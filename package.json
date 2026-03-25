@@ -1,0 +1,13 @@
+{
+  "name": "quotesnap",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/mobile",
+    "apps/backend"
+  ],
+  "scripts": {
+    "mobile": "npm run dev --workspace=apps/mobile",
+    "backend": "npm run dev --workspace=apps/backend"
+  }
+}
