@@ -12,7 +12,11 @@ A contractor can describe a job on-site and have a customer-approved quote befor
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Monorepo scaffold (Expo 52 + Express + Postgres) — Validated in Phase 1: Foundation
+- [x] JWT auth API (register, login, refresh, logout) with bcrypt-12 and SHA-256 token hashing — Validated in Phase 1: Foundation
+- [x] WatermelonDB offline-first schema (quotes, catalog_items, drafts, sync_queue_items) — Validated in Phase 1: Foundation
+- [x] Mobile auth flow (Zustand store, SecureStore persistence, auto-refresh, auth-gated navigation) — Validated in Phase 1: Foundation
+- [x] Offline-first is non-negotiable — wired on Day 1 as required — Validated in Phase 1: Foundation
 
 ### Active
 
@@ -96,4 +100,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after initialization*
+*Last updated: 2026-03-26 after Phase 1: Foundation complete*
