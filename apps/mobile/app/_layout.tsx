@@ -1,43 +1,46 @@
-import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { Text, View, StyleSheet } from "react-native";
-
-function PlaceholderScreen(): JSX.Element {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>QuoteSnap</Text>
-      <Text style={styles.subtitle}>Voice-to-quote for trade contractors</Text>
-      <StatusBar style="auto" />
-    </View>
-  );
-}
+import { useEffect } from 'react';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
+import { useAuthStore } from '../src/store/auth-store';
+import { initNetworkMonitor } from '../src/sync/network-monitor';
+import { initSyncQueue } from '../src/sync/sync-queue';
 
 export default function RootLayout(): JSX.Element {
-  return (
-    <Stack>
-      <Stack.Screen
-        name="index"
-        options={{ title: "QuoteSnap" }}
-      />
-    </Stack>
-  );
-}
+  const { isLoading, contractor, accessToken, restoreSession } = useAuthStore();
+  const segments = useSegments();
+  const router = useRouter();
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#666666",
-    marginTop: 8,
-  },
-});
+  // Initialize on mount
+  useEffect(() => {
+    initNetworkMonitor();
+    const unsubscribeSyncQueue = initSyncQueue();
+    restoreSession();
+    return () => {
+      unsubscribeSyncQueue();
+    };
+  }, []);
+
+  // Auth-gated navigation
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const isAuthenticated = contractor !== null && accessToken !== null;
+
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(app)');
+    }
+  }, [isLoading, contractor, accessToken, segments]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  return <Slot />;
+}
