@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 01-02-PLAN.md — backend auth API
-last_updated: "2026-03-25T19:24:52.752Z"
+status: Ready to plan
+stopped_at: Completed 01-04-PLAN.md — mobile auth flow
+last_updated: "2026-03-25T23:56:39.052Z"
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 4
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Current Position
 
-Phase: 01 (foundation) — EXECUTING
-Plan: 3 of 4
+Phase: 2
+Plan: Not started
 
 ## Performance Metrics
 
@@ -48,6 +48,8 @@ Plan: 3 of 4
 *Updated after each plan completion*
 | Phase 01-foundation P01 | 3 | 2 tasks | 15 files |
 | Phase 01 P02 | 3m | 2 tasks | 4 files |
+| Phase 01-foundation P03 | 2m | 2 tasks | 11 files |
+| Phase 01 P04 | 15m | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -67,6 +69,11 @@ Recent decisions affecting current work:
 - [Phase 01]: SHA-256 hash stored for refresh tokens (never plaintext) — revocable without storing secret material
 - [Phase 01]: Token rotation on every refresh — limits refresh token reuse window
 - [Phase 01]: Logout always returns 200 and same 401 message for wrong password/unknown user — prevents enumeration attacks
+- [Phase 01-foundation]: WatermelonDB JSI adapter enabled for SQLite performance on device
+- [Phase 01-foundation]: Sync queue dead_letter threshold: 5 retries; full exponential schedule deferred to Phase 7
+- [Phase 01-foundation]: Lazy dynamic import for auth-store in apiClient prevents circular dependency at module initialization
+- [Phase 01-foundation]: restoreSession sets tokens immediately from SecureStore even if access token may be stale; first API call auto-refreshes
+- [Phase 01-foundation]: logout best-effort: server revocation attempted but local session cleared regardless of network failure
 
 ### Pending Todos
 
@@ -80,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T19:24:52.749Z
-Stopped at: Completed 01-02-PLAN.md — backend auth API
+Last session: 2026-03-25T19:39:04.931Z
+Stopped at: Completed 01-04-PLAN.md — mobile auth flow
 Resume file: None
