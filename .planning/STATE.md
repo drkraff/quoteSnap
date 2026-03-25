@@ -87,6 +87,12 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T19:39:04.931Z
-Stopped at: Completed 01-04-PLAN.md — mobile auth flow
+Last session: 2026-03-26
+Stopped at: Phase 1 complete and approved. Backend auth verified (register 201, health 200, migration idempotent). Mobile UAT skipped (phone not on same WiFi) — not a blocker.
+Resume at: Phase 2 — Onboarding. Run /gsd:plan-phase 2 to start.
 Resume file: None
+
+### Docker note
+Local Postgres is running on port 5432. Docker quotesnap-db container is on port 5433.
+DATABASE_URL in apps/backend/.env uses port 5433.
+Start container before backend dev: `docker start quotesnap-db`
