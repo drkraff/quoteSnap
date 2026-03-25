@@ -9,9 +9,9 @@
 
 ### Authentication
 
-- [ ] **AUTH-01**: Contractor can create an account with phone number or email
-- [ ] **AUTH-02**: Contractor can log in and remain logged in across sessions (JWT 15-min + 30-day rolling refresh)
-- [ ] **AUTH-03**: Contractor can log out; session is fully cleared from device
+- [x] **AUTH-01**: Contractor can create an account with phone number or email
+- [x] **AUTH-02**: Contractor can log in and remain logged in across sessions (JWT 15-min + 30-day rolling refresh)
+- [x] **AUTH-03**: Contractor can log out; session is fully cleared from device
 - [ ] **AUTH-04**: App detects a valid existing session on launch and skips onboarding
 
 ### Onboarding
@@ -138,9 +138,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 1 | Pending |
-| AUTH-03 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
+| AUTH-02 | Phase 1 | Complete |
+| AUTH-03 | Phase 1 | Complete |
 | AUTH-04 | Phase 1 | Pending |
 | ONBD-01 | Phase 2 | Pending |
 | ONBD-02 | Phase 2 | Pending |
