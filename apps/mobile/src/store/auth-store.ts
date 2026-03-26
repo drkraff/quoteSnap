@@ -7,6 +7,7 @@ const KEYS = {
   ACCESS_TOKEN: 'quotesnap_access_token',
   REFRESH_TOKEN: 'quotesnap_refresh_token',
   CONTRACTOR: 'quotesnap_contractor',
+  ONBOARDING_COMPLETE: 'quotesnap_onboarding_complete',
 } as const;
 
 export type Contractor = ContractorResponse;
@@ -17,6 +18,7 @@ interface AuthState {
   refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  onboardingComplete: boolean;
 }
 
 interface AuthActions {
@@ -30,6 +32,7 @@ interface AuthActions {
   logout(): Promise<void>;
   refreshSession(): Promise<boolean>;
   restoreSession(): Promise<void>;
+  setOnboardingComplete(): Promise<void>;
 }
 
 async function storeTokens(
@@ -49,6 +52,7 @@ async function clearTokens(): Promise<void> {
     SecureStore.deleteItemAsync(KEYS.ACCESS_TOKEN),
     SecureStore.deleteItemAsync(KEYS.REFRESH_TOKEN),
     SecureStore.deleteItemAsync(KEYS.CONTRACTOR),
+    SecureStore.deleteItemAsync(KEYS.ONBOARDING_COMPLETE),
   ]);
 }
 
@@ -58,15 +62,22 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   refreshToken: null,
   isLoading: true,
   isAuthenticated: false,
+  onboardingComplete: false,
 
   async login(params) {
     const response = await authApi.login(params);
     await storeTokens(response.accessToken, response.refreshToken, response.contractor);
+    // Returning user who already onboarded has a trade set
+    const alreadyOnboarded = response.contractor.trade !== null;
+    if (alreadyOnboarded) {
+      await SecureStore.setItemAsync(KEYS.ONBOARDING_COMPLETE, 'true');
+    }
     set({
       contractor: response.contractor,
       accessToken: response.accessToken,
       refreshToken: response.refreshToken,
       isAuthenticated: true,
+      onboardingComplete: alreadyOnboarded,
     });
   },
 
@@ -78,6 +89,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       accessToken: response.accessToken,
       refreshToken: response.refreshToken,
       isAuthenticated: true,
+      onboardingComplete: false,
     });
   },
 
@@ -97,6 +109,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      onboardingComplete: false,
     });
   },
 
@@ -122,11 +135,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
   async restoreSession(): Promise<void> {
     try {
-      const [storedAccessToken, storedRefreshToken, storedContractor] = await Promise.all([
-        SecureStore.getItemAsync(KEYS.ACCESS_TOKEN),
-        SecureStore.getItemAsync(KEYS.REFRESH_TOKEN),
-        SecureStore.getItemAsync(KEYS.CONTRACTOR),
-      ]);
+      const [storedAccessToken, storedRefreshToken, storedContractor, storedOnboarding] =
+        await Promise.all([
+          SecureStore.getItemAsync(KEYS.ACCESS_TOKEN),
+          SecureStore.getItemAsync(KEYS.REFRESH_TOKEN),
+          SecureStore.getItemAsync(KEYS.CONTRACTOR),
+          SecureStore.getItemAsync(KEYS.ONBOARDING_COMPLETE),
+        ]);
 
       if (!storedRefreshToken || !storedContractor) {
         set({ isLoading: false });
@@ -134,6 +149,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       }
 
       const contractor = JSON.parse(storedContractor) as Contractor;
+      const onboardingComplete = storedOnboarding === 'true';
 
       if (storedAccessToken) {
         // Set tokens immediately; access token may be expired but will auto-refresh on first API call
@@ -143,6 +159,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           refreshToken: storedRefreshToken,
           isAuthenticated: true,
           isLoading: false,
+          onboardingComplete,
         });
       } else {
         // Access token missing — attempt refresh
@@ -153,6 +170,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
             contractor,
             isAuthenticated: true,
             isLoading: false,
+            onboardingComplete,
           });
         } else {
           await clearTokens();
@@ -163,5 +181,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // If SecureStore fails for any reason, treat as unauthenticated
       set({ isLoading: false });
     }
+  },
+
+  async setOnboardingComplete(): Promise<void> {
+    await SecureStore.setItemAsync(KEYS.ONBOARDING_COMPLETE, 'true');
+    set({ onboardingComplete: true });
   },
 }));
