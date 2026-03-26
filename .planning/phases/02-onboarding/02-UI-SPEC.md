@@ -46,8 +46,7 @@ Declared values (must be multiples of 4). Sourced from existing Phase 1 patterns
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4px | Gap between icon and label, badge padding |
-| sm | 8px | Inner card padding (compact), row gaps |
-| gap | 12px | 2-column grid inter-card gap (Trade Selection screen) |
+| sm | 8px | Inner card padding (compact), row gaps, 2-column grid inter-card gap (Trade Selection screen) |
 | md | 16px | Default vertical gap between elements, input padding |
 | lg | 24px | Screen-edge horizontal padding (matches Phase 1 `padding: 24`) |
 | xl | 32px | Vertical gap below headings (matches Phase 1 `marginBottom: 32`) |
@@ -57,7 +56,7 @@ Declared values (must be multiples of 4). Sourced from existing Phase 1 patterns
 Exceptions:
 - Trade card touch target: minimum 44px height (iOS HIG accessibility requirement for tappable items)
 
-**Source:** spacing tokens derived from Phase 1 StyleSheet values (login.tsx lines 75–109). `gap` (12px) promoted from exception footnote to first-class token per checker revision 2026-03-26.
+**Source:** spacing tokens derived from Phase 1 StyleSheet values (login.tsx lines 75–109). 2-column grid inter-card gap uses `sm` (8px) directly.
 
 ---
 
