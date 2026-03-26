@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 01-04-PLAN.md — mobile auth flow
-last_updated: "2026-03-25T23:56:39.052Z"
+status: Ready to execute
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-26T00:32:59.722Z"
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Contractor describes a job on-site, customer-approved quote in hand before driving off — zero paperwork at night.
-**Current focus:** Phase 01 — foundation
+**Current focus:** Phase 02 — onboarding
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (onboarding) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: Not started
 | Phase 01 P02 | 3m | 2 tasks | 4 files |
 | Phase 01-foundation P03 | 2m | 2 tasks | 11 files |
 | Phase 01 P04 | 15m | 2 tasks | 10 files |
+| Phase 02-onboarding P01 | 2m | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,8 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: Lazy dynamic import for auth-store in apiClient prevents circular dependency at module initialization
 - [Phase 01-foundation]: restoreSession sets tokens immediately from SecureStore even if access token may be stale; first API call auto-refreshes
 - [Phase 01-foundation]: logout best-effort: server revocation attempted but local session cleared regardless of network failure
+- [Phase 02-onboarding]: Duplicate seeding detected via contractors.trade column — 409 if trade already set, no separate seeding_state table needed
+- [Phase 02-onboarding]: Sequential INSERT per template item to capture per-row RETURNING id for seed response payload
 
 ### Pending Todos
 
@@ -87,12 +90,13 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26
-Stopped at: Phase 1 complete and approved. Backend auth verified (register 201, health 200, migration idempotent). Mobile UAT skipped (phone not on same WiFi) — not a blocker.
+Last session: 2026-03-26T00:32:59.719Z
+Stopped at: Completed 02-01-PLAN.md
 Resume at: Phase 2 — Onboarding. Run /gsd:plan-phase 2 to start.
 Resume file: None
 
 ### Docker note
+
 Local Postgres is running on port 5432. Docker quotesnap-db container is on port 5433.
 DATABASE_URL in apps/backend/.env uses port 5433.
 Start container before backend dev: `docker start quotesnap-db`

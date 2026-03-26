@@ -12,12 +12,12 @@
 - [x] **AUTH-01**: Contractor can create an account with phone number or email
 - [x] **AUTH-02**: Contractor can log in and remain logged in across sessions (JWT 15-min + 30-day rolling refresh)
 - [x] **AUTH-03**: Contractor can log out; session is fully cleared from device
-- [ ] **AUTH-04**: App detects a valid existing session on launch and skips onboarding
+- [x] **AUTH-04**: App detects a valid existing session on launch and skips onboarding
 
 ### Onboarding
 
-- [ ] **ONBD-01**: Contractor selects their trade (plumbing, electrical, HVAC) during first-launch onboarding
-- [ ] **ONBD-02**: Contractor receives a pre-seeded service catalog for their trade on account creation
+- [x] **ONBD-01**: Contractor selects their trade (plumbing, electrical, HVAC) during first-launch onboarding
+- [x] **ONBD-02**: Contractor receives a pre-seeded service catalog for their trade on account creation
 - [ ] **ONBD-03**: Onboarding completes end-to-end within 90 seconds on a 1-bar LTE connection on a low-end Android device
 - [ ] **ONBD-04**: Onboarding is completable with partial offline connectivity (account creation requires signal; catalog seeding falls back to bundled offline template)
 
@@ -73,8 +73,8 @@
 
 ### Offline Sync
 
-- [ ] **SYNC-01**: All quotes, catalog items, and drafts live in local SQLite; the app is fully functional without network
-- [ ] **SYNC-02**: A background sync queue pushes changes to the server when connectivity is available
+- [x] **SYNC-01**: All quotes, catalog items, and drafts live in local SQLite; the app is fully functional without network
+- [x] **SYNC-02**: A background sync queue pushes changes to the server when connectivity is available
 - [ ] **SYNC-03**: Sync retry schedule: 5s → 15s → 60s → 5m → 15m → dead-letter after max retries
 - [ ] **SYNC-04**: Dead-letter items are surfaced to the contractor with a plain-language error and retry option
 - [ ] **SYNC-05**: WatermelonDB uses server-as-truth conflict resolution; draft conflicts (pre-send) surface as a visible "Review before sending" prompt — not silent resolution
@@ -141,9 +141,9 @@
 | AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Complete |
-| AUTH-04 | Phase 1 | Pending |
-| ONBD-01 | Phase 2 | Pending |
-| ONBD-02 | Phase 2 | Pending |
+| AUTH-04 | Phase 1 | Complete |
+| ONBD-01 | Phase 2 | Complete |
+| ONBD-02 | Phase 2 | Complete |
 | ONBD-03 | Phase 2 | Pending |
 | ONBD-04 | Phase 2 | Pending |
 | CAT-01 | Phase 3 | Pending |
@@ -181,8 +181,8 @@
 | HIST-02 | Phase 4 | Pending |
 | HIST-03 | Phase 4 | Pending |
 | HIST-04 | Phase 4 | Pending |
-| SYNC-01 | Phase 1 | Pending |
-| SYNC-02 | Phase 1 | Pending |
+| SYNC-01 | Phase 1 | Complete |
+| SYNC-02 | Phase 1 | Complete |
 | SYNC-03 | Phase 7 | Pending |
 | SYNC-04 | Phase 7 | Pending |
 | SYNC-05 | Phase 7 | Pending |

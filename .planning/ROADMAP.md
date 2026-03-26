@@ -44,7 +44,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Contractor who loses signal mid-onboarding still receives a usable catalog (bundled offline template)
 **Plans**: 2 plans
 Plans:
-- [ ] 02-01-PLAN.md -- Backend API: catalog_items migration, trade templates, POST /onboarding/seed endpoint
+- [x] 02-01-PLAN.md -- Backend API: catalog_items migration, trade templates, POST /onboarding/seed endpoint
 - [ ] 02-02-PLAN.md -- Mobile onboarding screens (trade selection, seeding, ready), offline templates, navigation wiring
 **UI hint**: yes
 
@@ -119,7 +119,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/4 | Planned    |  |
-| 2. Onboarding | 0/2 | Planned | - |
+| 2. Onboarding | 1/2 | In Progress|  |
 | 3. Catalog Management | 0/TBD | Not started | - |
 | 4. Quote Review and History | 0/TBD | Not started | - |
 | 5. Voice-to-Quote Pipeline | 0/TBD | Not started | - |
