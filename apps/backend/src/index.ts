@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import { router as authRouter } from "./routes/auth.js";
+import { router as onboardingRouter } from "./routes/onboarding.js";
 
 const app = express();
 const PORT = process.env["PORT"] ? parseInt(process.env["PORT"], 10) : 3000;
@@ -9,6 +10,9 @@ app.use(express.json());
 
 // Auth routes
 app.use("/auth", authRouter);
+
+// Onboarding routes
+app.use("/onboarding", onboardingRouter);
 
 // GET /health — liveness probe
 app.get("/health", (_req: Request, res: Response) => {
