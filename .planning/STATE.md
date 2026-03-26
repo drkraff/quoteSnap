@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-26T00:32:59.722Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-26T00:38:48.402Z"
 progress:
   total_phases: 7
   completed_phases: 1
@@ -51,6 +51,7 @@ Plan: 2 of 2
 | Phase 01-foundation P03 | 2m | 2 tasks | 11 files |
 | Phase 01 P04 | 15m | 2 tasks | 10 files |
 | Phase 02-onboarding P01 | 2m | 2 tasks | 5 files |
+| Phase 02-onboarding P02 | 8m | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: logout best-effort: server revocation attempted but local session cleared regardless of network failure
 - [Phase 02-onboarding]: Duplicate seeding detected via contractors.trade column — 409 if trade already set, no separate seeding_state table needed
 - [Phase 02-onboarding]: Sequential INSERT per template item to capture per-row RETURNING id for seed response payload
+- [Phase 02-onboarding]: onboardingComplete persisted to SecureStore on setOnboardingComplete(); restored in restoreSession() so returning users skip onboarding on relaunch
+- [Phase 02-onboarding]: segments[1] cast to string[] to work around expo-router useSegments() 1-tuple type — runtime has more elements than static type declares
 
 ### Pending Todos
 
@@ -90,10 +93,36 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T00:32:59.719Z
-Stopped at: Completed 02-01-PLAN.md
-Resume at: Phase 2 — Onboarding. Run /gsd:plan-phase 2 to start.
-Resume file: None
+Last session: 2026-03-26T00:00:00.000Z
+Stopped at: Phase 2 execution complete — awaiting human UAT sign-off before marking phase done
+
+### What to do next
+
+Phase 02 (Onboarding) is fully built and all automated checks passed.
+You need to test it on a device/simulator, then come back and type "approved" (or report issues).
+
+**Step 1 — Start the backend**
+```bash
+docker start quotesnap-db
+cd apps/backend && npm run dev
+```
+
+**Step 2 — Run the app** (pick one)
+- Easiest: plug in Android phone with USB Debugging on → `cd apps/mobile && npm run android`
+- No phone: open Android Studio → start an AVD emulator → same command above
+- Quick try: install Expo Go on phone → `npm start` → scan QR (may crash due to native modules)
+
+**Step 3 — Test these 6 things** (file: `.planning/phases/02-onboarding/02-HUMAN-UAT.md`)
+1. New user flow: trade selection → seeding → ready → lands in app
+2. Single-select: tapping a second trade card deselects the first
+3. Returning user skip: relaunch after onboarding goes straight to app (no onboarding screens)
+4. Offline fallback: turn on airplane mode → seeding screen shows amber notice + uses bundled templates
+5. Timing: full onboarding flow finishes under 90 seconds
+6. Post-logout skip: log out, log back in with existing user → skips onboarding
+
+**Step 4 — Resume this conversation and type:**
+- `"approved"` → phase gets marked complete, move to Phase 3
+- Describe any issues → gap closure plans get created automatically
 
 ### Docker note
 
