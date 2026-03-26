@@ -6,7 +6,8 @@ import { initNetworkMonitor } from '../src/sync/network-monitor';
 import { initSyncQueue } from '../src/sync/sync-queue';
 
 export default function RootLayout(): JSX.Element {
-  const { isLoading, contractor, accessToken, restoreSession } = useAuthStore();
+  const { isLoading, contractor, accessToken, onboardingComplete, restoreSession } =
+    useAuthStore();
   const segments = useSegments();
   const router = useRouter();
 
@@ -20,7 +21,7 @@ export default function RootLayout(): JSX.Element {
     };
   }, []);
 
-  // Auth-gated navigation
+  // Auth-gated navigation with onboarding support
   useEffect(() => {
     if (isLoading) return;
 
@@ -29,10 +30,20 @@ export default function RootLayout(): JSX.Element {
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
+    } else if (isAuthenticated && !onboardingComplete && !inAuthGroup) {
+      // Authenticated but hasn't completed onboarding
+      router.replace('/(auth)/onboarding/trade-selection');
+    } else if (isAuthenticated && !onboardingComplete && inAuthGroup) {
+      // In auth group during onboarding -- allow navigation within onboarding screens
+      // Only redirect to trade-selection if not already in an onboarding screen
+      const inOnboarding = (segments as string[])[1] === 'onboarding';
+      if (!inOnboarding) {
+        router.replace('/(auth)/onboarding/trade-selection');
+      }
+    } else if (isAuthenticated && onboardingComplete && inAuthGroup) {
       router.replace('/(app)');
     }
-  }, [isLoading, contractor, accessToken, segments]);
+  }, [isLoading, contractor, accessToken, onboardingComplete, segments]);
 
   if (isLoading) {
     return (
