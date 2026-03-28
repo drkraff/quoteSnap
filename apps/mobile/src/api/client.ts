@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 
 const API_BASE_URL: string =
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? 'http://localhost:3000';
+  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? 'http://10.0.2.2:3000';
 
 interface ApiError {
   status: number;

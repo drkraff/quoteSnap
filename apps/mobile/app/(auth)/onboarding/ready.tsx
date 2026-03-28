@@ -1,13 +1,16 @@
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuthStore } from '../../../src/store/auth-store';
 
 export default function ReadyScreen(): JSX.Element {
   const { trade, itemCount } = useLocalSearchParams<{ trade: string; itemCount: string }>();
   const router = useRouter();
+  const { setOnboardingComplete } = useAuthStore();
 
   const tradeName = trade ? trade.charAt(0).toUpperCase() + trade.slice(1) : '';
 
-  function handleStartQuoting(): void {
+  async function handleStartQuoting(): Promise<void> {
+    await setOnboardingComplete();
     router.replace('/(app)');
   }
 

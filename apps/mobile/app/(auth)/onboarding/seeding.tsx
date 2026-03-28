@@ -17,7 +17,6 @@ export default function SeedingScreen(): JSX.Element {
   useEffect(() => {
     async function runSeeding(): Promise<void> {
       const contractorId = useAuthStore.getState().contractor!.id;
-      const setOnboardingComplete = useAuthStore.getState().setOnboardingComplete;
 
       // 5-second timeout using Promise.race
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -43,7 +42,6 @@ export default function SeedingScreen(): JSX.Element {
           }
         });
 
-        await setOnboardingComplete();
         router.replace({
           pathname: '/(auth)/onboarding/ready',
           params: { trade, itemCount: String(response.itemCount) },
@@ -72,7 +70,6 @@ export default function SeedingScreen(): JSX.Element {
         // Wait 1 second before advancing
         await new Promise<void>((resolve) => setTimeout(resolve, 1000));
 
-        await setOnboardingComplete();
         router.replace({
           pathname: '/(auth)/onboarding/ready',
           params: { trade, itemCount: String(template.length) },

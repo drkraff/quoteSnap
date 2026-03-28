@@ -78,7 +78,7 @@ router.post("/register", async (req: Request, res: Response): Promise<void> => {
     const result = await query(
       `INSERT INTO contractors (email, phone, password_hash, display_name)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, phone, display_name`,
+       RETURNING id, email, phone, display_name, trade`,
       [email ?? null, phone ?? null, passwordHash, displayName ?? null]
     );
 
@@ -87,6 +87,7 @@ router.post("/register", async (req: Request, res: Response): Promise<void> => {
       email: string | null;
       phone: string | null;
       display_name: string | null;
+      trade: string | null;
     };
 
     const tokens = await issueTokenPair(contractor.id, contractor.email, contractor.phone);
@@ -97,6 +98,7 @@ router.post("/register", async (req: Request, res: Response): Promise<void> => {
         email: contractor.email,
         phone: contractor.phone,
         displayName: contractor.display_name,
+        trade: contractor.trade,
       },
       ...tokens,
     });

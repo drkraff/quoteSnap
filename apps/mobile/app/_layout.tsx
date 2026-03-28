@@ -26,6 +26,7 @@ export default function RootLayout(): JSX.Element {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inAppGroup = segments[0] === '(app)';
     const isAuthenticated = contractor !== null && accessToken !== null;
 
     if (!isAuthenticated && !inAuthGroup) {
@@ -40,7 +41,7 @@ export default function RootLayout(): JSX.Element {
       if (!inOnboarding) {
         router.replace('/(auth)/onboarding/trade-selection');
       }
-    } else if (isAuthenticated && onboardingComplete && inAuthGroup) {
+    } else if (isAuthenticated && onboardingComplete && !inAppGroup) {
       router.replace('/(app)');
     }
   }, [isLoading, contractor, accessToken, onboardingComplete, segments]);
