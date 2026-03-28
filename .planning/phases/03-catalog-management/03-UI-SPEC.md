@@ -70,7 +70,7 @@ Exceptions:
 |------|-------|-------|
 | Dominant (60%) | `#ffffff` | Screen background, bottom sheet background, list row background |
 | Secondary (30%) | `#f5f5f5` | Section header background (sticky), unit badge background, form field background, bottom sheet scrim overlay at 50% opacity |
-| Accent (10%) | `#0066cc` | Primary CTA button fill, Save button fill, active tab indicator, swipe-archive icon tint on press |
+| Accent (10%) | `#0066cc` | Primary CTA button fill, Save Item button fill, active tab indicator, swipe-archive icon tint on press |
 | Destructive | `#dc2626` | Swipe-to-archive revealed action background (red), destructive icon |
 | Warning | `#b45309` | Offline sync-pending indicator dot only |
 | Muted text | `#666666` | Subheadings, placeholder text, secondary metadata |
@@ -80,7 +80,7 @@ Exceptions:
 
 Accent (`#0066cc`) reserved for:
 1. Primary CTA button ("Add Item") fill
-2. Save button fill in bottom sheet
+2. Save Item button fill in bottom sheet
 3. Active tab indicator in bottom tab bar
 4. Swipe-archive icon tint on reveal (icon only, not background — background is destructive red)
 
@@ -113,6 +113,10 @@ Source: accent and background values extracted from `trade-selection.tsx` and `s
 | `ActivityIndicator` | seeding.tsx |
 | Button pattern (TouchableOpacity + StyleSheet) | trade-selection.tsx |
 
+### Visual Hierarchy — CatalogScreen primary view
+
+Primary focal point: FAB button (bottom-right, `#0066cc` filled circle with elevation shadow — draws the eye to the single most common action). Secondary: Section headers (sticky, `#f5f5f5` secondary background — anchors scanning across long lists). Tertiary: Item rows (white background, no decoration — content is the focus, not chrome).
+
 ---
 
 ## Interaction Contracts
@@ -134,8 +138,8 @@ Source: accent and background values extracted from `trade-selection.tsx` and `s
 - Fields render top to bottom: Name → Unit → Price.
 - Unit field: rendered as a row of 5 pressable pill buttons (each / hour / foot / sqft / job). No external picker. Selected pill: `#0066cc` background, white text. Unselected: `#f5f5f5` background, `#333` text.
 - Price field: TextInput with `keyboardType="decimal-pad"`. Displays formatted dollars (e.g., `$125.00`). On change: strip non-numeric, store internally as cents integer. Prefix `$` is a non-editable Text sibling rendered left of the TextInput.
-- Validation: inline error Text (14px, `#dc2626`) appears below each invalid field on first Save attempt. Re-validates on each subsequent change.
-- Save button: full-width, 44px height, `#0066cc` fill, white label. Disabled (opacity 0.5) until all three fields are valid.
+- Validation: inline error Text (14px, `#dc2626`) appears below each invalid field on first submit attempt. Re-validates on each subsequent change.
+- Save Item button: full-width, 44px height, `#0066cc` fill, white label "Save Item". Disabled (opacity 0.5) until all three fields are valid.
 - Cancel: `×` icon (Ionicons `close`, 24px) in top-right corner of sheet. No confirmation.
 - Keyboard: sheet scrolls up when keyboard appears (use `KeyboardAvoidingView` wrapping the sheet content).
 
@@ -169,7 +173,7 @@ Source: accent and background values extracted from `trade-selection.tsx` and `s
 | Add button (FAB accessibility label) | Add catalog item |
 | Bottom sheet title — add mode | Add Item |
 | Bottom sheet title — edit mode | Edit Item |
-| Save button | Save |
+| Save button | Save Item |
 | Cancel button (accessibility label) | Cancel |
 | Name field placeholder | Item name |
 | Price field placeholder | 0.00 |
@@ -196,7 +200,7 @@ Source: D-03, D-06, D-08, D-11 from CONTEXT.md. All copy is sentence-case, no AL
 - `CatalogRow`: `accessibilityRole="button"`, label includes item name and price (e.g., "Pipe repair, $125.00 per each. Double tap to edit.").
 - Archive swipe action: `accessibilityRole="button"`, `accessibilityLabel="Archive {item name}"`.
 - Unit picker pills: `accessibilityRole="radio"`, `accessibilityState={{ checked: isSelected }}`.
-- Save button: `accessibilityState={{ disabled: !isValid }}`.
+- Save Item button: `accessibilityState={{ disabled: !isValid }}`.
 - UndoToast: `accessibilityLiveRegion="polite"` so screen readers announce it.
 - Minimum touch target 44px on all interactive elements — enforced via `minHeight: 44`.
 
@@ -222,7 +226,7 @@ Every interactive element must handle all applicable states:
 | CatalogRow | default, pressed (opacity 0.7), swipe-revealing, archived (hidden) |
 | Archive action button | default (red bg), pressed (darken to #b91c1c) |
 | FAB | default, pressed (opacity 0.85) |
-| Save button | disabled (opacity 0.5), default (#0066cc), pressed (opacity 0.85) |
+| Save Item button | disabled (opacity 0.5), default (#0066cc), pressed (opacity 0.85) |
 | Unit pill | unselected, selected (#0066cc bg), pressed |
 | Price TextInput | default, focused (#0066cc border), error (#dc2626 border) |
 | Name TextInput | default, focused (#0066cc border), error (#dc2626 border) |
