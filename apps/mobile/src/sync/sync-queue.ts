@@ -2,6 +2,8 @@ import { database } from '../db';
 import { SyncQueueItem } from '../db/models/sync-queue-item';
 import { isOnline, onConnectivityChange } from './network-monitor';
 import { Q } from '@nozbe/watermelondb';
+import { createCatalogItem, updateCatalogItem, archiveCatalogItem } from '../api/catalog';
+import { CatalogItem } from '../db/models/catalog-item';
 
 export interface SyncEnqueueParams {
   entityType: 'quote' | 'catalog_item' | 'draft' | 'audio';
@@ -31,6 +33,56 @@ export async function enqueue(params: SyncEnqueueParams): Promise<void> {
   }
 }
 
+async function pushToServer(item: SyncQueueItem): Promise<void> {
+  const payload = JSON.parse(item.payloadJson) as Record<string, unknown>;
+
+  if (item.entityType === 'catalog_item') {
+    if (item.action === 'create') {
+      const response = await createCatalogItem({
+        name: payload.name as string,
+        unit: payload.unit as string,
+        unitPriceCents: payload.unitPriceCents as number,
+        tradeCategory: payload.tradeCategory as string | undefined,
+      });
+      // Update local record with server ID
+      const catalogCollection = database.get<CatalogItem>('catalog_items');
+      const localItems = await catalogCollection
+        .query(Q.where('id', item.entityId))
+        .fetch();
+      if (localItems[0]) {
+        await database.write(async () => {
+          await localItems[0].update((record) => {
+            record.serverId = response.id;
+          });
+        });
+      }
+    } else if (item.action === 'update') {
+      const catalogCollection = database.get<CatalogItem>('catalog_items');
+      const localItems = await catalogCollection
+        .query(Q.where('id', item.entityId))
+        .fetch();
+      const serverId = localItems[0]?.serverId;
+      if (!serverId) {
+        throw new Error('Cannot sync update: no server ID for catalog item');
+      }
+      const isArchive = (payload.isArchived as boolean) === true;
+      if (isArchive) {
+        await archiveCatalogItem(serverId);
+      } else {
+        await updateCatalogItem(serverId, {
+          name: payload.name as string | undefined,
+          unit: payload.unit as string | undefined,
+          unitPriceCents: payload.unitPriceCents as number | undefined,
+        });
+      }
+    }
+    return;
+  }
+
+  // Other entity types — still placeholder for future phases
+  throw new Error(`Unhandled entity type: ${item.entityType}`);
+}
+
 export async function processQueue(): Promise<void> {
   if (!isOnline()) return;
 
@@ -50,8 +102,7 @@ export async function processQueue(): Promise<void> {
         });
       });
 
-      // TODO: Actual API call — placeholder for Phase 7 sync hardening
-      // await pushToServer(item);
+      await pushToServer(item);
 
       // On success, destroy the queue item
       await database.write(async () => {
