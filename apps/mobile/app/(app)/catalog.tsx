@@ -52,8 +52,10 @@ export default function CatalogScreen(): JSX.Element {
   const [undoVisible, setUndoVisible] = useState(false);
 
   useEffect(() => {
+    const contractorId = useAuthStore.getState().contractor?.id ?? '';
     const collection = database.get<CatalogItem>('catalog_items');
     const query = collection.query(
+      Q.where('contractor_id', contractorId),
       Q.where('is_archived', false),
       Q.sortBy('name', 'asc'),
     );

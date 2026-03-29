@@ -32,7 +32,7 @@ interface AuthActions {
   logout(): Promise<void>;
   refreshSession(): Promise<boolean>;
   restoreSession(): Promise<void>;
-  setOnboardingComplete(): Promise<void>;
+  setOnboardingComplete(trade: string): Promise<void>;
 }
 
 async function storeTokens(
@@ -183,8 +183,15 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     }
   },
 
-  async setOnboardingComplete(): Promise<void> {
+  async setOnboardingComplete(trade: string): Promise<void> {
     await SecureStore.setItemAsync(KEYS.ONBOARDING_COMPLETE, 'true');
-    set({ onboardingComplete: true });
+    const contractor = get().contractor;
+    if (contractor) {
+      const updated = { ...contractor, trade };
+      await SecureStore.setItemAsync(KEYS.CONTRACTOR, JSON.stringify(updated));
+      set({ onboardingComplete: true, contractor: updated });
+    } else {
+      set({ onboardingComplete: true });
+    }
   },
 }));

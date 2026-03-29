@@ -10,7 +10,7 @@ export default function ReadyScreen(): JSX.Element {
   const tradeName = trade ? trade.charAt(0).toUpperCase() + trade.slice(1) : '';
 
   async function handleStartQuoting(): Promise<void> {
-    await setOnboardingComplete();
+    await setOnboardingComplete(trade ?? '');
     router.replace('/(app)');
   }
 
