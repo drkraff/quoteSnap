@@ -35,7 +35,8 @@ export default function AppLayout(): JSX.Element {
       <Tabs.Screen
         name="catalog"
         options={{
-          title: 'Catalog',
+          title: 'My Catalog',
+          headerTitle: 'My Catalog',
           tabBarIcon: ({ focused, color }) => (
             <Ionicons
               name={focused ? 'list' : 'list-outline'}

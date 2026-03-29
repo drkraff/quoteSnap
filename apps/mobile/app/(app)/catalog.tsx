@@ -8,11 +8,14 @@ import {
 import { Q } from '@nozbe/watermelondb';
 import { database } from '../../src/db';
 import { CatalogItem } from '../../src/db/models/catalog-item';
-import { getPendingCount } from '../../src/sync/sync-queue';
+import { enqueue, getPendingCount } from '../../src/sync/sync-queue';
+import { useAuthStore } from '../../src/store/auth-store';
 import { CatalogRow } from '../../src/components/catalog/catalog-row';
 import { SectionHeader } from '../../src/components/catalog/section-header';
 import { EmptyState } from '../../src/components/catalog/empty-state';
 import { Fab } from '../../src/components/catalog/fab';
+import { ItemFormSheet } from '../../src/components/catalog/item-form-sheet';
+import { UndoToast } from '../../src/components/catalog/undo-toast';
 import { colors } from '../../src/theme/tokens';
 
 interface CatalogSection {
@@ -38,12 +41,15 @@ function groupByCategory(items: CatalogItem[]): CatalogSection[] {
     .map(([title, data]) => ({ title, data }));
 }
 
+// Screen title: "My Catalog" — set via _layout.tsx Tabs.Screen headerTitle
 export default function CatalogScreen(): JSX.Element {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [sections, setSections] = useState<CatalogSection[]>([]);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [archivedItem, setArchivedItem] = useState<CatalogItem | null>(null);
+  const [undoVisible, setUndoVisible] = useState(false);
 
   useEffect(() => {
     const collection = database.get<CatalogItem>('catalog_items');
@@ -83,9 +89,118 @@ export default function CatalogScreen(): JSX.Element {
     setSheetVisible(true);
   }
 
-  // Archive stub — wired in Task 2
-  function handleArchive(_item: CatalogItem): void {
-    // Implementation added in Task 2
+  async function handleSave(data: {
+    name: string;
+    unit: string;
+    unitPriceCents: number;
+  }): Promise<void> {
+    try {
+      if (editingItem) {
+        // Edit flow (CAT-02)
+        await database.write(async () => {
+          await editingItem.update((record) => {
+            record.name = data.name;
+            record.unit = data.unit;
+            record.unitPriceCents = data.unitPriceCents;
+          });
+        });
+        await enqueue({
+          entityType: 'catalog_item',
+          entityId: editingItem.id,
+          action: 'update',
+          payload: {
+            name: data.name,
+            unit: data.unit,
+            unitPriceCents: data.unitPriceCents,
+          },
+        });
+      } else {
+        // Add flow (CAT-01)
+        const contractorId =
+          useAuthStore.getState().contractor?.id ?? '';
+        const trade =
+          useAuthStore.getState().contractor?.trade ?? null;
+
+        const collection = database.get<CatalogItem>('catalog_items');
+        const newItem = await database.write(async () => {
+          return collection.create((record) => {
+            record.contractorId = contractorId;
+            record.name = data.name;
+            record.unit = data.unit;
+            record.unitPriceCents = data.unitPriceCents;
+            record.tradeCategory = trade;
+            record.isArchived = false;
+          });
+        });
+        await enqueue({
+          entityType: 'catalog_item',
+          entityId: newItem.id,
+          action: 'create',
+          payload: {
+            name: data.name,
+            unit: data.unit,
+            unitPriceCents: data.unitPriceCents,
+          },
+        });
+      }
+      setSheetVisible(false);
+      void refreshPendingCount();
+    } catch (error) {
+      // TODO: surface error to user in a future plan
+      // Silent catch prevents crash; data persists locally
+      void refreshPendingCount();
+    }
+  }
+
+  async function handleArchive(item: CatalogItem): Promise<void> {
+    try {
+      setArchivedItem(item);
+      await database.write(async () => {
+        await item.update((record) => {
+          record.isArchived = true;
+        });
+      });
+      setUndoVisible(true);
+      await enqueue({
+        entityType: 'catalog_item',
+        entityId: item.id,
+        action: 'update',
+        payload: { isArchived: true },
+      });
+      void refreshPendingCount();
+    } catch {
+      // Revert optimistic state on failure
+      setArchivedItem(null);
+      setUndoVisible(false);
+    }
+  }
+
+  async function handleUndo(): Promise<void> {
+    if (!archivedItem) return;
+    try {
+      await database.write(async () => {
+        await archivedItem.update((record) => {
+          record.isArchived = false;
+        });
+      });
+      await enqueue({
+        entityType: 'catalog_item',
+        entityId: archivedItem.id,
+        action: 'update',
+        payload: { isArchived: false },
+      });
+      void refreshPendingCount();
+    } catch {
+      // Undo failed — item remains archived; no crash
+    } finally {
+      setUndoVisible(false);
+      setArchivedItem(null);
+    }
+  }
+
+  function handleToastDismiss(): void {
+    setUndoVisible(false);
+    setArchivedItem(null);
   }
 
   return (
@@ -106,7 +221,7 @@ export default function CatalogScreen(): JSX.Element {
           <CatalogRow
             item={item}
             onPress={() => handleRowPress(item)}
-            onArchive={() => handleArchive(item)}
+            onArchive={() => { void handleArchive(item); }}
           />
         )}
         ListEmptyComponent={
@@ -116,7 +231,17 @@ export default function CatalogScreen(): JSX.Element {
         contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
       />
       <Fab onPress={handleFabPress} />
-      {/* ItemFormSheet and UndoToast wired in Task 2 */}
+      <ItemFormSheet
+        visible={sheetVisible}
+        editingItem={editingItem}
+        onSave={(data) => { void handleSave(data); }}
+        onClose={() => setSheetVisible(false)}
+      />
+      <UndoToast
+        visible={undoVisible}
+        onUndo={() => { void handleUndo(); }}
+        onDismiss={handleToastDismiss}
+      />
     </SafeAreaView>
   );
 }
