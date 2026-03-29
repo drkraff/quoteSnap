@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '../src/store/auth-store';
 import { initNetworkMonitor } from '../src/sync/network-monitor';
 import { initSyncQueue } from '../src/sync/sync-queue';
@@ -54,5 +55,9 @@ export default function RootLayout(): JSX.Element {
     );
   }
 
-  return <Slot />;
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Slot />
+    </GestureHandlerRootView>
+  );
 }
