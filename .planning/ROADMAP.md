@@ -58,7 +58,11 @@ Plans:
   3. Contractor can archive an item; it disappears from the active list and AI mapping but data is retained
   4. Contractor can view all active catalog items grouped by trade category without a network connection
   5. Catalog changes made offline sync to the server automatically when connectivity returns
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 03-01-PLAN.md -- Backend catalog CRUD endpoints (GET/POST/PUT/PATCH /catalog)
+- [ ] 03-02-PLAN.md -- Mobile catalog UI: tab navigator, SectionList, add/edit sheet, swipe-to-archive, WatermelonDB ops
+- [ ] 03-03-PLAN.md -- Sync queue wiring to backend API + end-to-end verification
 **UI hint**: yes
 
 ### Phase 4: Quote Review and History
@@ -120,7 +124,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/4 | Planned    |  |
 | 2. Onboarding | 1/2 | In Progress|  |
-| 3. Catalog Management | 0/TBD | Not started | - |
+| 3. Catalog Management | 0/3 | Not started | - |
 | 4. Quote Review and History | 0/TBD | Not started | - |
 | 5. Voice-to-Quote Pipeline | 0/TBD | Not started | - |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
