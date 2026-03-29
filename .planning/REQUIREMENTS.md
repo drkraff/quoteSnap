@@ -23,12 +23,12 @@
 
 ### Catalog Management
 
-- [ ] **CAT-01**: Contractor can add a new service item to their catalog (name, unit, price in cents)
-- [ ] **CAT-02**: Contractor can edit an existing catalog item (name, unit, price)
-- [ ] **CAT-03**: Contractor can archive a catalog item (soft delete — data retained, item hidden from AI mapping)
-- [ ] **CAT-04**: Catalog changes sync to the server when connectivity is available
-- [ ] **CAT-05**: Contractor can view all active catalog items grouped by trade category
-- [ ] **CAT-06**: Catalog is available offline from local SQLite (WatermelonDB)
+- [x] **CAT-01**: Contractor can add a new service item to their catalog (name, unit, price in cents)
+- [x] **CAT-02**: Contractor can edit an existing catalog item (name, unit, price)
+- [x] **CAT-03**: Contractor can archive a catalog item (soft delete — data retained, item hidden from AI mapping)
+- [x] **CAT-04**: Catalog changes sync to the server when connectivity is available
+- [x] **CAT-05**: Contractor can view all active catalog items grouped by trade category
+- [x] **CAT-06**: Catalog is available offline from local SQLite (WatermelonDB)
 
 ### Voice-to-Quote (AI Pipeline)
 
@@ -146,12 +146,12 @@
 | ONBD-02 | Phase 2 | Complete |
 | ONBD-03 | Phase 2 | Pending |
 | ONBD-04 | Phase 2 | Pending |
-| CAT-01 | Phase 3 | Pending |
-| CAT-02 | Phase 3 | Pending |
-| CAT-03 | Phase 3 | Pending |
-| CAT-04 | Phase 3 | Pending |
-| CAT-05 | Phase 3 | Pending |
-| CAT-06 | Phase 3 | Pending |
+| CAT-01 | Phase 3 | Complete |
+| CAT-02 | Phase 3 | Complete |
+| CAT-03 | Phase 3 | Complete |
+| CAT-04 | Phase 3 | Complete |
+| CAT-05 | Phase 3 | Complete |
+| CAT-06 | Phase 3 | Complete |
 | VOICE-01 | Phase 5 | Pending |
 | VOICE-02 | Phase 5 | Pending |
 | VOICE-03 | Phase 5 | Pending |

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-28T19:27:25.339Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-29T12:20:29.110Z"
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 6
+  total_plans: 5
+  completed_plans: 8
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Contractor describes a job on-site, customer-approved quote in hand before driving off — zero paperwork at night.
-**Current focus:** Phase 02 — onboarding
+**Current focus:** Phase 03 — catalog-management
 
 ## Current Position
 
-Phase: 02 (onboarding) — EXECUTING
-Plan: 2 of 2
+Phase: 03 (catalog-management) — EXECUTING
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -52,6 +52,9 @@ Plan: 2 of 2
 | Phase 01 P04 | 15m | 2 tasks | 10 files |
 | Phase 02-onboarding P01 | 2m | 2 tasks | 5 files |
 | Phase 02-onboarding P02 | 8m | 2 tasks | 9 files |
+| Phase 03-catalog-management P01 | 8 | 2 tasks | 3 files |
+| Phase 03-catalog-management P02 | 4m | 2 tasks | 10 files |
+| Phase 03-catalog-management P03 | 2 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -80,6 +83,13 @@ Recent decisions affecting current work:
 - [Phase 02-onboarding]: Sequential INSERT per template item to capture per-row RETURNING id for seed response payload
 - [Phase 02-onboarding]: onboardingComplete persisted to SecureStore on setOnboardingComplete(); restored in restoreSession() so returning users skip onboarding on relaunch
 - [Phase 02-onboarding]: segments[1] cast to string[] to work around expo-router useSegments() 1-tuple type — runtime has more elements than static type declares
+- [Phase 03-catalog-management]: VALID_UNITS as const tuple validates unit at both runtime and TypeScript type level
+- [Phase 03-catalog-management]: PUT /:id uses RETURNING clause to return updated item in single round-trip (no subsequent SELECT)
+- [Phase 03-catalog-management]: PATCH /:id/archive includes is_archived=FALSE in WHERE so already-archived items return 404 (idempotent soft-delete)
+- [Phase 03-catalog-management]: contractor.id used (not contractorId) — ContractorResponse type uses id field; plan spec referenced contractorId which does not exist
+- [Phase 03-catalog-management]: WatermelonDB observe() subscription for reactive catalog list — simplest pattern without withObservables HOC overhead
+- [Phase 03-catalog-management]: Archive operations route through PATCH /catalog/:id/archive — matches backend spec and REST semantics for state transition
+- [Phase 03-catalog-management]: patch method added to apiClient following existing request() pattern — consistent with get/post/put/delete
 
 ### Pending Todos
 
@@ -93,8 +103,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-28T19:27:25.336Z
-Stopped at: Phase 3 context gathered
+Last session: 2026-03-29T12:20:29.107Z
+Stopped at: Completed 03-03-PLAN.md
 
 ### What to do next
 
