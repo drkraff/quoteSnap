@@ -75,7 +75,11 @@ Plans:
   3. Contractor can remove a line item or add a catalog item manually to a draft
   4. Send button is blocked until the draft has at least one line item and a valid customer phone number
   5. Contractor can open the history list and view any past quote with its full line items and status — without network
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 04-01-PLAN.md -- Backend migration + types + routes + Jest setup + pure utility functions with tests + API client
+- [ ] 04-02-PLAN.md -- Mobile UI components: StatusBadge, QuoteRow, LineItemRow, PriceEditSheet, CatalogPickerSheet, QuoteDetail
+- [ ] 04-03-PLAN.md -- Screens (history, draft, detail) + tab nav + sync queue wiring + human verification
 **UI hint**: yes
 
 ### Phase 5: Voice-to-Quote Pipeline
@@ -125,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation | 0/4 | Planned    |  |
 | 2. Onboarding | 1/2 | In Progress|  |
 | 3. Catalog Management | 2/3 | In Progress|  |
-| 4. Quote Review and History | 0/TBD | Not started | - |
+| 4. Quote Review and History | 0/3 | Planned | - |
 | 5. Voice-to-Quote Pipeline | 0/TBD | Not started | - |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
 | 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
