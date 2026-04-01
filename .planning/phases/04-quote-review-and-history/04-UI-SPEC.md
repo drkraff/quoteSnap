@@ -5,6 +5,7 @@ status: draft
 shadcn_initialized: false
 preset: none
 created: 2026-04-01
+revised: 2026-04-01
 ---
 
 # Phase 4 — UI Design Contract
@@ -52,14 +53,19 @@ Exceptions:
 
 Source: `apps/mobile/src/theme/tokens.ts` — three sizes already defined. Phase 4 uses all three plus adds one display size for quote totals.
 
+**Weights in use: 400 (regular) and 700 (bold) — exactly 2 weights.**
+
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Label | 14px | 400 | 20px (1.43) | Status badge text, relative date ("2 days ago"), unit labels on line item rows, sheet field labels |
 | Body | 16px | 400 | 24px (1.5) | Line item name, customer phone number display, catalog picker item names, history row phone number |
+| Display | 20px | 700 | 26px (1.3) | Line item price (tappable), history row total price, draft subtotal in sticky footer |
 | Heading | 22px | 700 | 28px (1.27) | Screen titles ("New Quote", "Quote History"), sheet titles ("Edit Price", "Add Item") |
-| Display | 18px | 600 | 24px (1.33) | Line item price (tappable), history row total price, draft subtotal in sticky footer |
 
-Note: Display (18px/600) is a new token for this phase. Add to `tokens.ts` as `typography.display`. The existing three tokens (label, body, heading) are unchanged.
+Notes:
+- Display (20px/700) is a new token for this phase. Add to `tokens.ts` as `typography.display`. Raised from 18px to 20px to create a readable 4px gap above Body (16px) on mobile.
+- Weight 600 is not used in this phase. Only 400 and 700 are in the contract.
+- The existing three tokens (label 14px/400, body 16px/400, heading 22px/700) are unchanged.
 
 ---
 
@@ -93,11 +99,11 @@ Accent reserved for:
 
 ### Screens
 
-| Screen | Route | Description |
-|--------|-------|-------------|
-| Quotes tab (history list) | `app/(app)/quotes.tsx` | FlatList of all quotes sorted by recency. FAB at bottom-right. No loading state (WatermelonDB reads are instant). |
-| Draft review screen | `app/(app)/draft/[id].tsx` | Editable line items list + sticky footer (phone + Send). |
-| Quote detail screen (read-only) | `app/(app)/quote/[id].tsx` | Read-only view of sent/approved/declined/expired/failed_send quotes. FAB hidden. |
+| Screen | Route | Description | Focal Point |
+|--------|-------|-------------|-------------|
+| Quotes tab (history list) | `app/(app)/quotes.tsx` | FlatList of all quotes sorted by recency. FAB at bottom-right. No loading state (WatermelonDB reads are instant). | Primary anchor: the QuoteRow FlatList. Secondary: FAB (single action surface). |
+| Draft review screen | `app/(app)/draft/[id].tsx` | Editable line items list + sticky footer (phone + Send). | Primary anchor: the LineItemRow FlatList (scroll area, longest dwell time). Secondary anchor: sticky footer (Send button + phone input — persistent, always visible). |
+| Quote detail screen (read-only) | `app/(app)/quote/[id].tsx` | Read-only view of sent/approved/declined/expired/failed_send quotes. FAB hidden. | Primary anchor: QuoteDetail line items list. Secondary: status badge at top (communicates quote outcome at a glance). |
 
 ### New Components
 
@@ -106,7 +112,7 @@ Accent reserved for:
 | QuoteRow | `src/components/quotes/quote-row.tsx` | History list row: phone (left), status badge + date (center-left), total price (right). Min height 56px. |
 | StatusBadge | `src/components/quotes/status-badge.tsx` | Colored rounded chip. Props: `status` (7 values). Self-contained color mapping. |
 | LineItemRow | `src/components/quotes/line-item-row.tsx` | Swipeable row: item name (left, flex 1), +/- stepper (center), price (right, tappable). All interactive targets 44px minimum. |
-| PriceEditSheet | `src/components/quotes/price-edit-sheet.tsx` | React Native Modal. Single dollar-formatted TextInput, Save/Cancel. Adapts ItemFormSheet pattern. |
+| PriceEditSheet | `src/components/quotes/price-edit-sheet.tsx` | React Native Modal. Single dollar-formatted TextInput, "Update Price" / "Discard" buttons. Adapts ItemFormSheet pattern. |
 | CatalogPickerSheet | `src/components/quotes/catalog-picker-sheet.tsx` | React Native Modal. FlatList of active catalog items. Tap row to append to draft. No search (10-30 items, flat list is sufficient per CONTEXT.md). |
 | QuoteDetail | `src/components/quotes/quote-detail.tsx` | Read-only line items list + status + total. Reused by quote/[id].tsx. |
 
@@ -127,6 +133,7 @@ Accent reserved for:
 - Size: 56px diameter
 - Icon: `Ionicons add` (24px, white)
 - Background: `colors.accent` (#0066cc)
+- Accessibility: `accessibilityLabel="Create new quote"` on the TouchableOpacity/Pressable wrapping the FAB
 - Behavior: Creates new WatermelonDB `quote` (status: draft_local) + empty `draft` record, navigates to `app/(app)/draft/[id]`
 - Hidden on: quote detail screen (read-only)
 
@@ -141,8 +148,8 @@ Accent reserved for:
 - Tappable area: entire price cell, minimum 44px height
 - Opens PriceEditSheet modal
 - Pre-filled with current price (dollar-formatted)
-- Save: `database.write()` immediately, dismiss modal
-- Cancel: dismiss modal, no write
+- "Update Price": `database.write()` immediately, dismiss modal
+- "Discard": dismiss modal, no write
 
 ### Swipe-to-delete (LineItemRow)
 - Direction: swipe left
@@ -155,14 +162,14 @@ Accent reserved for:
 - Height: 48px, full width minus 32px horizontal margin
 - Background disabled: `colors.secondary` (#f5f5f5)
 - Background enabled: `colors.accent` (#0066cc)
-- Label: "Send Quote" (16px/600, white when enabled, mutedText when disabled)
+- Label: "Send Quote" (16px/700, white when enabled, mutedText when disabled)
 - Disabled conditions: zero line items OR invalid phone number
 - On tap while disabled: inline error appears below phone input (not toast). See Copywriting Contract.
 
 ### Status badge (QuoteRow, QuoteDetail)
 - Shape: rounded pill, 4px border-radius
-- Padding: 4px horizontal, 2px vertical
-- Font: 12px/600 — tighter than label for badge readability
+- Padding: 8px horizontal, 4px vertical — uses `sm` (8px) and `xs` (4px) tokens; fits 14px badge text
+- Font: 14px/700 — uses Label size at bold weight for badge readability; uses bold weight from the 2-weight contract
 - Color map (background / text):
   - `draft_local`: `#e0f0ff` / `#0066cc` (light accent tint / accent)
   - `draft_queued`: `#e0f0ff` / `#0066cc`
@@ -187,6 +194,8 @@ Accent reserved for:
 |---------|------|--------|
 | Primary CTA | "Send Quote" | CONTEXT.md D-13 (sticky footer Send button) |
 | Secondary CTA | "Add Item" | CONTEXT.md D-11 (bottom of line items list) |
+| Price edit confirm | "Update Price" | PriceEditSheet confirm button — specific verb + noun |
+| Price edit dismiss | "Discard" | PriceEditSheet dismiss button — avoids generic "Cancel" |
 | Empty state — history list (heading) | "No quotes yet" | Default |
 | Empty state — history list (body) | "Tap + to create your first quote" | Default — references FAB |
 | Empty state — draft (heading) | "No items added" | Default |
@@ -251,10 +260,12 @@ The following additions to `apps/mobile/src/theme/tokens.ts` are required before
 success: '#16a34a',          // Approved status badge
 
 // Add to typography:
-display: { fontSize: 18, fontWeight: '600' as const, lineHeight: 24 },  // Price display
+display: { fontSize: 20, fontWeight: '700' as const, lineHeight: 26 },  // Price display (20px/700)
 ```
 
 No other token changes. All spacing, border, and existing color tokens are used as-is.
+
+Weight 600 (`fontWeight: '600'`) is not present anywhere in the Phase 4 token contract. Only `'400'` (regular) and `'700'` (bold) are in use.
 
 ---
 
