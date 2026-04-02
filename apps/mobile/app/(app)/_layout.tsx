@@ -46,6 +46,28 @@ export default function AppLayout(): JSX.Element {
           ),
         }}
       />
+      <Tabs.Screen
+        name="quotes"
+        options={{
+          title: 'Quotes',
+          headerTitle: 'Quote History',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons
+              name={focused ? 'document-text' : 'document-text-outline'}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="draft/[id]"
+        options={{ href: null, headerTitle: 'New Quote' }}
+      />
+      <Tabs.Screen
+        name="quote/[id]"
+        options={{ href: null, headerTitle: 'Quote Details' }}
+      />
     </Tabs>
   );
 }

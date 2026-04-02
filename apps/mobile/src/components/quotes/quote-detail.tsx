@@ -23,7 +23,7 @@ interface QuoteDetailProps {
 
 export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element {
   const totalDisplay = `$${(quote.totalCents / 100).toFixed(2)}`;
-  const createdDate = formatRelativeDate(quote.createdAt);
+  const createdDate = formatRelativeDate(new Date(quote.createdAt));
   const phone = quote.customerPhone || 'No phone';
 
   function renderLineItem({ item }: { item: LineItemDisplay }): JSX.Element {
@@ -48,7 +48,7 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
         <Text style={styles.date}>{createdDate}</Text>
         {quote.sentAt && (
           <Text style={styles.date}>
-            {`Sent ${formatRelativeDate(quote.sentAt)}`}
+            {`Sent ${formatRelativeDate(new Date(quote.sentAt))}`}
           </Text>
         )}
       </View>

@@ -44,12 +44,12 @@
 
 ### Quote Review and Edit
 
-- [ ] **REVIEW-01**: Contractor can view the AI-generated draft as a list of line items with quantities and prices
-- [ ] **REVIEW-02**: Contractor can edit any line item (quantity, price) on the draft screen
-- [ ] **REVIEW-03**: Contractor can remove a line item from the draft
-- [ ] **REVIEW-04**: Contractor can add a catalog item manually to the draft
-- [ ] **REVIEW-05**: Draft auto-saves locally on every edit (no data loss on crash or background kill)
-- [ ] **REVIEW-06**: Pre-send validation checks that the draft has at least one line item and a valid customer phone number before allowing Send
+- [x] **REVIEW-01**: Contractor can view the AI-generated draft as a list of line items with quantities and prices
+- [x] **REVIEW-02**: Contractor can edit any line item (quantity, price) on the draft screen
+- [x] **REVIEW-03**: Contractor can remove a line item from the draft
+- [x] **REVIEW-04**: Contractor can add a catalog item manually to the draft
+- [x] **REVIEW-05**: Draft auto-saves locally on every edit (no data loss on crash or background kill)
+- [x] **REVIEW-06**: Pre-send validation checks that the draft has at least one line item and a valid customer phone number before allowing Send
 
 ### SMS Delivery and Customer Approval
 
@@ -66,9 +66,9 @@
 
 ### Quote Storage and History
 
-- [ ] **HIST-01**: All quote states (draft_local, draft_queued, sent, approved, declined, expired, failed_send) are persisted locally in WatermelonDB
+- [x] **HIST-01**: All quote states (draft_local, draft_queued, sent, approved, declined, expired, failed_send) are persisted locally in WatermelonDB
 - [ ] **HIST-02**: Contractor can view a history list of all quotes sorted by recency
-- [ ] **HIST-03**: Contractor can open a past quote to view its full line items and status
+- [x] **HIST-03**: Contractor can open a past quote to view its full line items and status
 - [ ] **HIST-04**: Quote history is accessible offline without a network connection
 
 ### Offline Sync
@@ -161,12 +161,12 @@
 | VOICE-07 | Phase 5 | Pending |
 | VOICE-08 | Phase 5 | Pending |
 | VOICE-09 | Phase 5 | Pending |
-| REVIEW-01 | Phase 4 | Pending |
-| REVIEW-02 | Phase 4 | Pending |
-| REVIEW-03 | Phase 4 | Pending |
-| REVIEW-04 | Phase 4 | Pending |
-| REVIEW-05 | Phase 4 | Pending |
-| REVIEW-06 | Phase 4 | Pending |
+| REVIEW-01 | Phase 4 | Complete |
+| REVIEW-02 | Phase 4 | Complete |
+| REVIEW-03 | Phase 4 | Complete |
+| REVIEW-04 | Phase 4 | Complete |
+| REVIEW-05 | Phase 4 | Complete |
+| REVIEW-06 | Phase 4 | Complete |
 | SMS-01 | Phase 6 | Pending |
 | SMS-02 | Phase 6 | Pending |
 | SMS-03 | Phase 6 | Pending |
@@ -177,9 +177,9 @@
 | SMS-08 | Phase 6 | Pending |
 | SMS-09 | Phase 6 | Pending |
 | SMS-10 | Phase 6 | Pending |
-| HIST-01 | Phase 4 | Pending |
+| HIST-01 | Phase 4 | Complete |
 | HIST-02 | Phase 4 | Pending |
-| HIST-03 | Phase 4 | Pending |
+| HIST-03 | Phase 4 | Complete |
 | HIST-04 | Phase 4 | Pending |
 | SYNC-01 | Phase 1 | Complete |
 | SYNC-02 | Phase 1 | Complete |

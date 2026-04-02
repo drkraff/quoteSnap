@@ -4,6 +4,9 @@ import { isOnline, onConnectivityChange } from './network-monitor';
 import { Q } from '@nozbe/watermelondb';
 import { createCatalogItem, updateCatalogItem, archiveCatalogItem } from '../api/catalog';
 import { CatalogItem } from '../db/models/catalog-item';
+import { createQuoteOnServer, updateQuoteOnServer } from '../api/quotes';
+import { Quote } from '../db/models/quote';
+import { Draft } from '../db/models/draft';
 
 export interface SyncEnqueueParams {
   entityType: 'quote' | 'catalog_item' | 'draft' | 'audio';
@@ -79,8 +82,57 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     return;
   }
 
-  // Other entity types — still placeholder for future phases
-  throw new Error(`Unhandled entity type: ${item.entityType}`);
+  if (item.entityType === 'quote') {
+    if (item.action === 'create') {
+      const response = await createQuoteOnServer({
+        status: payload.status as string | undefined,
+        customerPhone: payload.customerPhone as string | undefined,
+        totalCents: payload.totalCents as number | undefined,
+      });
+      const quoteCollection = database.get<Quote>('quotes');
+      const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
+      if (localItems[0]) {
+        await database.write(async () => {
+          await localItems[0].update((r) => {
+            r.serverId = response.id;
+          });
+        });
+      }
+    } else if (item.action === 'update') {
+      const quoteCollection = database.get<Quote>('quotes');
+      const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
+      const serverId = localItems[0]?.serverId;
+      if (!serverId) throw new Error('Cannot sync update: no server ID for quote');
+      await updateQuoteOnServer(serverId, {
+        status: payload.status as string | undefined,
+        customerPhone: payload.customerPhone as string | undefined,
+        totalCents: payload.totalCents as number | undefined,
+        lineItems: payload.lineItems as Array<{ name: string; quantity: number; unitPriceCents: number }> | undefined,
+      });
+    }
+    return;
+  }
+
+  if (item.entityType === 'draft') {
+    // Draft sync: look up parent quote's serverId, send line items as quote update
+    const draftCollection = database.get<Draft>('drafts');
+    const localDrafts = await draftCollection.query(Q.where('id', item.entityId)).fetch();
+    const draft = localDrafts[0];
+    if (!draft) return;
+    const quoteCollection = database.get<Quote>('quotes');
+    const quotes = await quoteCollection.query(Q.where('id', draft.quoteId)).fetch();
+    const quote = quotes[0];
+    if (!quote?.serverId) return; // Can't sync draft without server quote ID — will retry
+    const lineItemsRaw = payload.lineItemsJson as string | undefined;
+    if (lineItemsRaw) {
+      const items = JSON.parse(lineItemsRaw) as Array<{ name: string; quantity: number; unitPriceCents: number }>;
+      await updateQuoteOnServer(quote.serverId, { lineItems: items, totalCents: payload.totalCents as number | undefined });
+    }
+    return;
+  }
+
+  // Other entity types — log and skip (unknown types should not crash the queue)
+  console.warn(`Unhandled entity type: ${item.entityType}`);
 }
 
 export async function processQueue(): Promise<void> {

@@ -129,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation | 0/4 | Planned    |  |
 | 2. Onboarding | 1/2 | In Progress|  |
 | 3. Catalog Management | 2/3 | In Progress|  |
-| 4. Quote Review and History | 0/3 | Planned | - |
+| 4. Quote Review and History | 0/3 | Planned    |  |
 | 5. Voice-to-Quote Pipeline | 0/TBD | Not started | - |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
 | 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
