@@ -19,12 +19,14 @@ export const colors = {
   border: '#cccccc',
   borderFocused: '#0066cc',
   errorText: '#dc2626',
+  success: '#16a34a',
 } as const;
 
 export const typography = {
   body: { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
   label: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
   heading: { fontSize: 22, fontWeight: '700' as const, lineHeight: 28 },
+  display: { fontSize: 20, fontWeight: '700' as const, lineHeight: 26 },
 } as const;
 
 export const MIN_TOUCH_TARGET = 44;
