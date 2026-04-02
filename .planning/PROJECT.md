@@ -17,6 +17,10 @@ A contractor can describe a job on-site and have a customer-approved quote befor
 - [x] WatermelonDB offline-first schema (quotes, catalog_items, drafts, sync_queue_items) — Validated in Phase 1: Foundation
 - [x] Mobile auth flow (Zustand store, SecureStore persistence, auto-refresh, auth-gated navigation) — Validated in Phase 1: Foundation
 - [x] Offline-first is non-negotiable — wired on Day 1 as required — Validated in Phase 1: Foundation
+- [x] Contractor can review and edit a quote draft (view line items, quantity stepper, price edit, add/remove items, auto-save on every edit) — Validated in Phase 4: Quote Review and History
+- [x] Pre-send validation: at least one line item and a valid 10-digit phone required before Send unblocks — Validated in Phase 4: Quote Review and History
+- [x] Quote history is accessible offline with all quote states (draft_local, draft_queued, sent, approved, declined, expired, failed_send) — Validated in Phase 4: Quote Review and History
+- [x] Read-only quote detail screen with local fallback when offline or quote has no server ID — Validated in Phase 4: Quote Review and History
 
 ### Active
 
@@ -25,13 +29,12 @@ A contractor can describe a job on-site and have a customer-approved quote befor
 - [ ] Contractor can record a voice description of a job and receive a draft quote mapped to their catalog in under 10 seconds
 - [ ] AI mapping is catalog-locked: no line item is returned that does not exist in the contractor's catalog
 - [ ] Low-confidence AI line items are flagged visually with confidence tiers (≥0.85 clean, 0.60–0.84 amber, <0.60 red)
-- [ ] Contractor can review, edit, and send a quote draft via SMS to a customer
+- [ ] Contractor can send a quote draft via SMS to a customer
 - [ ] Customer receives a branded, mobile-optimized approval page via SMS (no app required)
 - [ ] Customer can approve or decline the quote with one tap; approval is recorded with a timestamp
 - [ ] Contractor receives a push notification (FCM) immediately when a customer approves
 - [ ] Quotes are immutable after send: approval page renders from a write-once snapshot
 - [ ] Approval tokens use 32-byte random + SHA-256 hash with server-side expiry enforced by pg-boss cron
-- [ ] Quote history is accessible offline with all quote states (draft, sent, approved, declined, expired)
 - [ ] App works fully on-site without cell signal via WatermelonDB offline-first local queue
 - [ ] Offline sync queue retries on reconnect with schedule: 5s / 15s / 60s / 5m / 15m / dead-letter
 - [ ] All 16 failure scenarios from workflow spec are handled with defined UX states and recovery paths
@@ -100,4 +103,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after Phase 1: Foundation complete*
+*Last updated: 2026-04-02 after Phase 4: Quote Review and History complete*
