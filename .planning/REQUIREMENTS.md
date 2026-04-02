@@ -67,9 +67,9 @@
 ### Quote Storage and History
 
 - [x] **HIST-01**: All quote states (draft_local, draft_queued, sent, approved, declined, expired, failed_send) are persisted locally in WatermelonDB
-- [ ] **HIST-02**: Contractor can view a history list of all quotes sorted by recency
+- [x] **HIST-02**: Contractor can view a history list of all quotes sorted by recency
 - [x] **HIST-03**: Contractor can open a past quote to view its full line items and status
-- [ ] **HIST-04**: Quote history is accessible offline without a network connection
+- [x] **HIST-04**: Quote history is accessible offline without a network connection
 
 ### Offline Sync
 
@@ -178,9 +178,9 @@
 | SMS-09 | Phase 6 | Pending |
 | SMS-10 | Phase 6 | Pending |
 | HIST-01 | Phase 4 | Complete |
-| HIST-02 | Phase 4 | Pending |
+| HIST-02 | Phase 4 | Complete |
 | HIST-03 | Phase 4 | Complete |
-| HIST-04 | Phase 4 | Pending |
+| HIST-04 | Phase 4 | Complete |
 | SYNC-01 | Phase 1 | Complete |
 | SYNC-02 | Phase 1 | Complete |
 | SYNC-03 | Phase 7 | Pending |

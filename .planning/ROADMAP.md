@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Foundation** - Auth + offline-first infrastructure; every subsequent phase depends on this
 - [ ] **Phase 2: Onboarding** - Trade selection and pre-seeded catalog so contractors enter the app ready to work
 - [ ] **Phase 3: Catalog Management** - Contractor owns their service catalog: add, edit, archive, sync
-- [ ] **Phase 4: Quote Review and History** - Contractor can review AI drafts, edit line items, and access quote history offline
+- [x] **Phase 4: Quote Review and History** - Contractor can review AI drafts, edit line items, and access quote history offline (completed 2026-04-02)
 - [ ] **Phase 5: Voice-to-Quote Pipeline** - Voice recording through Whisper/GPT-4o mapping delivers a catalog-constrained draft in under 10 seconds
 - [ ] **Phase 6: SMS Delivery and Customer Approval** - Quote goes to customer via SMS; customer approves; contractor gets push notification
 - [ ] **Phase 7: Sync Hardening and Failure Coverage** - Full retry schedule, conflict resolution, and all 16 failure scenarios handled
@@ -77,9 +77,9 @@ Plans:
   5. Contractor can open the history list and view any past quote with its full line items and status — without network
 **Plans**: 3 plans
 Plans:
-- [ ] 04-01-PLAN.md -- Backend migration + types + routes + Jest setup + pure utility functions with tests + API client
-- [ ] 04-02-PLAN.md -- Mobile UI components: StatusBadge, QuoteRow, LineItemRow, PriceEditSheet, CatalogPickerSheet, QuoteDetail
-- [ ] 04-03-PLAN.md -- Screens (history, draft, detail) + tab nav + sync queue wiring + human verification
+- [x] 04-01-PLAN.md -- Backend migration + types + routes + Jest setup + pure utility functions with tests + API client
+- [x] 04-02-PLAN.md -- Mobile UI components: StatusBadge, QuoteRow, LineItemRow, PriceEditSheet, CatalogPickerSheet, QuoteDetail
+- [x] 04-03-PLAN.md -- Screens (history, draft, detail) + tab nav + sync queue wiring + human verification
 **UI hint**: yes
 
 ### Phase 5: Voice-to-Quote Pipeline
@@ -129,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation | 0/4 | Planned    |  |
 | 2. Onboarding | 1/2 | In Progress|  |
 | 3. Catalog Management | 2/3 | In Progress|  |
-| 4. Quote Review and History | 0/3 | Planned    |  |
+| 4. Quote Review and History | 3/3 | Complete   | 2026-04-02 |
 | 5. Voice-to-Quote Pipeline | 0/TBD | Not started | - |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
 | 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
