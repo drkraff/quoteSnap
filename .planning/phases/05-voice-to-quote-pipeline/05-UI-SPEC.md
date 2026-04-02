@@ -35,8 +35,8 @@ Source: `tokens.ts` (pre-populated — do not re-specify)
 
 | Token | Value | Usage in Phase 5 |
 |-------|-------|-----------------|
-| xs | 4px | Badge gap below item name; waveform bar gap |
-| sm | 8px | FAB label gap; toast internal padding; row vertical padding |
+| xs | 4px | Badge gap below item name; waveform bar gap; confidence badge left border stripe width |
+| sm | 8px | FAB label gap; toast internal padding; row vertical padding; gap between Voice and Manual FABs |
 | md | 16px | FAB right margin; screen horizontal padding; toast left/right inset |
 | lg | 24px | Recording modal vertical section gap |
 | xl | 32px | Recording modal top/bottom padding |
@@ -45,8 +45,8 @@ Source: `tokens.ts` (pre-populated — do not re-specify)
 
 Exceptions:
 - FAB minimum height: 56px (comfortable for gloved/on-site hands — D-01 locked)
-- FAB gap between Voice and Manual: 12px (half-step between sm and md — fits the vertical stack without crowding)
-- Confidence badge left border stripe: 3px width (visual scan cue — D-05 locked)
+- FAB gap between Voice and Manual FABs: 8px (sm token — keeps stack tight in thumb zone without crowding)
+- Confidence badge left border stripe: 4px width (xs token — visual scan cue — D-05 locked)
 - `ai_processing` row minimum height: 56px (same as existing QuoteRow)
 - Flagged LineItemRow (confidence badge visible) minimum height: 72px (D-05 locked — badge is sibling below name text)
 - FlatList `contentContainerStyle.paddingBottom`: computed as `tabBarHeight + insets.bottom + fabStackHeight` — prevents last quote row being hidden under FAB stack (D-01 locked)
@@ -60,12 +60,13 @@ Source: `tokens.ts` (pre-populated — do not re-specify)
 | Role | Size | Weight | Line Height | Usage in Phase 5 |
 |------|------|--------|-------------|-----------------|
 | Body | 16px | 400 | 24px (1.5) | Item name in LineItemRow; recording duration counter; "Queued" label |
-| Label | 14px | 400 | 20px (1.43) | FAB labels ("Voice Quote", "Manual"); confidence badge text; toast message text |
+| Label | 14px | 400 | 20px (1.43) | FAB labels ("Voice Quote", "Manual Quote"); confidence badge text; toast message text |
 | Heading | 22px | 700 | 28px (1.27) | Recording modal title ("Describe the job") |
 | Display | 20px | 700 | 26px (1.3) | N/A this phase |
 
 Additional weight declaration:
-- FAB label weight: 600 (semibold) — labels must read clearly over colored FAB backgrounds
+- Two weights only: 400 (regular) and 700 (bold)
+- FAB label weight: 700 — labels must read clearly over colored FAB backgrounds
 - Toast action text ("tap to review"): 700 — matches existing UndoToast `undoText` pattern
 - Confidence badge text: 700 — amber/red labels must stand out without relying on color alone
 
@@ -89,7 +90,7 @@ Source: `tokens.ts` (pre-populated — do not re-specify)
 | Muted text | `#666666` | "Queued" label on offline-queued `ai_processing` rows; recording duration counter |
 | Toast background | `#333333` | "Your quote is ready" toast — reuse existing UndoToast container style |
 | Manual FAB fill | `#f5f5f5` (secondary) | Secondary FAB background — muted/outlined style signals lower priority than Voice FAB |
-| Manual FAB icon/label | `#666666` (mutedText) | Pen icon + "Manual" text — clearly secondary |
+| Manual FAB icon/label | `#666666` (mutedText) | Pen icon + "Manual Quote" text — clearly secondary |
 | Manual FAB border | `#cccccc` (border) | 1px border on Manual FAB to define it without color weight |
 
 **Accent reserved for:**
@@ -149,20 +150,20 @@ Source: `tokens.ts` (pre-populated — do not re-specify)
   width: 56, height: 56, borderRadius: 28
   backgroundColor: colors.accent (#0066cc)
   icon: mic-outline (Ionicons), size 24, color #ffffff
-  label: "Voice Quote", 14px, weight 600, color #ffffff
+  label: "Voice Quote", 14px, weight 700, color #ffffff
   elevation: 4 (Android) / shadowOpacity 0.25 (iOS)
   accessibilityLabel: "Start voice quote"
   accessibilityRole: "button"
 
-[Manual FAB] — 12px above Voice FAB
+[Manual Quote FAB] — 8px above Voice FAB
   position: absolute
-  bottom: insets.bottom + tabBarHeight + 16 + 56 + 12
+  bottom: insets.bottom + tabBarHeight + 16 + 56 + 8
   right: 16
   width: 56, height: 56, borderRadius: 28
   backgroundColor: colors.secondary (#f5f5f5)
   borderWidth: 1, borderColor: colors.border (#cccccc)
   icon: create-outline (Ionicons), size 24, color colors.mutedText (#666666)
-  label: "Manual", 14px, weight 600, color colors.mutedText (#666666)
+  label: "Manual Quote", 14px, weight 700, color colors.mutedText (#666666)
   elevation: 2 (Android) / shadowOpacity 0.15 (iOS)
   accessibilityLabel: "Create manual quote"
   accessibilityRole: "button"
@@ -170,7 +171,7 @@ Source: `tokens.ts` (pre-populated — do not re-specify)
 
 State rules:
 - Both FABs always visible — no expand/collapse, no long-press, no speed-dial (D-01 locked)
-- While `isCreating` is true on Manual FAB: opacity 0.6, disabled=true
+- While `isCreating` is true on Manual Quote FAB: opacity 0.6, disabled=true
 - Voice FAB is never disabled — recording screen handles mic permission state
 
 ### Recording Modal (voice-record.tsx)
@@ -204,7 +205,7 @@ Row height rules:
 - Flagged item (confidence 'review' or 'needs_input'): `minHeight: 72` — badge adds ~16px
 
 Left border stripe:
-- `borderLeftWidth: 3`
+- `borderLeftWidth: 4`
 - 'review': `borderLeftColor: '#d97706'`
 - 'needs_input': `borderLeftColor: colors.destructive` (#dc2626)
 - Clean items: no border
@@ -245,7 +246,7 @@ Auto-scroll rule: On draft load, if any items have confidence 'needs_input', `Fl
 │  └── ...                            │
 │                          paddingBottom = tabBarH + insets.bottom + 140 │
 │─────────────────────────────────────│
-│     [Manual FAB — secondary]        │  ← above Voice FAB
+│     [Manual Quote FAB — secondary]  │  ← above Voice FAB (8px gap)
 │     [Voice Quote FAB — primary]     │  ← thumb zone
 │─────────────────────────────────────│
 │ Tab bar                             │
@@ -285,7 +286,7 @@ Auto-scroll rule: On draft load, if any items have confidence 'needs_input', `Fl
 | Element | Copy |
 |---------|------|
 | Voice Quote FAB label | "Voice Quote" |
-| Manual FAB label | "Manual" |
+| Manual FAB label | "Manual Quote" |
 | Recording modal title | "Describe the job" |
 | Pre-record hint | "Tap to record" |
 | Active recording hint | "Tap to stop" |
@@ -317,6 +318,7 @@ Auto-scroll rule: On draft load, if any items have confidence 'needs_input', `Fl
 |---------|-------------|
 | All FABs | `accessibilityRole="button"`, descriptive `accessibilityLabel` |
 | Mic/Stop button | `accessibilityLabel` updates dynamically: "Start recording" / "Stop recording" |
+| Close button (recording modal) | `accessibilityLabel: "Dismiss recording"`, `accessibilityRole: "button"` |
 | ai_processing row | `accessibilityLabel`: "Quote processing" or "Quote queued, will upload when online" |
 | DraftReadyToast | `accessibilityLiveRegion="polite"` — screen reader announces on appearance |
 | Confidence badges | Must not rely on color alone — text label is primary signal (D-05 locked) |
