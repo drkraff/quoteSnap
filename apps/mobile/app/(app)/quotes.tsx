@@ -20,7 +20,7 @@ import { QuoteRow } from '../../src/components/quotes/quote-row';
 import { EmptyState } from '../../src/components/catalog/empty-state';
 import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
 import { colors, spacing, typography } from '../../src/theme/tokens';
-import { getVoiceStatus } from '../../src/api/voice';
+import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { isOnline } from '../../src/sync/network-monitor';
 
 // Tab bar height constant (safe default for both iOS/Android)
@@ -62,11 +62,32 @@ export default function QuotesScreen(): JSX.Element {
         try {
           const result = await getVoiceStatus(q.voiceJobId);
           if (result.status === 'complete' && result.draftId) {
-            await database.write(async () => {
-              await q.update((r) => {
-                r.status = 'draft_local';
+            try {
+              const draftData = await getDraftLineItems(result.draftId);
+              await database.write(async () => {
+                // Write line items JSON to the draft record BEFORE updating quote status
+                const draftCollection = database.get<Draft>('drafts');
+                const drafts = await draftCollection.query(Q.where('quote_id', q.id)).fetch();
+                if (drafts.length > 0) {
+                  const draft = drafts[0]!;
+                  await draft.update((d) => {
+                    d.lineItemsJson = JSON.stringify(draftData.lineItems);
+                  });
+                }
+                // Then transition the quote status so the UI updates
+                await q.update((r) => {
+                  r.status = 'draft_local';
+                });
               });
-            });
+            } catch {
+              // If getDraftLineItems fails (network), still transition status so the quote
+              // is not stuck in ai_processing forever. lineItemsJson stays '[]'.
+              await database.write(async () => {
+                await q.update((r) => {
+                  r.status = 'draft_local';
+                });
+              });
+            }
             setReadyDraftId(q.id);
           } else if (result.status === 'failed') {
             await database.write(async () => {

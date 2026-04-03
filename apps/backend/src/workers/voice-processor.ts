@@ -143,8 +143,8 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
 
       for (const item of lineItems) {
         await client.query(
-          `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents) VALUES ($1, $2, $3, $4)`,
-          [quoteId, item.name, item.quantity, item.unitPriceCents]
+          `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence) VALUES ($1, $2, $3, $4, $5)`,
+          [quoteId, item.name, item.quantity, item.unitPriceCents, item.confidence]
         );
       }
 

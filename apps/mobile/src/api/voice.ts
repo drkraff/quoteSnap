@@ -44,6 +44,37 @@ export async function uploadAudio(filePath: string, quoteServerId: string): Prom
   return response.json() as Promise<UploadAudioResponse>;
 }
 
+export interface DraftLineItemsResponse {
+  quoteId: string;
+  totalCents: number;
+  lineItems: Array<{
+    catalogItemId: string;
+    name: string;
+    quantity: number;
+    unitPriceCents: number;
+    confidence: number | undefined;
+  }>;
+}
+
+export async function getDraftLineItems(quoteId: string): Promise<DraftLineItemsResponse> {
+  const { useAuthStore } = await import('../store/auth-store');
+  const accessToken = useAuthStore.getState().accessToken;
+
+  const response = await fetch(`${API_BASE_URL}/voice/draft/${quoteId}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken ?? ''}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`getDraftLineItems failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<DraftLineItemsResponse>;
+}
+
 export async function getVoiceStatus(jobId: string): Promise<VoiceStatusResponse> {
   const { useAuthStore } = await import('../store/auth-store');
   const accessToken = useAuthStore.getState().accessToken;
