@@ -3,6 +3,7 @@ import { SyncQueueItem } from '../db/models/sync-queue-item';
 import { isOnline, onConnectivityChange } from './network-monitor';
 import { Q } from '@nozbe/watermelondb';
 import { createCatalogItem, updateCatalogItem, archiveCatalogItem } from '../api/catalog';
+import { uploadAudio } from '../api/voice';
 import { CatalogItem } from '../db/models/catalog-item';
 import { createQuoteOnServer, updateQuoteOnServer } from '../api/quotes';
 import { Quote } from '../db/models/quote';
@@ -131,7 +132,28 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     return;
   }
 
+  if (item.entityType === 'audio') {
+    const { filePath, quoteLocalId } = payload as { filePath: string; quoteLocalId: string };
+    const quoteCollection = database.get<Quote>('quotes');
+    const localQuotes = await quoteCollection.query(Q.where('id', quoteLocalId)).fetch();
+    const quote = localQuotes[0];
+    if (!quote) throw new Error('Cannot sync audio: quote not found');
+
+    // Upload audio — backend creates the server-side quote and job
+    const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quote.serverId ?? '');
+
+    // Store jobId and serverId on local quote
+    await database.write(async () => {
+      await quote.update((r) => {
+        r.voiceJobId = jobId;
+        r.serverId = serverQuoteId;
+      });
+    });
+    return;
+  }
+
   // Other entity types — log and skip (unknown types should not crash the queue)
+  // eslint-disable-next-line no-console
   console.warn(`Unhandled entity type: ${item.entityType}`);
 }
 

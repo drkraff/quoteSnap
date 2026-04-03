@@ -12,4 +12,5 @@ export class Quote extends Model {
   @readonly @date('created_at') createdAt!: Date;
   @date('updated_at') updatedAt!: Date;
   @date('sent_at') sentAt!: Date | null;
+  @text('voice_job_id') voiceJobId!: string | null;
 }
