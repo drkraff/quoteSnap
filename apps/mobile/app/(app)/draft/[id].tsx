@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { confidenceTier } from '../../../src/utils/confidence';
 import { useLocalSearchParams } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -55,6 +56,7 @@ export default function DraftScreen(): JSX.Element {
   const [loading, setLoading] = useState(true);
 
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flatListRef = useRef<FlatList>(null);
 
   // Load quote + draft on mount
   useEffect(() => {
@@ -94,6 +96,29 @@ export default function DraftScreen(): JSX.Element {
       .subscribe(setCatalogItems);
     return () => sub.unsubscribe();
   }, []);
+
+  // Auto-scroll to first red (needs_input) item on draft load
+  useEffect(() => {
+    if (lineItems.length === 0) return;
+    const firstRedIndex = lineItems.findIndex(
+      (item) => confidenceTier(item.confidence) === 'needs_input',
+    );
+    if (firstRedIndex > 0) {
+      const timer = setTimeout(() => {
+        try {
+          flatListRef.current?.scrollToIndex({
+            index: firstRedIndex,
+            animated: true,
+            viewPosition: 0.3,
+          });
+        } catch {
+          // FlatList may not have measured — fallback silently
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineItems.length]); // Only on initial load, not every edit
 
   // Clean up undo timer on unmount
   useEffect(() => {
@@ -289,18 +314,28 @@ export default function DraftScreen(): JSX.Element {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <FlatList
+        ref={flatListRef}
         data={lineItems}
         keyExtractor={(_, index) => String(index)}
-        renderItem={({ item, index }) => (
-          <LineItemRow
-            name={item.name}
-            quantity={item.quantity}
-            unitPriceCents={item.unitPriceCents}
-            onQuantityChange={(delta) => { void handleQuantityChange(index, delta); }}
-            onPricePress={() => setPriceEditIndex(index)}
-            onDelete={() => { void handleDeleteItem(index); }}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          const tier = confidenceTier(item.confidence);
+          const displayTier = tier === 'clean' ? undefined : tier;
+          return (
+            <LineItemRow
+              name={item.name}
+              quantity={item.quantity}
+              unitPriceCents={item.unitPriceCents}
+              confidence={displayTier}
+              onQuantityChange={(delta) => { void handleQuantityChange(index, delta); }}
+              onPricePress={() => setPriceEditIndex(index)}
+              onDelete={() => { void handleDeleteItem(index); }}
+            />
+          );
+        }}
+        onScrollToIndexFailed={(info) => {
+          const offset = info.averageItemLength * info.index;
+          flatListRef.current?.scrollToOffset({ offset, animated: true });
+        }}
         ListEmptyComponent={
           <EmptyState onAddItem={() => setShowCatalogPicker(true)} />
         }

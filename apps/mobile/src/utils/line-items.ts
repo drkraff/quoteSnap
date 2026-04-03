@@ -3,6 +3,7 @@ export interface LineItem {
   name: string;
   quantity: number;
   unitPriceCents: number;
+  confidence?: number; // 0-1 from AI pipeline; undefined for manual items
 }
 
 export function parseLineItems(json: string): LineItem[] {
@@ -40,7 +41,7 @@ export function updateQuantity(
 ): LineItem[] {
   return items.map((item, i) =>
     i === index
-      ? { ...item, quantity: Math.max(1, item.quantity + delta) }
+      ? { ...item, quantity: Math.max(1, item.quantity + delta), confidence: undefined }
       : item,
   );
 }
@@ -51,7 +52,7 @@ export function updatePrice(
   newPriceCents: number,
 ): LineItem[] {
   return items.map((item, i) =>
-    i === index ? { ...item, unitPriceCents: newPriceCents } : item,
+    i === index ? { ...item, unitPriceCents: newPriceCents, confidence: undefined } : item,
   );
 }
 

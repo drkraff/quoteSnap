@@ -10,6 +10,7 @@ interface LineItemRowProps {
   onQuantityChange: (delta: number) => void;
   onPricePress: () => void;
   onDelete: () => void;
+  confidence?: 'review' | 'needs_input';
 }
 
 export function LineItemRow({
@@ -19,6 +20,7 @@ export function LineItemRow({
   onQuantityChange,
   onPricePress,
   onDelete,
+  confidence,
 }: LineItemRowProps): JSX.Element {
   const priceDisplay = `$${(unitPriceCents / 100).toFixed(2)}`;
 
@@ -40,13 +42,28 @@ export function LineItemRow({
 
   const minusDisabled = quantity === 1;
 
+  const tierBorderStyle =
+    confidence === 'needs_input'
+      ? { borderLeftWidth: 4, borderLeftColor: colors.destructive }
+      : confidence === 'review'
+        ? { borderLeftWidth: 4, borderLeftColor: '#d97706' }
+        : {};
+
   return (
     <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
-      <View style={styles.row}>
-        {/* Left: item name */}
-        <Text style={styles.name} numberOfLines={1}>
-          {name}
-        </Text>
+      <View style={[styles.row, tierBorderStyle, confidence != null && styles.rowFlagged]}>
+        {/* Left: item name + confidence badge */}
+        <View style={styles.nameColumn}>
+          <Text style={styles.name} numberOfLines={1}>
+            {name}
+          </Text>
+          {confidence === 'review' && (
+            <Text style={styles.badgeAmber}>Review</Text>
+          )}
+          {confidence === 'needs_input' && (
+            <Text style={styles.badgeRed}>Needs Input</Text>
+          )}
+        </View>
 
         {/* Center: +/- stepper */}
         <View style={styles.stepper}>
@@ -103,13 +120,32 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  name: {
+  rowFlagged: {
+    minHeight: 72,
+  },
+  nameColumn: {
     flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  name: {
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
     color: '#000000',
-    marginRight: spacing.sm,
+  },
+  badgeAmber: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.warning, // #b45309 — accessible amber
+    marginTop: spacing.xs,
+  },
+  badgeRed: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.destructive, // #dc2626
+    marginTop: spacing.xs,
   },
   stepper: {
     flexDirection: 'row',
