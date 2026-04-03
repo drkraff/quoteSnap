@@ -92,11 +92,12 @@ Plans:
   3. Low-confidence line items are labeled "Review" (amber) or "Needs Input" (red) with no raw percentages shown
   4. Red-confidence items auto-scroll into view; contractor is never left wondering why the draft looks incomplete
   5. Voice recording works without network; audio enters the sync queue and processes when signal returns
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
-- [ ] 05-01-PLAN.md -- Backend voice pipeline: R2 upload, pg-boss worker, Whisper + GPT-4o mapping, catalog validation, polling endpoint
-- [ ] 05-02-PLAN.md -- Mobile recording UI: dual FAB, voice-record screen (expo-av), sync queue audio case, ai_processing row, polling
+- [x] 05-01-PLAN.md -- Backend voice pipeline: R2 upload, pg-boss worker, Whisper + GPT-4o mapping, catalog validation, polling endpoint
+- [x] 05-02-PLAN.md -- Mobile recording UI: dual FAB, voice-record screen (expo-av), sync queue audio case, ai_processing row, polling
 - [ ] 05-03-PLAN.md -- Confidence badges on LineItemRow, auto-scroll to red items, DraftReadyToast, human verification
+- [ ] 05-04-PLAN.md -- Gap closure: confidence column in migration, INSERT fix, GET /draft endpoint, getDraftLineItems polling call
 **UI hint**: yes
 
 ### Phase 6: SMS Delivery and Customer Approval
@@ -135,6 +136,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 2. Onboarding | 1/2 | In Progress|  |
 | 3. Catalog Management | 2/3 | In Progress|  |
 | 4. Quote Review and History | 3/3 | Complete   | 2026-04-02 |
-| 5. Voice-to-Quote Pipeline | 0/3 | Planned | - |
+| 5. Voice-to-Quote Pipeline | 2/4 | In Progress|  |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
 | 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
