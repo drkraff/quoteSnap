@@ -18,6 +18,7 @@ import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
 import { EmptyState } from '../../src/components/catalog/empty-state';
+import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus } from '../../src/api/voice';
 import { isOnline } from '../../src/sync/network-monitor';
@@ -30,6 +31,7 @@ export default function QuotesScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+  const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export default function QuotesScreen(): JSX.Element {
                 r.status = 'draft_local';
               });
             });
+            setReadyDraftId(q.id);
           } else if (result.status === 'failed') {
             await database.write(async () => {
               await q.update((r) => {
@@ -153,6 +156,12 @@ export default function QuotesScreen(): JSX.Element {
                   insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm + 56 + 16,
               }
         }
+      />
+
+      <DraftReadyToast
+        visible={readyDraftId !== null}
+        draftId={readyDraftId}
+        onDismiss={() => setReadyDraftId(null)}
       />
 
       {/* Manual Quote FAB — above voice FAB */}
