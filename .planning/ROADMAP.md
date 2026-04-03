@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Foundation** - Auth + offline-first infrastructure; every subsequent phase depends on this
 - [ ] **Phase 2: Onboarding** - Trade selection and pre-seeded catalog so contractors enter the app ready to work
 - [ ] **Phase 3: Catalog Management** - Contractor owns their service catalog: add, edit, archive, sync
-- [x] **Phase 4: Quote Review and History** - Contractor can review AI drafts, edit line items, and access quote history offline (completed 2026-04-02)
+- [x] **Phase 4: Quote Review and History** - Contractor can review AI drafts, edit line items, and access quote history offline (completed 2026-04-02)
 - [ ] **Phase 5: Voice-to-Quote Pipeline** - Voice recording through Whisper/GPT-4o mapping delivers a catalog-constrained draft in under 10 seconds
 - [ ] **Phase 6: SMS Delivery and Customer Approval** - Quote goes to customer via SMS; customer approves; contractor gets push notification
 - [ ] **Phase 7: Sync Hardening and Failure Coverage** - Full retry schedule, conflict resolution, and all 16 failure scenarios handled
@@ -92,7 +92,12 @@ Plans:
   3. Low-confidence line items are labeled "Review" (amber) or "Needs Input" (red) with no raw percentages shown
   4. Red-confidence items auto-scroll into view; contractor is never left wondering why the draft looks incomplete
   5. Voice recording works without network; audio enters the sync queue and processes when signal returns
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 05-01-PLAN.md -- Backend voice pipeline: R2 upload, pg-boss worker, Whisper + GPT-4o mapping, catalog validation, polling endpoint
+- [ ] 05-02-PLAN.md -- Mobile recording UI: dual FAB, voice-record screen (expo-av), sync queue audio case, ai_processing row, polling
+- [ ] 05-03-PLAN.md -- Confidence badges on LineItemRow, auto-scroll to red items, DraftReadyToast, human verification
+**UI hint**: yes
 
 ### Phase 6: SMS Delivery and Customer Approval
 **Goal**: Contractor sends a quote by SMS; customer approves with one tap; contractor gets notified immediately
@@ -122,7 +127,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -130,6 +135,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Onboarding | 1/2 | In Progress|  |
 | 3. Catalog Management | 2/3 | In Progress|  |
 | 4. Quote Review and History | 3/3 | Complete   | 2026-04-02 |
-| 5. Voice-to-Quote Pipeline | 0/TBD | Not started | - |
+| 5. Voice-to-Quote Pipeline | 0/3 | Planned | - |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
 | 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
