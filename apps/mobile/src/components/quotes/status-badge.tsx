@@ -8,6 +8,7 @@ interface StatusConfig {
 }
 
 const STATUS_MAP: Record<string, StatusConfig> = {
+  ai_processing: { label: 'Processing', bg: '#e0f0ff', text: '#0066cc' },
   draft_local: { label: 'Draft', bg: '#e0f0ff', text: '#0066cc' },
   draft_queued: { label: 'Queued', bg: '#e0f0ff', text: '#0066cc' },
   sent: { label: 'Sent', bg: '#f0f0f0', text: '#666666' },

@@ -68,6 +68,10 @@ export default function AppLayout(): JSX.Element {
         name="quote/[id]"
         options={{ href: null, headerTitle: 'Quote Details' }}
       />
+      <Tabs.Screen
+        name="voice-record"
+        options={{ href: null, headerTitle: 'Voice Quote', tabBarStyle: { display: 'none' } }}
+      />
     </Tabs>
   );
 }
