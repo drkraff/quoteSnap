@@ -4,3 +4,6 @@ ALTER TABLE quotes ADD COLUMN IF NOT EXISTS voice_job_id VARCHAR(50);
 -- Update status column comment to include ai_processing
 COMMENT ON COLUMN quotes.status IS
   'ai_processing | draft_local | draft_queued | sent | approved | declined | expired | failed_send';
+
+-- Add confidence column to quote_line_items for AI confidence scores
+ALTER TABLE quote_line_items ADD COLUMN IF NOT EXISTS confidence REAL;
