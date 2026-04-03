@@ -106,3 +106,67 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// GET /draft/:quoteId — return AI-generated line items with confidence scores
+router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contractorId = req.contractor!.contractorId;
+    const { quoteId } = req.params as { quoteId: string };
+
+    // Verify quote exists and belongs to contractor
+    const quoteResult = await query(
+      `SELECT id, status, total_cents FROM quotes WHERE id = $1 AND contractor_id = $2`,
+      [quoteId, contractorId]
+    );
+
+    if (quoteResult.rows.length === 0) {
+      res.status(404).json({ error: 'Draft not found' });
+      return;
+    }
+
+    const quoteRow = quoteResult.rows[0] as { id: string; status: string; total_cents: number };
+
+    if (quoteRow.status === 'ai_processing') {
+      res.status(404).json({ error: 'Draft not ready' });
+      return;
+    }
+
+    // Fetch line items with confidence scores
+    const lineItemsResult = await query(
+      `SELECT qli.catalog_item_id AS "catalogItemId",
+              qli.name,
+              qli.quantity,
+              qli.unit_price_cents AS "unitPriceCents",
+              qli.confidence
+       FROM quote_line_items qli
+       WHERE qli.quote_id = $1
+       ORDER BY qli.created_at ASC`,
+      [quoteId]
+    );
+
+    type LineItemRow = {
+      catalogItemId: string | null;
+      name: string;
+      quantity: number;
+      unitPriceCents: number;
+      confidence: number | null;
+    };
+
+    const lineItems = (lineItemsResult.rows as LineItemRow[]).map((row) => ({
+      catalogItemId: row.catalogItemId ?? '',
+      name: row.name,
+      quantity: row.quantity,
+      unitPriceCents: row.unitPriceCents,
+      confidence: row.confidence ?? undefined,
+    }));
+
+    res.json({
+      quoteId,
+      totalCents: quoteRow.total_cents,
+      lineItems,
+    });
+  } catch (err) {
+    console.error('GET /voice/draft/:quoteId error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
