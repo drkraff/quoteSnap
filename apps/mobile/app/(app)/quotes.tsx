@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
+  Text,
   FlatList,
   Pressable,
   StyleSheet,
@@ -17,13 +18,19 @@ import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
 import { EmptyState } from '../../src/components/catalog/empty-state';
-import { colors } from '../../src/theme/tokens';
+import { colors, spacing, typography } from '../../src/theme/tokens';
+import { getVoiceStatus } from '../../src/api/voice';
+import { isOnline } from '../../src/sync/network-monitor';
+
+// Tab bar height constant (safe default for both iOS/Android)
+const TAB_BAR_HEIGHT = 56;
 
 export default function QuotesScreen(): JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
@@ -38,7 +45,53 @@ export default function QuotesScreen(): JSX.Element {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Polling for ai_processing quotes
+  useEffect(() => {
+    const processingQuotes = quotes.filter((q) => q.status === 'ai_processing' && q.voiceJobId);
+
+    if (processingQuotes.length === 0) {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      return;
+    }
+
+    async function pollProcessing(): Promise<void> {
+      for (const q of processingQuotes) {
+        if (!q.voiceJobId) continue;
+        try {
+          const result = await getVoiceStatus(q.voiceJobId);
+          if (result.status === 'complete' && result.draftId) {
+            await database.write(async () => {
+              await q.update((r) => {
+                r.status = 'draft_local';
+              });
+            });
+          } else if (result.status === 'failed') {
+            await database.write(async () => {
+              await q.update((r) => {
+                r.status = 'failed_send';
+              });
+            });
+          }
+        } catch {
+          // Network error — will retry next poll
+        }
+      }
+      pollTimerRef.current = setTimeout(() => { void pollProcessing(); }, 1500);
+    }
+
+    if (isOnline()) {
+      pollTimerRef.current = setTimeout(() => { void pollProcessing(); }, 1500);
+    }
+
+    return () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, [quotes]);
+
   function handleQuotePress(quote: Quote): void {
+    // ai_processing quotes are not interactive
+    if (quote.status === 'ai_processing') return;
+
     if (quote.status === 'draft_local') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       router.push(`/draft/${quote.id}` as any);
@@ -48,7 +101,7 @@ export default function QuotesScreen(): JSX.Element {
     }
   }
 
-  async function handleFabPress(): Promise<void> {
+  async function handleManualQuotePress(): Promise<void> {
     if (isCreating) return;
     setIsCreating(true);
     try {
@@ -90,22 +143,47 @@ export default function QuotesScreen(): JSX.Element {
           <QuoteRow quote={item} onPress={handleQuotePress} />
         )}
         ListEmptyComponent={
-          <EmptyState onAddItem={() => { void handleFabPress(); }} />
+          <EmptyState onAddItem={() => { void handleManualQuotePress(); }} />
         }
-        contentContainerStyle={quotes.length === 0 ? styles.emptyContent : undefined}
+        contentContainerStyle={
+          quotes.length === 0
+            ? styles.emptyContent
+            : {
+                paddingBottom:
+                  insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm + 56 + 16,
+              }
+        }
       />
+
+      {/* Manual Quote FAB — above voice FAB */}
       <Pressable
         style={[
-          styles.fab,
-          { bottom: insets.bottom + 16 },
+          styles.manualFab,
+          { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm },
           isCreating && styles.fabDisabled,
         ]}
-        onPress={() => { void handleFabPress(); }}
-        accessibilityLabel="Create new quote"
+        onPress={() => { void handleManualQuotePress(); }}
+        accessibilityLabel="Create manual quote"
         accessibilityRole="button"
         disabled={isCreating}
       >
-        <Ionicons name="add" size={24} color="#ffffff" />
+        <Ionicons name="create-outline" size={24} color={colors.mutedText} />
+        <Text style={styles.manualFabLabel}>Manual Quote</Text>
+      </Pressable>
+
+      {/* Voice Quote FAB — bottom, primary */}
+      <Pressable
+        style={[
+          styles.voiceFab,
+          { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 },
+        ]}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onPress={() => { router.push('/voice-record' as any); }}
+        accessibilityLabel="Start voice quote"
+        accessibilityRole="button"
+      >
+        <Ionicons name="mic-outline" size={24} color="#ffffff" />
+        <Text style={styles.voiceFabLabel}>Voice Quote</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -119,20 +197,49 @@ const styles = StyleSheet.create({
   emptyContent: {
     flex: 1,
   },
-  fab: {
+  voiceFab: {
     position: 'absolute',
-    right: 16,
-    width: 56,
+    right: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
     height: 56,
+    paddingHorizontal: spacing.md,
     borderRadius: 28,
     backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
     elevation: 4,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
+  },
+  voiceFabLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginLeft: spacing.sm,
+  },
+  manualFab: {
+    position: 'absolute',
+    right: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    paddingHorizontal: spacing.md,
+    borderRadius: 28,
+    backgroundColor: colors.secondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+  },
+  manualFabLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.mutedText,
+    marginLeft: spacing.sm,
   },
   fabDisabled: {
     opacity: 0.6,

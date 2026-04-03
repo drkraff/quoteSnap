@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 1,
+  version: 2,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -9,12 +9,13 @@ export const schema = appSchema({
         { name: 'server_id', type: 'string', isOptional: true },
         { name: 'contractor_id', type: 'string' },
         { name: 'status', type: 'string' },
-        // status: draft_local | draft_queued | sent | approved | declined | expired | failed_send
+        // status: ai_processing | draft_local | draft_queued | sent | approved | declined | expired | failed_send
         { name: 'customer_phone', type: 'string', isOptional: true },
         { name: 'total_cents', type: 'number' },
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
         { name: 'sent_at', type: 'number', isOptional: true },
+        { name: 'voice_job_id', type: 'string', isOptional: true },
       ],
     }),
     tableSchema({
