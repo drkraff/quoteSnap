@@ -15,12 +15,12 @@ function isApiError(value: unknown): value is { error: string } {
 // Shared refresh promise — concurrent 401s coalesce into one refresh attempt
 let refreshPromise: Promise<boolean> | null = null;
 
-async function getOrRefreshSession(): Promise<boolean> {
+function getOrRefreshSession(): Promise<boolean> {
   if (!refreshPromise) {
-    const { useAuthStore } = await import('../store/auth-store');
-    refreshPromise = useAuthStore.getState().refreshSession().finally(() => {
-      refreshPromise = null;
-    });
+    // Assign synchronously before any await so concurrent callers share this promise
+    refreshPromise = import('../store/auth-store')
+      .then(({ useAuthStore }) => useAuthStore.getState().refreshSession())
+      .finally(() => { refreshPromise = null; });
   }
   return refreshPromise;
 }
