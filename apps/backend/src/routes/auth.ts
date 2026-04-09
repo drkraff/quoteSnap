@@ -2,7 +2,16 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { rateLimit } from "express-rate-limit";
 import { query } from "../db/connection.js";
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts, please try again later" },
+});
 import {
   ContractorPayload,
   RegisterBody,
@@ -115,7 +124,7 @@ router.post("/register", async (req: Request, res: Response): Promise<void> => {
 
 // ── POST /login ───────────────────────────────────────────────────────────────
 
-router.post("/login", async (req: Request, res: Response): Promise<void> => {
+router.post("/login", authLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as LoginBody;
     const { email, phone, password } = body;
@@ -178,7 +187,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
 
 // ── POST /refresh ─────────────────────────────────────────────────────────────
 
-router.post("/refresh", async (req: Request, res: Response): Promise<void> => {
+router.post("/refresh", authLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as RefreshBody;
     const { refreshToken } = body;
