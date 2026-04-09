@@ -12,6 +12,19 @@ function isApiError(value: unknown): value is { error: string } {
   return typeof value === 'object' && value !== null && 'error' in value;
 }
 
+// Shared refresh promise — concurrent 401s coalesce into one refresh attempt
+let refreshPromise: Promise<boolean> | null = null;
+
+async function getOrRefreshSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    const { useAuthStore } = await import('../store/auth-store');
+    refreshPromise = useAuthStore.getState().refreshSession().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -37,8 +50,7 @@ async function request<T>(
   });
 
   if (response.status === 401 && !retrying) {
-    // Attempt token refresh
-    const refreshed = await useAuthStore.getState().refreshSession();
+    const refreshed = await getOrRefreshSession();
     if (refreshed) {
       return request<T>(method, path, body, true);
     } else {
