@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 04-quote-review-and-history-03-PLAN.md
-last_updated: "2026-04-02T20:23:09.831Z"
+status: Ready to execute
+stopped_at: Completed 05-voice-to-quote-pipeline-04-PLAN.md
+last_updated: "2026-04-03T22:21:02.831Z"
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 12
+  total_plans: 12
+  completed_plans: 15
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Contractor describes a job on-site, customer-approved quote in hand before driving off — zero paperwork at night.
-**Current focus:** Phase 04 — quote-review-and-history
+**Current focus:** Phase 05 — voice-to-quote-pipeline
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
+Phase: 05 (voice-to-quote-pipeline) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -58,6 +58,10 @@ Plan: Not started
 | Phase 04-quote-review-and-history P02 | 3m | 2 tasks | 8 files |
 | Phase 04-quote-review-and-history P01 | 6 | 2 tasks | 13 files |
 | Phase 04-quote-review-and-history P03 | 10m | 3 tasks | 6 files |
+| Phase 05-voice-to-quote-pipeline P02 | 6m | 2 tasks | 13 files |
+| Phase 05-voice-to-quote-pipeline P01 | 10m | 2 tasks | 7 files |
+| Phase 05-voice-to-quote-pipeline P03 | 6m | 2 tasks | 7 files |
+| Phase 05-voice-to-quote-pipeline P04 | 15 | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -100,6 +104,16 @@ Recent decisions affecting current work:
 - [Phase 04-quote-review-and-history]: router.push uses as any cast for draft/[id] and quote/[id] — expo-router typed routes require files at compile time, routes exist at runtime
 - [Phase 04-quote-review-and-history]: Draft sync returns early if parent quote has no serverId yet — sync queue will retry once quote create syncs and writes back server ID
 - [Phase 04-quote-review-and-history]: Send Quote transitions to draft_queued and enqueues full payload (status, customerPhone, totalCents, lineItems) — Phase 6 wires actual SMS delivery
+- [Phase 05-voice-to-quote-pipeline]: FileSystem.moveAsync from cacheDirectory to documentDirectory immediately after stopAndUnloadAsync: required per VOICE-02 for Android cache eviction safety
+- [Phase 05-voice-to-quote-pipeline]: schemaMigrations v2 passed to SQLiteAdapter: WatermelonDB upgrades existing databases without data loss on schema bump
+- [Phase 05-voice-to-quote-pipeline]: Polling loop in QuotesScreen useEffect watching quotes array: reactive to WatermelonDB observable, auto-stops when no ai_processing quotes remain
+- [Phase 05-voice-to-quote-pipeline]: pg-boss WorkHandler receives Job[] batch array; localConcurrency:2 used (teamSize does not exist in v12)
+- [Phase 05-voice-to-quote-pipeline]: package.json type=module required for NodeNext ESM module resolution (fixes pre-existing migrate.ts build failure)
+- [Phase 05-voice-to-quote-pipeline]: confidenceTier returns clean/review/needs_input with no raw float values exposed to UI
+- [Phase 05-voice-to-quote-pipeline]: lineItems.length (not lineItems array) used as auto-scroll effect dependency to prevent re-scroll on every edit
+- [Phase 05-voice-to-quote-pipeline]: lineItemsJson written before q.status update to prevent race where user taps DraftReadyToast before data arrives
+- [Phase 05-voice-to-quote-pipeline]: getDraftLineItems network failure falls back to status-only transition — quote never stuck in ai_processing forever
+- [Phase 05-voice-to-quote-pipeline]: GET /draft/:quoteId returns 404 when status is still ai_processing — mobile should not call until polling shows complete
 
 ### Pending Todos
 
@@ -113,8 +127,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T13:37:11.196Z
-Stopped at: Completed 04-quote-review-and-history-03-PLAN.md
+Last session: 2026-04-03T22:21:02.828Z
+Stopped at: Completed 05-voice-to-quote-pipeline-04-PLAN.md
 
 ### What to do next
 

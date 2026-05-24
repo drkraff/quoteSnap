@@ -32,15 +32,15 @@
 
 ### Voice-to-Quote (AI Pipeline)
 
-- [ ] **VOICE-01**: Contractor can record a voice description of a job using the in-app mic (expo-av)
-- [ ] **VOICE-02**: Audio buffer is moved from cacheDirectory → documentDirectory immediately after recording stops (prevents Android cache eviction)
-- [ ] **VOICE-03**: Recorded audio is uploaded to the backend via a local offline queue (works without signal)
-- [ ] **VOICE-04**: Backend transcribes audio via Whisper and maps transcript to catalog items via GPT-4o function calling
-- [ ] **VOICE-05**: GPT-4o is constrained to return only catalog item IDs and quantities — never free-text prices
-- [ ] **VOICE-06**: Backend validates every returned item ID against the contractor's catalog; non-catalog items are rejected and flagged for manual entry, not silently passed through
-- [ ] **VOICE-07**: AI draft is returned to client via polling at 1.5s intervals
-- [ ] **VOICE-08**: Confidence tiers are applied to each line item: ≥0.85 = clean (no badge), 0.60–0.84 = "Review" (amber), <0.60 = "Needs Input" (red, auto-scrolls to item)
-- [ ] **VOICE-09**: No raw confidence percentages are shown to contractors — plain language labels only
+- [x] **VOICE-01**: Contractor can record a voice description of a job using the in-app mic (expo-av)
+- [x] **VOICE-02**: Audio buffer is moved from cacheDirectory → documentDirectory immediately after recording stops (prevents Android cache eviction)
+- [x] **VOICE-03**: Recorded audio is uploaded to the backend via a local offline queue (works without signal)
+- [x] **VOICE-04**: Backend transcribes audio via Whisper and maps transcript to catalog items via GPT-4o function calling
+- [x] **VOICE-05**: GPT-4o is constrained to return only catalog item IDs and quantities — never free-text prices
+- [x] **VOICE-06**: Backend validates every returned item ID against the contractor's catalog; non-catalog items are rejected and flagged for manual entry, not silently passed through
+- [x] **VOICE-07**: AI draft is returned to client via polling at 1.5s intervals
+- [x] **VOICE-08**: Confidence tiers are applied to each line item: ≥0.85 = clean (no badge), 0.60–0.84 = "Review" (amber), <0.60 = "Needs Input" (red, auto-scrolls to item)
+- [x] **VOICE-09**: No raw confidence percentages are shown to contractors — plain language labels only
 
 ### Quote Review and Edit
 
@@ -152,15 +152,15 @@
 | CAT-04 | Phase 3 | Complete |
 | CAT-05 | Phase 3 | Complete |
 | CAT-06 | Phase 3 | Complete |
-| VOICE-01 | Phase 5 | Pending |
-| VOICE-02 | Phase 5 | Pending |
-| VOICE-03 | Phase 5 | Pending |
-| VOICE-04 | Phase 5 | Pending |
-| VOICE-05 | Phase 5 | Pending |
-| VOICE-06 | Phase 5 | Pending |
-| VOICE-07 | Phase 5 | Pending |
-| VOICE-08 | Phase 5 | Pending |
-| VOICE-09 | Phase 5 | Pending |
+| VOICE-01 | Phase 5 | Complete |
+| VOICE-02 | Phase 5 | Complete |
+| VOICE-03 | Phase 5 | Complete |
+| VOICE-04 | Phase 5 | Complete |
+| VOICE-05 | Phase 5 | Complete |
+| VOICE-06 | Phase 5 | Complete |
+| VOICE-07 | Phase 5 | Complete |
+| VOICE-08 | Phase 5 | Complete |
+| VOICE-09 | Phase 5 | Complete |
 | REVIEW-01 | Phase 4 | Complete |
 | REVIEW-02 | Phase 4 | Complete |
 | REVIEW-03 | Phase 4 | Complete |
