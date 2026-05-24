@@ -132,8 +132,7 @@ Stopped at: Completed 05-voice-to-quote-pipeline-04-PLAN.md
 
 ### What to do next
 
-Phase 02 (Onboarding) is fully built and all automated checks passed.
-You need to test it on a device/simulator, then come back and type "approved" (or report issues).
+Phase 5 (Voice-to-Quote Pipeline) is code-complete. All 4 plans done, backend + mobile TS clean, unit tests green. Awaiting human UAT on a physical Android device before marking the phase complete.
 
 **Step 1 — Start the backend**
 
@@ -142,25 +141,25 @@ docker start quotesnap-db
 cd apps/backend && npm run dev
 ```
 
-**Step 2 — Run the app** (pick one)
+**Step 2 — Run the app on a physical Android device** (voice recording needs native audio hardware; emulators are unreliable for mic)
 
-- Easiest: plug in Android phone with USB Debugging on → `cd apps/mobile && npm run android`
-- No phone: open Android Studio → start an AVD emulator → same command above
-- Quick try: install Expo Go on phone → `npm start` → scan QR (may crash due to native modules)
+- Plug in Android phone with USB Debugging on → `cd apps/mobile && npm run android`
+- Confirm API base URL points to the dev host the phone can reach (not `10.0.2.2` — that's emulator-only)
 
-**Step 3 — Test these 6 things** (file: `.planning/phases/02-onboarding/02-HUMAN-UAT.md`)
+**Step 3 — Run the 3 Phase 5 tests** (file: `.planning/phases/05-voice-to-quote-pipeline/05-HUMAN-UAT.md`)
 
-1. New user flow: trade selection → seeding → ready → lands in app
-2. Single-select: tapping a second trade card deselects the first
-3. Returning user skip: relaunch after onboarding goes straight to app (no onboarding screens)
-4. Offline fallback: turn on airplane mode → seeding screen shows amber notice + uses bundled templates
-5. Timing: full onboarding flow finishes under 90 seconds
-6. Post-logout skip: log out, log back in with existing user → skips onboarding
+1. Full AI pipeline E2E: record audio → AI processing → draft screen shows confidence badges (amber Review / red Needs Input); first red auto-scrolls; DraftReadyToast appears
+2. Offline queue: airplane mode → record → see queued row → re-enable network → row transitions to ai_processing → draft_local → toast
+3. Manual Quote FAB regression: ensures pre-Phase-5 manual draft creation still works
 
 **Step 4 — Resume this conversation and type:**
 
-- `"approved"` → phase gets marked complete, move to Phase 3
+- `"approved"` → phase gets marked complete, move to Phase 6 (SMS + customer approval)
 - Describe any issues → gap closure plans get created automatically
+
+### Pending after Phase 5
+
+- PR 3 (sync queue correctness) and PR 4 (login OR query security fix) — see `.planning/phases/01-foundation/prs/PR-PLAN.md`
 
 ### Docker note
 
