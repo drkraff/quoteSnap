@@ -33,3 +33,6 @@ npm-debug.log*
 # Scratch / tooling output
 repomix-output.xml
 review code/
+
+# Claude Code per-user settings
+.claude/settings.local.json
