@@ -139,3 +139,30 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 5. Voice-to-Quote Pipeline | 3/4 | In Progress|  |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
 | 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
+
+## Backlog
+
+### Phase 999.1: Shareable demo deployment — backend to Railway + EAS builds (Android now, iOS gated on $99 Apple Developer Program) (BACKLOG)
+
+**Goal:** Produce a demo that can be sent to people (not Expo Go, not USB/LAN local testing), deployed onto the already-documented production architecture so the work is reusable, not throwaway.
+
+**Why Expo Go failed (root cause, not the symptom):** the SDK 52-vs-54 mismatch is a red herring. The app bundles WatermelonDB (native, used across 8 files in `apps/mobile/src/db/`) which is absent from Expo Go at *any* SDK. It requires a custom build. SDK 52→54 upgrade is out of scope (high-risk RN/React/New-Arch migration; would not enable Expo Go anyway).
+
+**Decisions locked this session:**
+- **Backend host = Railway** — already a made decision in PROJECT.md ("Railway + Managed Postgres over AWS/GCP, ~$70/mo at 100 users"). Deploying the demo to Railway *is* production infra step 1, not a throwaway. pg-boss needs a long-lived process → Vercel/serverless is ruled out.
+- **Distribution = EAS Build** — already the documented mechanism; single iOS/Android TS codebase; cloud builds mean **no Mac needed** for iOS builds.
+- **iOS hard gate = Apple Developer Program ($99/yr).** No free shareable iOS path exists: the free Apple-ID path requires a Mac (user is on Windows), expires every 7 days, installs locally only, and can't be sent to people. TestFlight (the only "send to people" iOS route) requires the paid program. EAS removes the Mac requirement for *building* but not the paid-account requirement for *distributing*.
+- **Sequence = Android first (free, shareable today); iOS added later via the same EAS pipeline once the $99 Apple enrollment is paid.** iOS scope decision still open — user was weighing whether the free path could avoid the fee (it can't, for a shareable demo).
+
+**Architecture changes (replace the band-aids permanently):**
+- **Env-driven API URL:** `apps/mobile/src/api/client.ts:3-4` and `voice.ts:3-4` already read `Constants.expoConfig?.extra?.apiUrl` (fallback emulator-only `http://10.0.2.2:3000`). Convert `app.json` → `app.config.ts` reading `process.env.EXPO_PUBLIC_API_URL`; add `eas.json` with profiles (`development`=LAN IP, `preview`=Railway URL, `production`=Railway URL). No source changes to client.ts/voice.ts.
+- **Backend → Railway:** verify `src/index.ts` binds `process.env.PORT` on `0.0.0.0`; provision Node service + managed Postgres plugin; run `npm run migrate` on deploy; set env from `apps/backend/.env.example` (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `R2_*`, `OPENAI_API_KEY`).
+- **EAS builds:** free Expo account + `eas-cli`; `eas build -p android --profile preview` → APK + shareable install link (no Apple account). iOS: `eas build -p ios --profile preview` after Apple enrollment.
+
+**Files to touch:** `apps/mobile/app.json`→`app.config.ts`; new `apps/mobile/eas.json`; verify `apps/backend/src/index.ts` PORT binding; (no client.ts/voice.ts changes). Full plan saved at `~/.claude/plans/managed-to-scan-the-reflective-frog.md`.
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
