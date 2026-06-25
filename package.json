@@ -14,6 +14,8 @@
   "overrides": {
     "react-native": "0.76.5",
     "react": "18.3.1",
-    "react-server-dom-webpack": ">=19.0.2"
+    "jest-expo": {
+      "react-server-dom-webpack": ">=19.0.2"
+    }
   }
 }
