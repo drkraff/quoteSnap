@@ -5,6 +5,8 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/cha
 import pool, { query } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
 import type { VoiceJobData, AILineItem } from '../types/voice.js';
+import { validateAndBuildLineItems } from './voice-validation.js';
+import type { CatalogItemRow } from './voice-validation.js';
 
 export const boss = new PgBoss(process.env['DATABASE_URL']!);
 
@@ -15,14 +17,10 @@ export async function initBoss(): Promise<void> {
 
   await boss.start();
 
+  await boss.createQueue('voice-process');
+
   await boss.work<VoiceJobData>('voice-process', { localConcurrency: 2 }, processVoiceJobs);
 }
-
-type CatalogItemRow = {
-  id: string;
-  name: string;
-  unit_price_cents: number;
-};
 
 async function processVoiceJobs(jobs: Job<VoiceJobData>[]): Promise<void> {
   await Promise.all(jobs.map(processVoiceJob));
@@ -43,6 +41,7 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
       file: audioFile,
     });
     const transcript = transcription.text;
+    console.log(`[voice] transcript: "${transcript}"`);
 
     // c) Delete audio from R2 immediately (PII)
     await deleteFromR2(r2Key);
@@ -115,26 +114,9 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
       [contractorId, aiItemIds]
     );
     const validCatalogItems = validationResult.rows as CatalogItemRow[];
-    const validCatalogMap = new Map<string, CatalogItemRow>(
-      validCatalogItems.map(item => [item.id, item])
-    );
 
-    const validatedItems = aiItems.filter(item => validCatalogMap.has(item.catalogItemId));
-
-    // h) Build line items
-    const lineItems = validatedItems.map(item => {
-      const catalogItem = validCatalogMap.get(item.catalogItemId)!;
-      return {
-        catalogItemId: item.catalogItemId,
-        name: catalogItem.name,
-        quantity: item.quantity,
-        unitPriceCents: catalogItem.unit_price_cents,
-        confidence: item.confidence,
-      };
-    });
-
-    // i) Calculate total
-    const totalCents = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
+    // h-i) Validate catalog IDs, build line items, calculate total
+    const { lineItems, totalCents } = validateAndBuildLineItems(aiItems, validCatalogItems);
 
     // j) Write draft line items and update quote status in transaction
     const client = await pool.connect();
@@ -143,8 +125,8 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
 
       for (const item of lineItems) {
         await client.query(
-          `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence) VALUES ($1, $2, $3, $4, $5)`,
-          [quoteId, item.name, item.quantity, item.unitPriceCents, item.confidence]
+          `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [quoteId, item.catalogItemId, item.name, item.quantity, item.unitPriceCents, item.confidence]
         );
       }
 

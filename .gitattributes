@@ -1,0 +1,18 @@
+# Normalize line endings: stored as LF in the repo, checked out as-is on each OS.
+# Eliminates the constant LF/CRLF warnings when Windows checkouts touch files.
+* text=auto eol=lf
+
+# Common binary types — never apply text conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+
+# Lockfiles: keep merge noise down
+package-lock.json -diff

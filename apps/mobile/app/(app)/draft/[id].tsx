@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { confidenceTier } from '../../../src/utils/confidence';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +41,7 @@ import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function DraftScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -266,7 +267,10 @@ export default function DraftScreen(): JSX.Element {
   }
 
   async function handleSendPress(): Promise<void> {
-    if (!quote || !draft) return;
+    if (!quote || !draft) {
+      setValidationError('Draft not loaded — please go back and try again');
+      return;
+    }
     if (!canSend(lineItems.length, phone)) {
       if (lineItems.length === 0) {
         setValidationError('Add at least one item before sending');
@@ -295,7 +299,8 @@ export default function DraftScreen(): JSX.Element {
         })),
       },
     });
-    // Phase 6 wires the actual SMS send — this queues the action
+    // Phase 6 wires the actual SMS send — navigate back to quotes list
+    router.back();
   }
 
   if (loading) {

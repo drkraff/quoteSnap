@@ -8,7 +8,7 @@ import {
   Linking,
   SafeAreaView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +42,13 @@ export default function VoiceRecordScreen(): JSX.Element {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setRecordingState('idle');
+      setDurationSeconds(0);
+    }, [])
+  );
 
   const handleStartRecording = useCallback(async () => {
     try {

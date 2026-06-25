@@ -7,3 +7,6 @@ COMMENT ON COLUMN quotes.status IS
 
 -- Add confidence column to quote_line_items for AI confidence scores
 ALTER TABLE quote_line_items ADD COLUMN IF NOT EXISTS confidence REAL;
+
+-- Add catalog_item_id to quote_line_items to track which catalog item each AI line item came from
+ALTER TABLE quote_line_items ADD COLUMN IF NOT EXISTS catalog_item_id UUID REFERENCES catalog_items(id) ON DELETE SET NULL;

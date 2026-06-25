@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 04-quote-review-and-history-03-PLAN.md
-last_updated: "2026-04-02T20:23:09.831Z"
+status: Ready to execute
+stopped_at: Completed 05-voice-to-quote-pipeline-04-PLAN.md
+last_updated: "2026-04-03T22:21:02.831Z"
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 12
+  total_plans: 12
+  completed_plans: 15
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Contractor describes a job on-site, customer-approved quote in hand before driving off — zero paperwork at night.
-**Current focus:** Phase 04 — quote-review-and-history
+**Current focus:** Phase 05 — voice-to-quote-pipeline
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
+Phase: 05 (voice-to-quote-pipeline) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -58,6 +58,10 @@ Plan: Not started
 | Phase 04-quote-review-and-history P02 | 3m | 2 tasks | 8 files |
 | Phase 04-quote-review-and-history P01 | 6 | 2 tasks | 13 files |
 | Phase 04-quote-review-and-history P03 | 10m | 3 tasks | 6 files |
+| Phase 05-voice-to-quote-pipeline P02 | 6m | 2 tasks | 13 files |
+| Phase 05-voice-to-quote-pipeline P01 | 10m | 2 tasks | 7 files |
+| Phase 05-voice-to-quote-pipeline P03 | 6m | 2 tasks | 7 files |
+| Phase 05-voice-to-quote-pipeline P04 | 15 | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -100,6 +104,16 @@ Recent decisions affecting current work:
 - [Phase 04-quote-review-and-history]: router.push uses as any cast for draft/[id] and quote/[id] — expo-router typed routes require files at compile time, routes exist at runtime
 - [Phase 04-quote-review-and-history]: Draft sync returns early if parent quote has no serverId yet — sync queue will retry once quote create syncs and writes back server ID
 - [Phase 04-quote-review-and-history]: Send Quote transitions to draft_queued and enqueues full payload (status, customerPhone, totalCents, lineItems) — Phase 6 wires actual SMS delivery
+- [Phase 05-voice-to-quote-pipeline]: FileSystem.moveAsync from cacheDirectory to documentDirectory immediately after stopAndUnloadAsync: required per VOICE-02 for Android cache eviction safety
+- [Phase 05-voice-to-quote-pipeline]: schemaMigrations v2 passed to SQLiteAdapter: WatermelonDB upgrades existing databases without data loss on schema bump
+- [Phase 05-voice-to-quote-pipeline]: Polling loop in QuotesScreen useEffect watching quotes array: reactive to WatermelonDB observable, auto-stops when no ai_processing quotes remain
+- [Phase 05-voice-to-quote-pipeline]: pg-boss WorkHandler receives Job[] batch array; localConcurrency:2 used (teamSize does not exist in v12)
+- [Phase 05-voice-to-quote-pipeline]: package.json type=module required for NodeNext ESM module resolution (fixes pre-existing migrate.ts build failure)
+- [Phase 05-voice-to-quote-pipeline]: confidenceTier returns clean/review/needs_input with no raw float values exposed to UI
+- [Phase 05-voice-to-quote-pipeline]: lineItems.length (not lineItems array) used as auto-scroll effect dependency to prevent re-scroll on every edit
+- [Phase 05-voice-to-quote-pipeline]: lineItemsJson written before q.status update to prevent race where user taps DraftReadyToast before data arrives
+- [Phase 05-voice-to-quote-pipeline]: getDraftLineItems network failure falls back to status-only transition — quote never stuck in ai_processing forever
+- [Phase 05-voice-to-quote-pipeline]: GET /draft/:quoteId returns 404 when status is still ai_processing — mobile should not call until polling shows complete
 
 ### Pending Todos
 
@@ -113,13 +127,12 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T13:37:11.196Z
-Stopped at: Completed 04-quote-review-and-history-03-PLAN.md
+Last session: 2026-04-03T22:21:02.828Z
+Stopped at: Completed 05-voice-to-quote-pipeline-04-PLAN.md
 
 ### What to do next
 
-Phase 02 (Onboarding) is fully built and all automated checks passed.
-You need to test it on a device/simulator, then come back and type "approved" (or report issues).
+Phase 5 (Voice-to-Quote Pipeline) is code-complete. All 4 plans done, backend + mobile TS clean, unit tests green. Awaiting human UAT on a physical Android device before marking the phase complete.
 
 **Step 1 — Start the backend**
 
@@ -128,25 +141,25 @@ docker start quotesnap-db
 cd apps/backend && npm run dev
 ```
 
-**Step 2 — Run the app** (pick one)
+**Step 2 — Run the app on a physical Android device** (voice recording needs native audio hardware; emulators are unreliable for mic)
 
-- Easiest: plug in Android phone with USB Debugging on → `cd apps/mobile && npm run android`
-- No phone: open Android Studio → start an AVD emulator → same command above
-- Quick try: install Expo Go on phone → `npm start` → scan QR (may crash due to native modules)
+- Plug in Android phone with USB Debugging on → `cd apps/mobile && npm run android`
+- Confirm API base URL points to the dev host the phone can reach (not `10.0.2.2` — that's emulator-only)
 
-**Step 3 — Test these 6 things** (file: `.planning/phases/02-onboarding/02-HUMAN-UAT.md`)
+**Step 3 — Run the 3 Phase 5 tests** (file: `.planning/phases/05-voice-to-quote-pipeline/05-HUMAN-UAT.md`)
 
-1. New user flow: trade selection → seeding → ready → lands in app
-2. Single-select: tapping a second trade card deselects the first
-3. Returning user skip: relaunch after onboarding goes straight to app (no onboarding screens)
-4. Offline fallback: turn on airplane mode → seeding screen shows amber notice + uses bundled templates
-5. Timing: full onboarding flow finishes under 90 seconds
-6. Post-logout skip: log out, log back in with existing user → skips onboarding
+1. Full AI pipeline E2E: record audio → AI processing → draft screen shows confidence badges (amber Review / red Needs Input); first red auto-scrolls; DraftReadyToast appears
+2. Offline queue: airplane mode → record → see queued row → re-enable network → row transitions to ai_processing → draft_local → toast
+3. Manual Quote FAB regression: ensures pre-Phase-5 manual draft creation still works
 
 **Step 4 — Resume this conversation and type:**
 
-- `"approved"` → phase gets marked complete, move to Phase 3
+- `"approved"` → phase gets marked complete, move to Phase 6 (SMS + customer approval)
 - Describe any issues → gap closure plans get created automatically
+
+### Pending after Phase 5
+
+- PR 3 (sync queue correctness) and PR 4 (login OR query security fix) — see `.planning/phases/01-foundation/prs/PR-PLAN.md`
 
 ### Docker note
 

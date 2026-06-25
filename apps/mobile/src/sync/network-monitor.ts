@@ -7,7 +7,7 @@ const listeners: Set<NetworkListener> = new Set();
 
 export function initNetworkMonitor(): void {
   NetInfo.addEventListener((state: NetInfoState) => {
-    const connected = Boolean(state.isConnected && state.isInternetReachable);
+    const connected = Boolean(state.isConnected);
     if (connected !== currentState) {
       currentState = connected;
       listeners.forEach((listener) => listener(connected));
