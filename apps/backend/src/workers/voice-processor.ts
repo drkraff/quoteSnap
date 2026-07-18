@@ -34,11 +34,16 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const audioBuffer = await getFromR2(r2Key);
     const audioFile = new File([new Uint8Array(audioBuffer)], 'audio.m4a', { type: 'audio/m4a' });
 
-    // b) Whisper transcription
+    // b) Whisper transcription.
+    // Pin the language: Whisper's auto-detect mistakes short Hebrew clips for
+    // Arabic and returns garbage. WHISPER_LANGUAGE overrides (default 'he');
+    // set it to '' to fall back to auto-detect for mixed-language use.
     const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
+    const whisperLanguage = process.env['WHISPER_LANGUAGE'] ?? 'he';
     const transcription = await openai.audio.transcriptions.create({
       model: 'whisper-1',
       file: audioFile,
+      ...(whisperLanguage ? { language: whisperLanguage } : {}),
     });
     const transcript = transcription.text;
     console.log(`[voice] transcript: "${transcript}"`);
