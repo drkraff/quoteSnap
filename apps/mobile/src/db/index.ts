@@ -10,7 +10,7 @@ import { SyncQueueItem } from './models/sync-queue-item';
 const adapter = new SQLiteAdapter({
   schema,
   migrations,
-  jsi: true,
+  jsi: false,
   onSetUpError: (error) => {
     // eslint-disable-next-line no-console
     console.error('WatermelonDB setup error:', error);
