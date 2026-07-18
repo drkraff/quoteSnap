@@ -95,7 +95,9 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
     if (job.state === 'completed') {
       response = { status: 'complete', draftId: quoteId };
     } else if (job.state === 'failed') {
-      response = { status: 'failed', error: 'Processing failed' };
+      // TEMP DEBUG: surface the real worker error to diagnose failures
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      response = { status: 'failed', error: 'Processing failed', debug: (job as any).output } as VoiceStatusResponse;
     } else {
       response = { status: 'processing' };
     }

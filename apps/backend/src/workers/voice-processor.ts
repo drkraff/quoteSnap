@@ -1,6 +1,6 @@
 import { PgBoss } from 'pg-boss';
 import type { Job } from 'pg-boss';
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions/completions.js';
 import pool, { query } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
@@ -32,7 +32,10 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
   try {
     // a) Fetch audio from R2
     const audioBuffer = await getFromR2(r2Key);
-    const audioFile = new File([new Uint8Array(audioBuffer)], 'audio.m4a', { type: 'audio/m4a' });
+    // Use the OpenAI SDK's toFile() rather than the global File constructor:
+    // File is only a global on Node >= 20, and the Railway build may run on
+    // Node 18, where `new File(...)` throws "File is not defined".
+    const audioFile = await toFile(audioBuffer, 'audio.m4a', { type: 'audio/m4a' });
 
     // b) Whisper transcription.
     // Pin the language: Whisper's auto-detect mistakes short Hebrew clips for
