@@ -21,12 +21,12 @@ A contractor can describe a job on-site and have a customer-approved quote befor
 - [x] Pre-send validation: at least one line item and a valid 10-digit phone required before Send unblocks — Validated in Phase 4: Quote Review and History
 - [x] Quote history is accessible offline with all quote states (draft_local, draft_queued, sent, approved, declined, expired, failed_send) — Validated in Phase 4: Quote Review and History
 - [x] Read-only quote detail screen with local fallback when offline or quote has no server ID — Validated in Phase 4: Quote Review and History
+- [x] Contractor can create an account, select their trade, and receive a pre-seeded service catalog within 90 seconds of first launch — Validated in Phase 2: Onboarding
+- [x] Contractor can manage their service catalog (add, edit, archive items; import trade templates) — Validated in Phase 3: Catalog Management
 
 ### Active
 
-- [ ] Contractor can create an account, select their trade, and receive a pre-seeded service catalog within 90 seconds of first launch
-- [ ] Contractor can manage their service catalog (add, edit, archive items; import trade templates)
-- [ ] Contractor can record a voice description of a job and receive a draft quote mapped to their catalog in under 10 seconds
+- [ ] Contractor can record a voice description of a job and receive a draft quote mapped to their catalog in under 10 seconds — code-complete (Phase 5); awaiting on-device Human UAT against live Railway backend
 - [ ] AI mapping is catalog-locked: no line item is returned that does not exist in the contractor's catalog
 - [ ] Low-confidence AI line items are flagged visually with confidence tiers (≥0.85 clean, 0.60–0.84 amber, <0.60 red)
 - [ ] Contractor can send a quote draft via SMS to a customer
@@ -76,14 +76,17 @@ A contractor can describe a job on-site and have a customer-approved quote befor
 |----------|-----------|---------|
 | React Native + Expo managed workflow | Single TypeScript codebase for iOS/Android; expo-av for audio; EAS Build for distribution without native chains | — Pending |
 | WatermelonDB (SQLite) for offline-first | Required for job-site use; retrofitting offline onto online-first is a rewrite; sync queue on Day 1 | — Pending |
-| Railway + Managed Postgres over AWS/GCP | Eliminate DevOps overhead for solo founder; ~$70/mo at 100 users | — Pending |
-| pg-boss for queue + cron | Handles AI job queue and quote expiry cron without Redis at MVP scale | — Pending |
-| Cloudflare R2 for audio/photo storage | Provides deletion path for PII compliance; audio deleted post-transcription | — Pending |
+| Railway + Managed Postgres over AWS/GCP | Eliminate DevOps overhead for solo founder; ~$70/mo at 100 users | ✅ Live — deployed 2026-07, verified E2E at quotesnap-production-1001.up.railway.app |
+| pg-boss for queue + cron | Handles AI job queue and quote expiry cron without Redis at MVP scale | ✅ Live — voice job queue verified on Railway |
+| Cloudflare R2 for audio/photo storage | Provides deletion path for PII compliance; audio deleted post-transcription | ✅ Live — audio upload/transcription verified on Railway |
 | Catalog-constraint architecture (two layers) | Layer 1: system prompt returns only catalog item IDs; Layer 2: backend validates every ID — prevents trust-ending hallucination bug | — Pending |
 | Quote snapshots are write-once (DB trigger) | Editing catalog after send cannot alter what customer sees or approves | — Pending |
 | Polling at 1.5s for AI results (not WebSockets) | Sufficient at MVP scale; WebSockets add infra complexity without meaningful UX improvement | — Pending |
 | Confidence tiers: ≥0.85 clean, 0.60–0.84 amber, <0.60 red | No raw percentages shown to contractors — plain language labels only | — Pending |
 | No free tier; 14-day trial instead | Signals differentiated high-value product; avoids free-tier support cost | — Pending |
+| WatermelonDB JSI adapter DISABLED (`jsi: false`) — **reverses** the Phase 1 "JSI enabled" decision | RN 0.76.5 / Expo 52 removed `JSIModulePackage`/`JSIModuleSpec` that WatermelonDB android-jsi imports → build failed | ✅ Applied 2026-07 — async bridge adapter, fully functional; gradle edits fragile (see STATE) |
+| Whisper pinned to Hebrew (`WHISPER_LANGUAGE=he`) | Auto-detect mistook Hebrew for Arabic, returning garbage transcripts | ✅ Applied 2026-07 (`6b951aa`) |
+| OpenAI `toFile()` instead of global `new File()` | `File` is Node ≥20 only; Railway built on Node 18 → `new File()` threw and killed every voice job | ✅ Applied 2026-07 (`e9b14e9`) |
 
 ## Evolution
 
@@ -103,4 +106,6 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-02 after Phase 4: Quote Review and History complete*
+*Last updated: 2026-07-24 — reconciled with reality after the Railway backend deploy, live
+voice-pipeline fixes, and on-device bring-up (April→July work previously tracked only in
+HANDOFF.md). Phases 1–4 complete; Phase 5 code-complete and awaiting on-device Human UAT.*
