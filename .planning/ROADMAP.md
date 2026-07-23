@@ -12,11 +12,11 @@ QuoteSnap ships in 7 phases that follow the natural delivery boundaries of the p
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Auth + offline-first infrastructure; every subsequent phase depends on this
-- [ ] **Phase 2: Onboarding** - Trade selection and pre-seeded catalog so contractors enter the app ready to work
-- [ ] **Phase 3: Catalog Management** - Contractor owns their service catalog: add, edit, archive, sync
+- [x] **Phase 1: Foundation** - Auth + offline-first infrastructure; every subsequent phase depends on this (completed ≤2026-04-02)
+- [x] **Phase 2: Onboarding** - Trade selection and pre-seeded catalog so contractors enter the app ready to work (completed ≤2026-04-02)
+- [x] **Phase 3: Catalog Management** - Contractor owns their service catalog: add, edit, archive, sync (completed ≤2026-04-02)
 - [x] **Phase 4: Quote Review and History** - Contractor can review AI drafts, edit line items, and access quote history offline (completed 2026-04-02)
-- [ ] **Phase 5: Voice-to-Quote Pipeline** - Voice recording through Whisper/GPT-4o mapping delivers a catalog-constrained draft in under 10 seconds
+- [ ] **Phase 5: Voice-to-Quote Pipeline** - Voice recording through Whisper/GPT-4o mapping delivers a catalog-constrained draft in under 10 seconds (code-complete; awaiting on-device Human UAT against live Railway backend)
 - [ ] **Phase 6: SMS Delivery and Customer Approval** - Quote goes to customer via SMS; customer approves; contractor gets push notification
 - [ ] **Phase 7: Sync Hardening and Failure Coverage** - Full retry schedule, conflict resolution, and all 16 failure scenarios handled
 
@@ -32,7 +32,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Contractor can log out; the device holds no session data afterward
   4. App detects an existing valid session on launch and skips the auth screens entirely
   5. All core data (quotes, catalog, drafts) lives in local SQLite and the app opens without network
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [x] 01-01-PLAN.md -- Monorepo scaffold: npm workspaces, Expo 52 app shell, Express server + GET /health
+- [x] 01-02-PLAN.md -- Backend Auth API (register/login/refresh/logout; bcrypt-12, SHA-256 refresh-token hashing)
+- [x] 01-03-PLAN.md -- WatermelonDB local schema (quotes, catalog_items, drafts, sync_queue_items) + sync queue
+- [x] 01-04-PLAN.md -- Mobile auth flow (Zustand store, SecureStore persistence, auto-refresh, auth-gated nav)
 
 ### Phase 2: Onboarding
 **Goal**: A new contractor completes setup and has a working service catalog within 90 seconds of first launch
@@ -45,7 +50,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 Plans:
 - [x] 02-01-PLAN.md -- Backend API: catalog_items migration, trade templates, POST /onboarding/seed endpoint
-- [ ] 02-02-PLAN.md -- Mobile onboarding screens (trade selection, seeding, ready), offline templates, navigation wiring
+- [x] 02-02-PLAN.md -- Mobile onboarding screens (trade selection, seeding, ready), offline templates, navigation wiring
 **UI hint**: yes
 
 ### Phase 3: Catalog Management
@@ -62,7 +67,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md -- Backend catalog CRUD endpoints (GET/POST/PUT/PATCH /catalog)
 - [x] 03-02-PLAN.md -- Mobile catalog UI: tab navigator, SectionList, add/edit sheet, swipe-to-archive, WatermelonDB ops
-- [ ] 03-03-PLAN.md -- Sync queue wiring to backend API + end-to-end verification
+- [x] 03-03-PLAN.md -- Sync queue wiring to backend API + end-to-end verification
 **UI hint**: yes
 
 ### Phase 4: Quote Review and History
@@ -97,7 +102,7 @@ Plans:
 - [x] 05-01-PLAN.md -- Backend voice pipeline: R2 upload, pg-boss worker, Whisper + GPT-4o mapping, catalog validation, polling endpoint
 - [x] 05-02-PLAN.md -- Mobile recording UI: dual FAB, voice-record screen (expo-av), sync queue audio case, ai_processing row, polling
 - [x] 05-03-PLAN.md -- Confidence badges on LineItemRow, auto-scroll to red items, DraftReadyToast, human verification
-- [ ] 05-04-PLAN.md -- Gap closure: confidence column in migration, INSERT fix, GET /draft endpoint, getDraftLineItems polling call
+- [x] 05-04-PLAN.md -- Gap closure: confidence column in migration, INSERT fix, GET /draft endpoint, getDraftLineItems polling call
 **UI hint**: yes
 
 ### Phase 6: SMS Delivery and Customer Approval
@@ -123,6 +128,11 @@ Plans:
   3. Mic permission denied, audio upload failure, Whisper failure, and GPT-4o timeout each produce a specific, actionable UI state — not a crash or generic error
   4. An app crash during recording or editing recovers the state from local SQLite on next launch with a "Resume where you left off" prompt
   5. All 16 failure scenarios from the workflow spec have a verified detection method, UX state, and recovery path
+**Deferred here from Phase 5 (voice-client robustness):** the on-device voice poller currently
+lives only in the Quotes screen (`quotes.tsx`) and stops when you leave the tab; it does not
+survive app restart mid-processing (FAIL-04 resume), orphan `ai_processing` quotes poll forever
+(need a stale-out sweep), and the cold-start `isOnline()` gate can skip the first poll. These land
+here alongside SYNC-03 (5s/15s/60s/5m/15m retry schedule) — they are NOT Phase 5 UAT blockers.
 **Plans**: TBD
 
 ## Progress
@@ -132,17 +142,23 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/4 | Planned    |  |
-| 2. Onboarding | 1/2 | In Progress|  |
-| 3. Catalog Management | 2/3 | In Progress|  |
+| 1. Foundation | 4/4 | Complete   | ≤2026-04-02 |
+| 2. Onboarding | 2/2 | Complete   | ≤2026-04-02 |
+| 3. Catalog Management | 3/3 | Complete   | ≤2026-04-02 |
 | 4. Quote Review and History | 3/3 | Complete   | 2026-04-02 |
-| 5. Voice-to-Quote Pipeline | 3/4 | In Progress|  |
+| 5. Voice-to-Quote Pipeline | 4/4 | Code-complete — awaiting on-device UAT | - |
 | 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
 | 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
 
 ## Backlog
 
-### Phase 999.1: Shareable demo deployment — backend to Railway + EAS builds (Android now, iOS gated on $99 Apple Developer Program) (BACKLOG)
+### Phase 999.1: Shareable demo deployment — backend to Railway + EAS builds (Android now, iOS gated on $99 Apple Developer Program) (IN PROGRESS)
+
+**Status (updated 2026-07-24):** the **backend-to-Railway portion is DONE** — live and verified
+E2E at `https://quotesnap-production-1001.up.railway.app` (`GET /health` → ok; auth, manual
+quotes, sync, and the full voice→AI pipeline confirmed against it). The app runs on a physical
+Samsung via a USB dev build pointed at Railway. **Remaining:** the EAS Android build (shareable
+APK/AAB, no USB) is not yet done; iOS is still gated on the $99 Apple Developer Program fee.
 
 **Goal:** Produce a demo that can be sent to people (not Expo Go, not USB/LAN local testing), deployed onto the already-documented production architecture so the work is reusable, not throwaway.
 

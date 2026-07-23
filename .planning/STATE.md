@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 05-voice-to-quote-pipeline-04-PLAN.md
-last_updated: "2026-04-03T22:21:02.831Z"
+status: Phase 5 code-complete — awaiting on-device Human UAT against live Railway backend
+stopped_at: Backend deployed to Railway + voice pipeline fixed live + app running on physical Samsung (device dev build); Phase 5 UAT not yet run
+last_updated: "2026-07-24"
 progress:
   total_phases: 7
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 15
+  completed_phases: 4
+  total_plans: 16
+  completed_plans: 16
 ---
 
 # Project State
@@ -19,12 +19,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Contractor describes a job on-site, customer-approved quote in hand before driving off — zero paperwork at night.
-**Current focus:** Phase 05 — voice-to-quote-pipeline
+**Current focus:** Phase 05 — voice-to-quote-pipeline (code-complete; awaiting on-device UAT)
 
 ## Current Position
 
-Phase: 05 (voice-to-quote-pipeline) — EXECUTING
-Plan: 2 of 4
+Phase: 05 (voice-to-quote-pipeline) — CODE-COMPLETE, AWAITING HUMAN UAT
+Plan: 4 of 4 done. Backend now deployed and verified on Railway (the UAT blocker — a broken
+voice backend — is fixed). Next gate is running `05-HUMAN-UAT.md` on the physical device
+against the live Railway backend.
 
 ## Performance Metrics
 
@@ -115,6 +117,13 @@ Recent decisions affecting current work:
 - [Phase 05-voice-to-quote-pipeline]: getDraftLineItems network failure falls back to status-only transition — quote never stuck in ai_processing forever
 - [Phase 05-voice-to-quote-pipeline]: GET /draft/:quoteId returns 404 when status is still ai_processing — mobile should not call until polling shows complete
 
+#### Post-milestone deploy/device work (2026-07, tracked only in HANDOFF.md until now)
+- [Deploy]: Backend deployed to Railway and verified E2E — `https://quotesnap-production-1001.up.railway.app`. Auth, manual quotes, sync, and the full voice→AI pipeline all confirmed live. (Fulfills the backend portion of backlog 999.1.)
+- [Device/build]: **WatermelonDB JSI adapter DISABLED (`jsi: false`) — SUPERSEDES the earlier "JSI adapter enabled" decision above.** RN 0.76.5 / Expo 52 removed `JSIModulePackage`/`JSIModuleSpec` that WatermelonDB's android-jsi imports, so the build wouldn't compile. Now uses the async bridge adapter (fully functional). Gradle/MainApplication edits are gitignored (Expo regenerates `android/`) and fragile — a future `expo prebuild --clean` wipes them; bake into a config plugin / post-prebuild guard (Phase 3 / device hardening).
+- [Voice backend fix `6b951aa`]: Whisper pinned to Hebrew via `WHISPER_LANGUAGE=he` — auto-detect mistook Hebrew for Arabic and returned garbage.
+- [Voice backend fix `e9b14e9`]: Use OpenAI `toFile()` instead of global `new File()` — `File` only exists on Node ≥20; Railway built on Node 18 and `new File()` threw, killing every voice job before transcription.
+- [Voice backend fix]: Railway `OPENAI_API_KEY` had been truncated (missing last 8 chars → 401) — re-pasted the full key. This was the final blocker to a working voice pipeline.
+
 ### Pending Todos
 
 None yet.
@@ -124,27 +133,35 @@ None yet.
 - Samsung Galaxy A32 FCM kill risk: must test push notifications on physical device before Phase 6 ships
 - Android audio buffer: must use FileSystem.moveAsync to documentDirectory immediately post-recording (Phase 5)
 - Quote expiry TTL value (SMS-10): default 72h but exact value to be confirmed before Phase 6
+- **Secrets exposed in chat (2026-07):** the OpenAI key + R2 secret were pasted into chat while debugging. Low risk for a demo (OpenAI has a $5 hard cap) but rotate both post-demo and re-update Railway with the FULL value (mind the earlier truncation).
+- **Phase 5 `totalCents` bug (the one true Phase 5 correctness gap):** the on-device voice poller writes line items to the draft and flips status but never persists `quote.totalCents` (`draftData.totalCents` is dropped), so the quote row total shows $0. Fix as part of the Phase 5 UAT pass. Poller/orphan/retry robustness is Phase 7, not this.
 
 ## Session Continuity
 
-Last session: 2026-04-03T22:21:02.828Z
-Stopped at: Completed 05-voice-to-quote-pipeline-04-PLAN.md
+Last session: 2026-07-18 (handoff) — see HANDOFF.md / NEXT-SESSION-PLAN.md
+Stopped at: Backend live on Railway + voice pipeline fixed & verified E2E + app running on physical Samsung. Phase 5 Human UAT still not run.
 
 ### What to do next
 
-Phase 5 (Voice-to-Quote Pipeline) is code-complete. All 4 plans done, backend + mobile TS clean, unit tests green. Awaiting human UAT on a physical Android device before marking the phase complete.
+Phase 5 (Voice-to-Quote Pipeline) is code-complete and the **backend blocker is now gone** —
+the voice pipeline was broken during the original April UAT window (truncated OpenAI key on
+Railway + Whisper/Node-18 bugs), all since fixed. The Phase 5 Human UAT has therefore **never
+been run against a working backend**. That is the real next gate.
 
-**Step 1 — Start the backend**
+Before/while running UAT, fix the **one Phase 5 correctness bug**: the on-device poller never
+persists `quote.totalCents` (draft total shows $0) — see Blockers/Concerns. The
+poller-off-screen / orphan-sweep / retry-schedule robustness items are **Phase 7**, not this.
 
-```bash
-docker start quotesnap-db
-cd apps/backend && npm run dev
-```
+**Step 1 — Backend is already live on Railway** (`https://quotesnap-production-1001.up.railway.app`,
+`GET /health` → ok). No local backend needed for device UAT. (Local dev is still possible via the
+Docker note below if you want to iterate on the backend.)
 
-**Step 2 — Run the app on a physical Android device** (voice recording needs native audio hardware; emulators are unreliable for mic)
+**Step 2 — Run the app on the physical Android device** (voice recording needs native audio
+hardware; emulators are unreliable for mic)
 
 - Plug in Android phone with USB Debugging on → `cd apps/mobile && npm run android`
-- Confirm API base URL points to the dev host the phone can reach (not `10.0.2.2` — that's emulator-only)
+- The dev build already reads `extra.apiUrl` → Railway (not `10.0.2.2`, which is emulator-only)
+- Note: this build has WatermelonDB JSI disabled (`jsi:false`) for RN 0.76 — see Decisions
 
 **Step 3 — Run the 3 Phase 5 tests** (file: `.planning/phases/05-voice-to-quote-pipeline/05-HUMAN-UAT.md`)
 
