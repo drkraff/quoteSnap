@@ -16,6 +16,7 @@ const STATUS_MAP: Record<string, StatusConfig> = {
   declined: { label: 'Declined', bg: '#fee2e2', text: '#dc2626' },
   expired: { label: 'Expired', bg: '#fee2e2', text: '#dc2626' },
   failed_send: { label: 'Failed', bg: '#fee2e2', text: '#dc2626' },
+  ai_failed: { label: 'Failed', bg: '#fee2e2', text: '#dc2626' },
 };
 
 const FALLBACK: StatusConfig = { label: 'Unknown', bg: '#f0f0f0', text: '#666666' };

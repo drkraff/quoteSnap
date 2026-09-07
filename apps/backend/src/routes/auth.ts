@@ -20,6 +20,7 @@ import {
   LogoutBody,
   TokenPair,
 } from "../types/auth.js";
+import { resolveLoginIdentifier } from "../auth/login-lookup.js";
 
 export const router = Router();
 
@@ -133,19 +134,31 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
       res.status(400).json({ error: "Password is required" });
       return;
     }
-    if (!email && !phone) {
+
+    const identifier = resolveLoginIdentifier(email, phone);
+    if (!identifier) {
       res.status(400).json({ error: "Email or phone is required" });
       return;
     }
 
-    const result = await query(
-      `SELECT id, email, phone, display_name, trade, password_hash
-       FROM contractors
-       WHERE ($1::text IS NOT NULL AND email = $1)
-          OR ($2::text IS NOT NULL AND phone = $2)
-       LIMIT 1`,
-      [email ?? null, phone ?? null]
-    );
+    // Look up by exactly one identifier. An OR across email|phone with LIMIT 1
+    // can return a different contractor when the payload mixes both fields.
+    const result =
+      identifier.field === "email"
+        ? await query(
+            `SELECT id, email, phone, display_name, trade, password_hash
+             FROM contractors
+             WHERE email = $1
+             LIMIT 1`,
+            [identifier.value]
+          )
+        : await query(
+            `SELECT id, email, phone, display_name, trade, password_hash
+             FROM contractors
+             WHERE phone = $1
+             LIMIT 1`,
+            [identifier.value]
+          );
 
     if (result.rows.length === 0) {
       res.status(401).json({ error: "Invalid credentials" });

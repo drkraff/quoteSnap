@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth.js';
-import { uploadToR2 } from '../services/r2.js';
+import { uploadToR2, deleteFromR2 } from '../services/r2.js';
 import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
@@ -42,19 +42,42 @@ router.post(
       );
       const quoteId = (quoteResult.rows[0] as { id: string }).id;
 
-      // Upload audio to R2
-      await uploadToR2(r2Key, req.file.buffer, req.file.mimetype);
+      let audioUploaded = false;
+      let jobEnqueued = false;
+      try {
+        await uploadToR2(r2Key, req.file.buffer, req.file.mimetype);
+        audioUploaded = true;
 
-      // Send pg-boss job
-      const jobId = await boss.send('voice-process', { quoteId, contractorId, r2Key });
+        const jobId = await boss.send('voice-process', { quoteId, contractorId, r2Key });
+        jobEnqueued = true;
 
-      // Update quote with job ID
-      await query(
-        `UPDATE quotes SET voice_job_id = $1 WHERE id = $2`,
-        [jobId, quoteId]
-      );
+        await query(
+          `UPDATE quotes SET voice_job_id = $1 WHERE id = $2`,
+          [jobId, quoteId]
+        );
 
-      res.status(202).json({ jobId, quoteId });
+        res.status(202).json({ jobId, quoteId });
+      } catch (pipelineErr) {
+        // If the job never queued, the quote would otherwise sit in ai_processing forever.
+        if (!jobEnqueued) {
+          try {
+            await query(
+              `UPDATE quotes SET status = 'ai_failed' WHERE id = $1 AND status = 'ai_processing'`,
+              [quoteId]
+            );
+          } catch (markErr) {
+            console.error('Failed to mark quote ai_failed after upload/enqueue error:', markErr);
+          }
+          if (audioUploaded) {
+            try {
+              await deleteFromR2(r2Key);
+            } catch (deleteErr) {
+              console.error('Failed to delete orphaned R2 audio after enqueue error:', deleteErr);
+            }
+          }
+        }
+        throw pipelineErr;
+      }
     } catch (err) {
       console.error('POST /voice/upload error:', err);
       res.status(500).json({ error: 'Internal server error' });
@@ -126,7 +149,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
 
     const quoteRow = quoteResult.rows[0] as { id: string; status: string; total_cents: number };
 
-    if (quoteRow.status === 'ai_processing') {
+    if (quoteRow.status === 'ai_processing' || quoteRow.status === 'ai_failed') {
       res.status(404).json({ error: 'Draft not ready' });
       return;
     }

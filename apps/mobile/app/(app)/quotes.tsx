@@ -92,7 +92,7 @@ export default function QuotesScreen(): JSX.Element {
           } else if (result.status === 'failed') {
             await database.write(async () => {
               await q.update((r) => {
-                r.status = 'failed_send';
+                r.status = 'ai_failed';
               });
             });
           }

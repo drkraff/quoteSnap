@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateAndBuildLineItems } from './voice-validation.js';
+import { filterUuidCatalogIds, validateAndBuildLineItems } from './voice-validation.js';
 import type { CatalogItemRow } from './voice-validation.js';
 import type { AILineItem } from '../types/voice.js';
 
@@ -96,5 +96,43 @@ describe('validateAndBuildLineItems', () => {
     const { lineItems } = validateAndBuildLineItems(aiItems, catalog);
 
     assert.equal(lineItems[0]!.quantity, 5);
+  });
+
+  it('drops non-UUID AI catalog IDs without throwing', () => {
+    const uuidCatalog: CatalogItemRow[] = [
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Breaker', unit_price_cents: 5000 },
+    ];
+    const aiItems: AILineItem[] = [
+      { catalogItemId: 'not-a-uuid', quantity: 1, confidence: 0.9 },
+      { catalogItemId: 'light switch', quantity: 2, confidence: 0.8 },
+      { catalogItemId: '11111111-1111-4111-8111-111111111111', quantity: 1, confidence: 0.7 },
+    ];
+
+    const { lineItems, totalCents } = validateAndBuildLineItems(aiItems, uuidCatalog);
+
+    assert.equal(lineItems.length, 1);
+    assert.equal(lineItems[0]!.catalogItemId, '11111111-1111-4111-8111-111111111111');
+    assert.equal(totalCents, 5000);
+  });
+});
+
+describe('filterUuidCatalogIds', () => {
+  it('keeps only UUID-shaped IDs so Postgres uuid = ANY() will not crash', () => {
+    const ids = [
+      '11111111-1111-4111-8111-111111111111',
+      'not-a-uuid',
+      'light switch',
+      '22222222-2222-4222-8222-222222222222',
+      '',
+    ];
+
+    assert.deepEqual(filterUuidCatalogIds(ids), [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ]);
+  });
+
+  it('returns an empty array when every ID is invalid', () => {
+    assert.deepEqual(filterUuidCatalogIds(['nope', 'also-nope']), []);
   });
 });
