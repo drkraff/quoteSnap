@@ -200,7 +200,7 @@ These are the three tests from `.planning/phases/05-voice-to-quote-pipeline/05-H
 **Fail signals**:
 - ❌ Row doesn't appear when offline → sync queue not persisting → audio file got dropped
 - ❌ Row gets stuck queued after network returns → `NetInfo` listener didn't fire → recent `network-monitor.ts` change is suspect, check `state.isConnected` is being received
-- ❌ Multiple rows appear → sync queue may have run twice (no single-flight lock on `master`; open PR #8 targets this — log it, don't assume the fix is merged)
+- ❌ Multiple rows appear → sync queue ran twice despite single-flight (PR #8) — log it; unexpected on current `master`
 
 **Result**:
 

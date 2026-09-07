@@ -6,7 +6,7 @@ This file is no longer a live GSD dashboard. Checkboxes and “Plans: TBD” bel
 
 ## Snapshot
 
-Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-07 against `master` including PR #5 (CI) and PR #7 (voice/auth). Open PRs #8 (sync queue) and #9 (`ai_processing` reaper) are **not** treated as done.
+Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-07 against `master` including PRs #5 (CI), #7 (voice/auth), **#8 (sync retry/backoff/dead_letter/single-flight — merged)**, and **#9 (`ai_processing` reaper — merged)**.
 
 | Phase | Requirements | In code | Notes |
 |-------|--------------|---------|-------|
@@ -16,7 +16,7 @@ Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-07 again
 | 4 Quote review + history | REVIEW-01…06, HIST-01…04 | Yes | |
 | 5 Voice-to-quote | VOICE-01…09 | Yes | Code-complete; physical Android UAT still open |
 | 6 SMS + approval | SMS-01…10 | No | Do not implement unless asked |
-| 7 Sync hardening | SYNC-03…06, FAIL-01…08 | Partial | Basic queue only |
+| 7 Sync hardening | SYNC-03…06, FAIL-01…08 | Partial | SYNC-03 retry/backoff/dead_letter + single-flight landed (PR #8); SYNC-04 UI and FAIL-* not done |
 | Backlog 999.1 Railway + EAS | — | Partial | Root `build`/`start` + `EXPO_PUBLIC_API_URL`; no `eas.json` in repo |
 
 Do not start Phase 6, Phase 7 product work, or Railway/EAS from this roadmap alone.

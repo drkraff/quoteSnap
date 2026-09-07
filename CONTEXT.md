@@ -18,7 +18,7 @@ Core loop on `master`: register/login → trade onboarding + catalog seed → ca
 
 ## Status on `master` (2026-09-07)
 
-Verified against HEAD `ee66ed5` (merge of GitHub PR #7). Do not treat open PRs as landed.
+Verified against HEAD `7d841fd` (merges of GitHub PRs #8 and #9 on top of #7). Re-check GitHub before treating anything else as landed.
 
 | Phase | In code? | Honest status |
 |-------|----------|----------------|
@@ -26,21 +26,21 @@ Verified against HEAD `ee66ed5` (merge of GitHub PR #7). Do not treat open PRs a
 | 2 Onboarding | Yes | Shipped. `ONBD-03` (90s on 1-bar LTE) and `ONBD-04` (offline seed) not human-validated. |
 | 3 Catalog management | Yes | Shipped (`CAT-01`…`CAT-06`). |
 | 4 Quote review + history | Yes | Shipped (`REVIEW-*`, `HIST-*`). |
-| 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). |
+| 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
 | 6 SMS + customer approval | No | Not started (`SMS-01`…`SMS-10`). |
-| 7 Sync hardening + 16 failure scenarios | Partial | Queue exists; full retry schedule, dead-letter UX, and `FAIL-*` coverage are **not** done. |
+| 7 Sync hardening + 16 failure scenarios | Partial | **PR #8 landed `SYNC-03`:** retry/backoff `5s → 15s → 60s → 5m → 15m` then `dead_letter`, single-flight `processQueue`, audio-parent guard, NetInfo unsubscribe. Dead-letter **UI** (`SYNC-04`), conflict UX (`SYNC-05`), and `FAIL-*` coverage are **not** done. |
 | Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` scripts exist for Railway. `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `eas.json` / `railway.toml` in the repo.** Do not claim a live demo deploy. |
 
 Recent **merged** work to reflect if you mention status:
 
 - **PR #5** — CI workflow + typecheck/test scripts.
 - **PR #7** — login identifier lock-down (D1), UUID filter before catalog `ANY($2::uuid[])` (D2), R2 delete after successful GPT+DB commit (D3), `ai_failed` on upload/enqueue failure (D7), Whisper default English (D8), AI failures write `ai_failed` not `failed_send` (D9).
+- **PR #8** — mobile sync queue: failures stay `pending` with `nextRetryAt` backoff; `dead_letter` after the 15m attempt fails; `createSingleFlight` so overlapping `processQueue` calls do not double-write; `resolveAudioQuoteServerId` (no empty parent id on `/voice/upload`); NetInfo unsubscribe + root-layout teardown. Also picks up pre-existing `failed` rows. Dead-letter UI (`SYNC-04`) unchanged.
+- **PR #9** — pg-boss cron `ai-processing-reaper` (`* * * * *` UTC) marks quotes still `ai_processing` older than `AI_PROCESSING_TIMEOUT_MS` (default 15 minutes) as `ai_failed`. `GET /voice/status/:jobId` returns `{ status: 'failed' }` when the owned quote is already `ai_failed`, even if the pg-boss job is still active or gone, so the mobile poller stops.
 
-**Open at the time this file was written** (re-check GitHub; do not assume merged):
+**Still open (docs, not these fixes):**
 
-- **PR #8** — mobile sync-queue retries / single-flight / audio parent (`apps/mobile/src/sync/`).
-- **PR #9** — backend `ai_processing` reaper (`apps/backend/src/workers/`).
-- **PR #6** — draft Phase 5 UAT runbook (docs).
+- **PR #6** — draft Phase 5 UAT runbook.
 - **PR #4** — older GSD ROADMAP/STATE/PROJECT rewrite; superseded by this `CONTEXT.md` approach.
 
 Do **not** implement Phase 6 SMS, Railway/EAS, or product features unless a task explicitly asks.
@@ -56,7 +56,7 @@ apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
 apps/backend/src/db/migrations/   001_foundation … 005_ai_failed
 apps/mobile/src/db/               schema v2, models, SQLiteAdapter
-apps/mobile/src/sync/             enqueue + processQueue (basic; Phase 7 incomplete)
+apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent)
 .github/workflows/ci.yml
 ```
 
@@ -73,7 +73,7 @@ There is no root `README.md`. Native `android/` and `ios/` are gitignored (Expo 
 | `/quotes` | list/create/update quotes + line items |
 | `/voice` | `POST /upload`, `GET /status/:jobId`, `GET /draft/:quoteId` |
 
-Workers: `apps/backend/src/workers/voice-processor.ts` (pg-boss queue `voice-process`). No Twilio, FCM, or approval-page routes.
+Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing-reaper.ts` (queue `ai-processing-reaper`, every minute). No Twilio, FCM, or approval-page routes.
 
 ### Mobile screens (`apps/mobile/app`)
 
@@ -114,7 +114,7 @@ Workers: `apps/backend/src/workers/voice-processor.ts` (pg-boss queue `voice-pro
 cd apps/backend && npm run dev    # tsx watch, default PORT=3000
 ```
 
-`app.listen(PORT)` (no explicit host). For a physical phone, Windows/macOS firewall must allow inbound TCP 3000. Required env: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `OPENAI_API_KEY`, `R2_*` (see `apps/backend/.env.example`). Optional: `WHISPER_LANGUAGE` — default **`en`**; set `he` for Hebrew; empty string opts into Whisper auto-detect. Not listed in `.env.example`.
+`app.listen(PORT)` (no explicit host). For a physical phone, Windows/macOS firewall must allow inbound TCP 3000. Required env: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `OPENAI_API_KEY`, `R2_*` (see `apps/backend/.env.example`). Optional: `WHISPER_LANGUAGE` — default **`en`**; set `he` for Hebrew; empty string opts into Whisper auto-detect. Optional: `AI_PROCESSING_TIMEOUT_MS` — default **900000** (15 minutes); commented in `.env.example`.
 
 Auth: 15-minute JWT access tokens; 30-day refresh tokens stored as SHA-256 hashes; rotation on refresh. Login uses **one** identifier (email wins if both present) — never `WHERE email = $1 OR phone = $2 LIMIT 1`.
 
@@ -137,21 +137,21 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), and whisper-language; mobile tests cover confidence, line-items, and quote-validation utilities.
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, and the ai-processing reaper; mobile tests cover confidence, line-items, quote-validation, plus sync retry/backoff, single-flight, audio parent, NetInfo, and `processQueue`.
 
 ---
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master`**, not speculation about open PRs:
+These are **on `master` after PRs #8 and #9**. Do not re-implement retry/single-flight or the reaper.
 
-- **Sync queue is a stub of Phase 7.** `processQueue` has no single-flight lock; `failed` items are not flipped back to `pending` (so they do not retry); audio upload uses `quote.serverId ?? ''`; `initNetworkMonitor` does not retain the NetInfo unsubscribe. Dead-letter after 5 failures is sketched, not productized (`SYNC-03`…`SYNC-05`). PR #8 targets this — **open, not merged**.
-- **Orphan `ai_processing`.** Quotes with no `voiceJobId` are not polled (`quotes.tsx` filters on `voiceJobId`). If enqueue succeeds but `voice_job_id` update fails, the client can 500 and a retry can insert a second quote. PR #9 (reaper) — **open, not merged**.
+- **Dead-letter UX (`SYNC-04`) and draft conflict UX (`SYNC-05`)** are not built. Queue items can reach `dead_letter`; there is no contractor-facing retry screen.
+- **Local `ai_processing` without `voiceJobId` is still not polled** (`quotes.tsx` requires `voiceJobId`). The server reaper will mark the **server** row `ai_failed` after the timeout; the local row will not learn that unless a later poll/sync path exists. A 500 after enqueue can still insert a second server quote on client retry (PR #7 leftover).
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).
 - **Mic denied** shows an in-app Alert + Settings link (`voice-record.tsx`); other `FAIL-*` scenarios are incomplete. `WORKFLOW-failure-edge-cases.md` is referenced by `FAIL-01` and **is not in the repo**.
 
-When you mention defects, prefer “this is in `sync-queue.ts` on master” over “PR #8 will fix it.”
+When you mention defects, prefer what is in the tree on `master` over open-PR speculation.
 
 ---
 
