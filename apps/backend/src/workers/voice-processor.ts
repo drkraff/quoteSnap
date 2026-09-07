@@ -8,6 +8,7 @@ import type { VoiceJobData, AILineItem } from '../types/voice.js';
 import { filterUuidCatalogIds, validateAndBuildLineItems } from './voice-validation.js';
 import type { CatalogItemRow } from './voice-validation.js';
 import { resolveWhisperLanguage } from './whisper-language.js';
+import { startAiProcessingReaper } from './ai-processing-reaper.js';
 
 export const boss = new PgBoss(process.env['DATABASE_URL']!);
 
@@ -21,6 +22,8 @@ export async function initBoss(): Promise<void> {
   await boss.createQueue('voice-process');
 
   await boss.work<VoiceJobData>('voice-process', { localConcurrency: 2 }, processVoiceJobs);
+
+  await startAiProcessingReaper(boss, query);
 }
 
 async function processVoiceJobs(jobs: Job<VoiceJobData>[]): Promise<void> {
