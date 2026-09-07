@@ -1,7 +1,11 @@
 # Requirements: QuoteSnap
 
 **Defined:** 2026-03-25
+**Operational status:** [CONTEXT.md](../CONTEXT.md) — this file is the **ID catalog**, not a live dashboard.
+
 **Core Value:** A contractor can describe a job on-site and have a customer-approved quote before driving off the street — with zero paperwork at night.
+
+Checkboxes mean “accepted as in-scope and (if checked) implemented in code,” not “human UAT passed.” Phase 5 voice items are code-complete; physical Android UAT is still open. Do not delete IDs.
 
 ---
 
@@ -62,11 +66,11 @@
 - [ ] **SMS-07**: Customer can decline the quote with one tap
 - [ ] **SMS-08**: Contractor receives a push notification (FCM) immediately when a customer approves
 - [ ] **SMS-09**: Expired quotes show a neutral "This quote has expired" state — not an error page
-- [ ] **SMS-10**: Quote expiry TTL is configurable (default 72 hours; exact value to be decided before Phase 5)
+- [ ] **SMS-10**: Quote expiry TTL is configurable (default 72 hours; exact value to be decided before Phase 6)
 
 ### Quote Storage and History
 
-- [x] **HIST-01**: All quote states (draft_local, draft_queued, sent, approved, declined, expired, failed_send) are persisted locally in WatermelonDB
+- [x] **HIST-01**: All quote states (ai_processing, ai_failed, draft_local, draft_queued, sent, approved, declined, expired, failed_send) are persisted locally in WatermelonDB
 - [x] **HIST-02**: Contractor can view a history list of all quotes sorted by recency
 - [x] **HIST-03**: Contractor can open a past quote to view its full line items and status
 - [x] **HIST-04**: Quote history is accessible offline without a network connection
@@ -75,7 +79,7 @@
 
 - [x] **SYNC-01**: All quotes, catalog items, and drafts live in local SQLite; the app is fully functional without network
 - [x] **SYNC-02**: A background sync queue pushes changes to the server when connectivity is available
-- [ ] **SYNC-03**: Sync retry schedule: 5s → 15s → 60s → 5m → 15m → dead-letter after max retries
+- [x] **SYNC-03**: Sync retry schedule: 5s → 15s → 60s → 5m → 15m → dead-letter after max retries
 - [ ] **SYNC-04**: Dead-letter items are surfaced to the contractor with a plain-language error and retry option
 - [ ] **SYNC-05**: WatermelonDB uses server-as-truth conflict resolution; draft conflicts (pre-send) surface as a visible "Review before sending" prompt — not silent resolution
 - [ ] **SYNC-06**: Quote snapshots (post-send) are unaffected by sync state — approval page integrity is guaranteed
@@ -183,7 +187,7 @@
 | HIST-04 | Phase 4 | Complete |
 | SYNC-01 | Phase 1 | Complete |
 | SYNC-02 | Phase 1 | Complete |
-| SYNC-03 | Phase 7 | Pending |
+| SYNC-03 | Phase 7 | Complete |
 | SYNC-04 | Phase 7 | Pending |
 | SYNC-05 | Phase 7 | Pending |
 | SYNC-06 | Phase 7 | Pending |
@@ -203,4 +207,4 @@
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after roadmap creation — phase assignments confirmed*
+*Last updated: 2026-09-07 — IDs preserved; HIST-01 statuses include ai_processing/ai_failed; SMS-10 gate is Phase 6; SYNC-03 complete after PR #8; status narrative lives in CONTEXT.md*

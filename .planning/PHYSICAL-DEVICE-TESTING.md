@@ -1,6 +1,6 @@
 # Physical Device Testing Guide
 
-Single source of truth for testing QuoteSnap on a real Android device. Use this whenever you need to validate a phase end-to-end before marking it complete, or to sanity-check a change that can't be exercised in unit tests or emulator.
+Procedure for QuoteSnap on a real Android device. Product/status briefing: [CONTEXT.md](../CONTEXT.md).
 
 This guide assumes a Windows host (where this repo lives), an Android phone with developer mode on, and both connected to the same Wi-Fi network.
 
@@ -30,7 +30,7 @@ Run through this before plugging anything in. All items must be true.
 | 4 | `adb devices` lists the phone as `device` (not `unauthorized` or `offline`) | Run from any terminal: `adb devices` |
 | 5 | Docker Desktop is running | `docker ps` returns without error |
 | 6 | `quotesnap-db` container is up on port 5433 | `docker ps --filter "name=quotesnap-db"` |
-| 7 | Backend `apps/backend/.env` has all required keys | At minimum: `DATABASE_URL`, `JWT_SECRET`, `OPENAI_API_KEY`, R2 keys |
+| 7 | Backend `apps/backend/.env` has all required keys | At minimum: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `OPENAI_API_KEY`, R2 keys |
 | 8 | Mobile API base URL points to your laptop's LAN IP, not `10.0.2.2` | See **Critical: API base URL** below |
 
 ---
@@ -48,26 +48,19 @@ ipconfig | Select-String "IPv4"
 
 Pick the IPv4 address of your active Wi-Fi adapter (typically `192.168.x.x` or `10.0.x.x`). For example: `192.168.1.42`.
 
-### Set it in app.json
+### Set `EXPO_PUBLIC_API_URL` (do not commit a LAN IP)
 
-Edit `apps/mobile/app.json` and add an `extra` block inside `expo`:
+`apps/mobile/app.config.ts` reads `process.env.EXPO_PUBLIC_API_URL` into `expo.extra.apiUrl`. The fallback is `http://10.0.2.2:3000` (emulator only).
 
-```json
-{
-  "expo": {
-    "name": "QuoteSnap",
-    ...
-    "experiments": {
-      "typedRoutes": true
-    },
-    "extra": {
-      "apiUrl": "http://192.168.1.42:3000"
-    }
-  }
-}
+Create a gitignored `apps/mobile/.env` (or export the var in the shell before `npm run android`):
+
+```
+EXPO_PUBLIC_API_URL=http://192.168.1.42:3000
 ```
 
-Replace `192.168.1.42` with your actual IP.
+Replace `192.168.1.42` with your actual IP. There is no `app.json` extra block anymore.
+
+Restart Metro after changing the env var so `app.config.ts` re-evaluates.
 
 ### Verify the backend is reachable from the phone
 
@@ -77,12 +70,9 @@ While the backend is running, open the phone's browser and visit `http://<your-l
 - Or temporarily disable the firewall just for the testing session (re-enable after).
 - Confirm both devices are on the same SSID, not a guest network with client isolation.
 
-### Don't commit your local apiUrl
+### Don't commit your local API URL
 
-Your LAN IP is specific to your home/office. If you push the change, others will get a broken build. Either:
-
-- Add a pre-commit reminder to revert `extra.apiUrl` before staging
-- Or move it to a local-only config (Expo's `app.config.js` reading from `.env` is the long-term fix — out of scope for now)
+Your LAN IP is specific to your network. `apps/mobile/.env` is gitignored. Do not hard-code `extra.apiUrl` in `app.config.ts`.
 
 ---
 
@@ -183,7 +173,7 @@ These are the three tests from `.planning/phases/05-voice-to-quote-pipeline/05-H
 - ❌ Hangs at `ai_processing` for >30 seconds → check backend logs for Whisper/GPT-4o errors
 - ❌ Draft has line items but no badges → confidence column never persisted (verify `quote_line_items.confidence` has non-null values in DB)
 - ❌ Draft is empty → catalog ID validation rejected everything (catalog mismatch with prompt vocabulary)
-- ❌ App crashes during recording → check `expo-av` permission status in app.json
+- ❌ App crashes during recording → check `expo-av` permission status in `app.config.ts`
 
 **Result**:
 
@@ -210,7 +200,7 @@ These are the three tests from `.planning/phases/05-voice-to-quote-pipeline/05-H
 **Fail signals**:
 - ❌ Row doesn't appear when offline → sync queue not persisting → audio file got dropped
 - ❌ Row gets stuck queued after network returns → `NetInfo` listener didn't fire → recent `network-monitor.ts` change is suspect, check `state.isConnected` is being received
-- ❌ Multiple rows appear → sync queue ran twice (pending PR 3 fix — log this if seen but don't block)
+- ❌ Multiple rows appear → sync queue ran twice despite single-flight (PR #8) — log it; unexpected on current `master`
 
 **Result**:
 
@@ -228,8 +218,8 @@ These are the three tests from `.planning/phases/05-voice-to-quote-pipeline/05-H
 
 **Expected**:
 - All pre-Phase-5 manual quote behavior unchanged
-- After Send, returns to Quotes tab (this navigation was added in PR #3)
-- New row appears in `draft_queued` state
+- After Send, returns to Quotes tab
+- New row appears in `draft_queued` state (SMS is Phase 6 — Send does not message the customer yet)
 
 **Fail signals**:
 - ❌ Manual FAB triggers voice recording instead → FAB wiring regression
@@ -300,8 +290,8 @@ This validates the PR #2 fix (refresh race coalescing).
    - Change `status: partial` → `status: complete`
    - Mark each test result as ✅
    - Update `passed: 3` in the Summary block
-2. Return to Claude Code and type `"approved"` to trigger the phase-complete flow (ROADMAP update, STATE advance to Phase 6)
-3. Revert any local-only `apiUrl` change you made in `app.json` before opening any new PR
+2. Update the Phase 5 row in [CONTEXT.md](../CONTEXT.md) if UAT is now the gate that closed.
+3. Keep LAN `EXPO_PUBLIC_API_URL` out of git.
 
 ---
 
@@ -334,7 +324,7 @@ ipconfig | Select-String "IPv4"
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| All API calls hang/fail | `apiUrl` still pointing at `10.0.2.2` | Add `extra.apiUrl` with LAN IP in `app.json` |
+| All API calls hang/fail | `apiUrl` still pointing at `10.0.2.2` | Set `EXPO_PUBLIC_API_URL` to your LAN IP; restart Metro |
 | API calls fail only from phone, fine on emulator | Windows Firewall blocking inbound 3000 | Add inbound rule for TCP 3000 |
 | Voice recording silently fails | Microphone permission denied | Settings → Apps → QuoteSnap → Permissions → enable Mic |
 | Voice processing never completes | Backend `OPENAI_API_KEY` missing or invalid | Check backend terminal for Whisper/OpenAI errors |
