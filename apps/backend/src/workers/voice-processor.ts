@@ -5,8 +5,9 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/cha
 import pool, { query } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
 import type { VoiceJobData, AILineItem } from '../types/voice.js';
-import { validateAndBuildLineItems } from './voice-validation.js';
+import { filterUuidCatalogIds, validateAndBuildLineItems } from './voice-validation.js';
 import type { CatalogItemRow } from './voice-validation.js';
+import { resolveWhisperLanguage } from './whisper-language.js';
 
 export const boss = new PgBoss(process.env['DATABASE_URL']!);
 
@@ -38,11 +39,10 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const audioFile = await toFile(audioBuffer, 'audio.m4a', { type: 'audio/m4a' });
 
     // b) Whisper transcription.
-    // Pin the language: Whisper's auto-detect mistakes short Hebrew clips for
-    // Arabic and returns garbage. WHISPER_LANGUAGE overrides (default 'he');
+    // Default English (US trades). WHISPER_LANGUAGE overrides (e.g. 'he');
     // set it to '' to fall back to auto-detect for mixed-language use.
     const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
-    const whisperLanguage = process.env['WHISPER_LANGUAGE'] ?? 'he';
+    const whisperLanguage = resolveWhisperLanguage(process.env['WHISPER_LANGUAGE']);
     const transcription = await openai.audio.transcriptions.create({
       model: 'whisper-1',
       file: audioFile,
@@ -51,10 +51,10 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const transcript = transcription.text;
     console.log(`[voice] transcript: "${transcript}"`);
 
-    // c) Delete audio from R2 immediately (PII)
-    await deleteFromR2(r2Key);
+    // Audio stays in R2 until GPT + DB write succeed so pg-boss retries can
+    // re-fetch it. Deleted after commit (see below).
 
-    // d) Fetch contractor's active catalog
+    // c) Fetch contractor's active catalog
     const catalogResult = await query(
       `SELECT id, name, unit FROM catalog_items WHERE contractor_id = $1 AND is_archived = false`,
       [contractorId]
@@ -115,13 +115,16 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const parsed = JSON.parse(toolCall.function.arguments) as { items: AILineItem[] };
     const aiItems = parsed.items;
 
-    // g) Validate catalog IDs
-    const aiItemIds = aiItems.map(i => i.catalogItemId);
-    const validationResult = await query(
-      `SELECT id, name, unit_price_cents FROM catalog_items WHERE contractor_id = $1 AND id = ANY($2) AND is_archived = false`,
-      [contractorId, aiItemIds]
-    );
-    const validCatalogItems = validationResult.rows as CatalogItemRow[];
+    // g) Validate catalog IDs — only UUID-shaped values may hit the uuid column.
+    const aiItemIds = filterUuidCatalogIds(aiItems.map(i => i.catalogItemId));
+    let validCatalogItems: CatalogItemRow[] = [];
+    if (aiItemIds.length > 0) {
+      const validationResult = await query(
+        `SELECT id, name, unit_price_cents FROM catalog_items WHERE contractor_id = $1 AND id = ANY($2::uuid[]) AND is_archived = false`,
+        [contractorId, aiItemIds]
+      );
+      validCatalogItems = validationResult.rows as CatalogItemRow[];
+    }
 
     // h-i) Validate catalog IDs, build line items, calculate total
     const { lineItems, totalCents } = validateAndBuildLineItems(aiItems, validCatalogItems);
@@ -150,17 +153,24 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     } finally {
       client.release();
     }
+
+    // PII: delete audio only after a durable success so retries still have the object.
+    try {
+      await deleteFromR2(r2Key);
+    } catch (deleteErr) {
+      console.error(`Failed to delete R2 audio ${r2Key} after successful processing:`, deleteErr);
+    }
   } catch (err) {
     console.error(`voice-process job ${job.id} failed:`, err);
 
-    // Update quote to failed state so polling endpoint can reflect this
+    // AI failure is not an SMS send failure (failed_send).
     try {
       await query(
-        `UPDATE quotes SET status = 'failed_send' WHERE id = $1`,
+        `UPDATE quotes SET status = 'ai_failed' WHERE id = $1 AND status = 'ai_processing'`,
         [quoteId]
       );
     } catch (updateErr) {
-      console.error('Failed to update quote status to failed_send:', updateErr);
+      console.error('Failed to update quote status to ai_failed:', updateErr);
     }
 
     throw err;

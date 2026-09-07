@@ -6,6 +6,17 @@ export type CatalogItemRow = {
   unit_price_cents: number;
 };
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Drop AI-invented non-UUID catalog IDs before they are bound to
+ * `id = ANY($n::uuid[])`. Invalid values crash Postgres instead of filtering.
+ */
+export function filterUuidCatalogIds(ids: string[]): string[] {
+  return ids.filter((id) => UUID_RE.test(id));
+}
+
 export interface ValidatedLineItem {
   catalogItemId: string;
   name: string;

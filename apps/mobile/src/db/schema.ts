@@ -9,7 +9,7 @@ export const schema = appSchema({
         { name: 'server_id', type: 'string', isOptional: true },
         { name: 'contractor_id', type: 'string' },
         { name: 'status', type: 'string' },
-        // status: ai_processing | draft_local | draft_queued | sent | approved | declined | expired | failed_send
+        // status: ai_processing | ai_failed | draft_local | draft_queued | sent | approved | declined | expired | failed_send
         { name: 'customer_phone', type: 'string', isOptional: true },
         { name: 'total_cents', type: 'number' },
         { name: 'created_at', type: 'number' },
