@@ -14,11 +14,12 @@ export default function RootLayout(): JSX.Element {
 
   // Initialize on mount
   useEffect(() => {
-    initNetworkMonitor();
+    const unsubscribeNetwork = initNetworkMonitor();
     const unsubscribeSyncQueue = initSyncQueue();
     restoreSession();
     return () => {
       unsubscribeSyncQueue();
+      unsubscribeNetwork();
     };
   }, []);
 

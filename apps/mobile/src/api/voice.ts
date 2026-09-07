@@ -14,7 +14,7 @@ export interface VoiceStatusResponse {
   error?: string;
 }
 
-export async function uploadAudio(filePath: string, quoteServerId: string): Promise<UploadAudioResponse> {
+export async function uploadAudio(filePath: string, quoteServerId?: string): Promise<UploadAudioResponse> {
   // Lazy import to avoid circular dependency
   const { useAuthStore } = await import('../store/auth-store');
   const accessToken = useAuthStore.getState().accessToken;
@@ -26,7 +26,9 @@ export async function uploadAudio(filePath: string, quoteServerId: string): Prom
     name: 'recording.m4a',
   } as unknown as Blob);
 
-  formData.append('quoteServerId', quoteServerId);
+  if (quoteServerId) {
+    formData.append('quoteServerId', quoteServerId);
+  }
 
   const response = await fetch(`${API_BASE_URL}/voice/upload`, {
     method: 'POST',

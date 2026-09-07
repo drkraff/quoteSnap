@@ -8,6 +8,12 @@ import { CatalogItem } from '../db/models/catalog-item';
 import { createQuoteOnServer, updateQuoteOnServer } from '../api/quotes';
 import { Quote } from '../db/models/quote';
 import { Draft } from '../db/models/draft';
+import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
+import { createSingleFlight } from './single-flight';
+import { resolveAudioQuoteServerId } from './audio-parent';
+
+const queueFlight = createSingleFlight();
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface SyncEnqueueParams {
   entityType: 'quote' | 'catalog_item' | 'draft' | 'audio';
@@ -26,6 +32,7 @@ export async function enqueue(params: SyncEnqueueParams): Promise<void> {
       item.payloadJson = JSON.stringify(params.payload);
       item.status = 'pending';
       item.retryCount = 0;
+      item.nextRetryAt = null;
     });
   });
 
@@ -123,7 +130,9 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     const quoteCollection = database.get<Quote>('quotes');
     const quotes = await quoteCollection.query(Q.where('id', draft.quoteId)).fetch();
     const quote = quotes[0];
-    if (!quote?.serverId) return; // Can't sync draft without server quote ID — will retry
+    if (!quote?.serverId) {
+      throw new Error('Cannot sync draft: parent quote has no server ID yet');
+    }
     const lineItemsRaw = payload.lineItemsJson as string | undefined;
     if (lineItemsRaw) {
       const items = JSON.parse(lineItemsRaw) as Array<{ name: string; quantity: number; unitPriceCents: number }>;
@@ -139,8 +148,8 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     const quote = localQuotes[0];
     if (!quote) throw new Error('Cannot sync audio: quote not found');
 
-    // Upload audio — backend creates the server-side quote and job
-    const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quote.serverId ?? '');
+    const quoteServerId = resolveAudioQuoteServerId(quote);
+    const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quoteServerId);
 
     // Store jobId and serverId on local quote
     await database.write(async () => {
@@ -157,18 +166,44 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
   console.warn(`Unhandled entity type: ${item.entityType}`);
 }
 
-export async function processQueue(): Promise<void> {
+function nextRetryAtMs(item: SyncQueueItem): number | null {
+  return item.nextRetryAt ? item.nextRetryAt.getTime() : null;
+}
+
+function scheduleRetryTimer(atMs: number | null): void {
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  if (atMs == null) return;
+  const delay = Math.max(0, atMs - Date.now());
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    processQueue().catch(() => {});
+  }, delay);
+}
+
+async function processQueueOnce(): Promise<void> {
   if (!isOnline()) return;
 
   const collection = database.get<SyncQueueItem>('sync_queue_items');
-  const pending = await collection
+  const candidates = await collection
     .query(
-      Q.where('status', 'pending'),
+      Q.or(
+        Q.where('status', 'pending'),
+        Q.where('status', 'failed'),
+        Q.where('status', 'in_progress'),
+      ),
       Q.sortBy('created_at', 'asc'),
     )
     .fetch();
 
-  for (const item of pending) {
+  const now = Date.now();
+  const due = candidates.filter((item) =>
+    isQueueItemDue({ status: item.status, nextRetryAtMs: nextRetryAtMs(item) }, now),
+  );
+
+  for (const item of due) {
     try {
       await database.write(async () => {
         await item.update((record) => {
@@ -184,21 +219,38 @@ export async function processQueue(): Promise<void> {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const nextCount = item.retryCount + 1;
+      const schedule = applyFailureSchedule(nextCount, Date.now());
       await database.write(async () => {
         await item.update((record) => {
-          record.retryCount = item.retryCount + 1;
+          record.retryCount = nextCount;
           record.lastError = errorMessage;
-          // Basic retry schedule placeholder — full schedule in Phase 7
-          // 5s, 15s, 60s, 5m, 15m then dead_letter
-          if (item.retryCount >= 5) {
-            record.status = 'dead_letter';
-          } else {
-            record.status = 'failed';
-          }
+          record.status = schedule.status;
+          record.nextRetryAt = schedule.nextRetryAtMs != null ? new Date(schedule.nextRetryAtMs) : null;
         });
       });
     }
   }
+
+  const remaining = await collection
+    .query(
+      Q.or(
+        Q.where('status', 'pending'),
+        Q.where('status', 'failed'),
+      ),
+    )
+    .fetch();
+  scheduleRetryTimer(
+    soonestFutureRetryMs(
+      remaining.map((item) => ({ status: item.status, nextRetryAtMs: nextRetryAtMs(item) })),
+      Date.now(),
+    ),
+  );
+}
+
+export async function processQueue(): Promise<void> {
+  if (!isOnline()) return;
+  return queueFlight.run(processQueueOnce);
 }
 
 export function initSyncQueue(): () => void {
@@ -212,7 +264,13 @@ export function initSyncQueue(): () => void {
   // Initial queue processing attempt
   processQueue().catch(() => {});
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
 }
 
 export async function getPendingCount(): Promise<number> {
@@ -223,4 +281,12 @@ export async function getPendingCount(): Promise<number> {
 export async function getDeadLetterItems(): Promise<SyncQueueItem[]> {
   const collection = database.get<SyncQueueItem>('sync_queue_items');
   return collection.query(Q.where('status', 'dead_letter')).fetch();
+}
+
+export function resetSyncQueueForTests(): void {
+  queueFlight.reset();
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
 }
