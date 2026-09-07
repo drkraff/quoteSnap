@@ -17,6 +17,7 @@ const upload = multer({
 type QuoteRow = {
   id: string;
   contractor_id: string;
+  status: string;
 };
 
 // POST /upload — upload audio, create ai_processing quote, send pg-boss job
@@ -93,7 +94,7 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
 
     // Verify the quote belongs to the requesting contractor
     const ownershipResult = await query(
-      `SELECT id FROM quotes WHERE voice_job_id = $1 AND contractor_id = $2`,
+      `SELECT id, status FROM quotes WHERE voice_job_id = $1 AND contractor_id = $2`,
       [jobId, contractorId]
     );
 
@@ -104,6 +105,13 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
 
     const quoteRow = ownershipResult.rows[0] as QuoteRow;
     const quoteId = quoteRow.id;
+
+    // Reaper (and worker catch) write ai_failed on the quote even when the
+    // pg-boss job is still active or already gone — stop the mobile poller.
+    if (quoteRow.status === 'ai_failed') {
+      res.json({ status: 'failed', error: 'Processing failed' });
+      return;
+    }
 
     // Fetch job from pg-boss
     const job = await boss.getJobById('voice-process', jobId);
