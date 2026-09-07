@@ -6,6 +6,8 @@ started: 2026-04-04T01:30:00Z
 updated: 2026-04-04T01:30:00Z
 ---
 
+Human runbook (preconditions, LAN API URL, proof bar): [docs/UAT-PHASE5.md](../../../docs/UAT-PHASE5.md)
+
 ## Current Test
 
 [awaiting human testing]
