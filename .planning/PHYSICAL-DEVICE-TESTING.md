@@ -2,6 +2,8 @@
 
 Procedure for QuoteSnap on a real Android device. Product/status briefing: [CONTEXT.md](../CONTEXT.md).
 
+**Phase 5 UAT:** [docs/UAT-PHASE5.md](../docs/UAT-PHASE5.md) — the three pending human tests, preconditions, and hosted-proof slots.
+
 This guide assumes a Windows host (where this repo lives), an Android phone with developer mode on, and both connected to the same Wi-Fi network.
 
 ---
