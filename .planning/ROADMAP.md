@@ -1,168 +1,22 @@
 # Roadmap: QuoteSnap
 
-## Overview
+**Canonical status:** [CONTEXT.md](../CONTEXT.md). Requirement IDs: [REQUIREMENTS.md](REQUIREMENTS.md).
 
-QuoteSnap ships in 7 phases that follow the natural delivery boundaries of the product. The foundation (auth + offline core) comes first because the offline-first constraint is non-retrofittable. Onboarding and catalog build the contractor's data layer. Quote review and voice pipeline deliver the core value loop. SMS delivery and customer approval close the loop. Final hardening covers sync resilience and all 16 failure scenarios, producing a beta-ready app.
+This file is no longer a live GSD dashboard. Checkboxes and “Plans: TBD” below used to contradict the tree (Phase 1 shown Planned after it shipped; Phase 5 Plan 04 unchecked after `05-04-SUMMARY.md` existed). Phase PLAN/SUMMARY files under `phases/` are the historical record of *how* work landed.
 
-## Phases
+## Snapshot
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-07 against `master` including PR #5 (CI) and PR #7 (voice/auth). Open PRs #8 (sync queue) and #9 (`ai_processing` reaper) are **not** treated as done.
 
-Decimal phases appear between their surrounding integers in numeric order.
+| Phase | Requirements | In code | Notes |
+|-------|--------------|---------|-------|
+| 1 Foundation | AUTH-01…04, SYNC-01…02 | Yes | GitHub PRs #1, #2 merged |
+| 2 Onboarding | ONBD-01…04 | Yes | ONBD-03/04 not device-validated |
+| 3 Catalog | CAT-01…06 | Yes | |
+| 4 Quote review + history | REVIEW-01…06, HIST-01…04 | Yes | |
+| 5 Voice-to-quote | VOICE-01…09 | Yes | Code-complete; physical Android UAT still open |
+| 6 SMS + approval | SMS-01…10 | No | Do not implement unless asked |
+| 7 Sync hardening | SYNC-03…06, FAIL-01…08 | Partial | Basic queue only |
+| Backlog 999.1 Railway + EAS | — | Partial | Root `build`/`start` + `EXPO_PUBLIC_API_URL`; no `eas.json` in repo |
 
-- [ ] **Phase 1: Foundation** - Auth + offline-first infrastructure; every subsequent phase depends on this
-- [ ] **Phase 2: Onboarding** - Trade selection and pre-seeded catalog so contractors enter the app ready to work
-- [ ] **Phase 3: Catalog Management** - Contractor owns their service catalog: add, edit, archive, sync
-- [x] **Phase 4: Quote Review and History** - Contractor can review AI drafts, edit line items, and access quote history offline (completed 2026-04-02)
-- [ ] **Phase 5: Voice-to-Quote Pipeline** - Voice recording through Whisper/GPT-4o mapping delivers a catalog-constrained draft in under 10 seconds
-- [ ] **Phase 6: SMS Delivery and Customer Approval** - Quote goes to customer via SMS; customer approves; contractor gets push notification
-- [ ] **Phase 7: Sync Hardening and Failure Coverage** - Full retry schedule, conflict resolution, and all 16 failure scenarios handled
-
-## Phase Details
-
-### Phase 1: Foundation
-**Goal**: Contractors can authenticate and the app is offline-first from day one
-**Depends on**: Nothing (first phase)
-**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, SYNC-01, SYNC-02
-**Success Criteria** (what must be TRUE):
-  1. Contractor can create an account with phone number or email and land in the app
-  2. Contractor can close and reopen the app and remain logged in without re-authenticating
-  3. Contractor can log out; the device holds no session data afterward
-  4. App detects an existing valid session on launch and skips the auth screens entirely
-  5. All core data (quotes, catalog, drafts) lives in local SQLite and the app opens without network
-**Plans**: TBD
-
-### Phase 2: Onboarding
-**Goal**: A new contractor completes setup and has a working service catalog within 90 seconds of first launch
-**Depends on**: Phase 1
-**Requirements**: ONBD-01, ONBD-02, ONBD-03, ONBD-04
-**Success Criteria** (what must be TRUE):
-  1. Contractor selects their trade during first-launch onboarding and the app seeds an appropriate catalog
-  2. Onboarding completes end-to-end in under 90 seconds on a low-end Android on a 1-bar LTE connection
-  3. Contractor who loses signal mid-onboarding still receives a usable catalog (bundled offline template)
-**Plans**: 2 plans
-Plans:
-- [x] 02-01-PLAN.md -- Backend API: catalog_items migration, trade templates, POST /onboarding/seed endpoint
-- [ ] 02-02-PLAN.md -- Mobile onboarding screens (trade selection, seeding, ready), offline templates, navigation wiring
-**UI hint**: yes
-
-### Phase 3: Catalog Management
-**Goal**: Contractor can own and maintain their service catalog from the phone
-**Depends on**: Phase 2
-**Requirements**: CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, CAT-06
-**Success Criteria** (what must be TRUE):
-  1. Contractor can add a new service item (name, unit, price) and it appears in the catalog immediately
-  2. Contractor can edit an existing item and the change persists across app restarts
-  3. Contractor can archive an item; it disappears from the active list and AI mapping but data is retained
-  4. Contractor can view all active catalog items grouped by trade category without a network connection
-  5. Catalog changes made offline sync to the server automatically when connectivity returns
-**Plans**: 3 plans
-Plans:
-- [x] 03-01-PLAN.md -- Backend catalog CRUD endpoints (GET/POST/PUT/PATCH /catalog)
-- [x] 03-02-PLAN.md -- Mobile catalog UI: tab navigator, SectionList, add/edit sheet, swipe-to-archive, WatermelonDB ops
-- [ ] 03-03-PLAN.md -- Sync queue wiring to backend API + end-to-end verification
-**UI hint**: yes
-
-### Phase 4: Quote Review and History
-**Goal**: Contractor can review and edit a quote draft, and access all past quotes offline
-**Depends on**: Phase 3
-**Requirements**: REVIEW-01, REVIEW-02, REVIEW-03, REVIEW-04, REVIEW-05, REVIEW-06, HIST-01, HIST-02, HIST-03, HIST-04
-**Success Criteria** (what must be TRUE):
-  1. Contractor can view a draft as a list of line items with quantities and prices
-  2. Contractor can edit quantity or price on any line item; changes auto-save locally on every edit
-  3. Contractor can remove a line item or add a catalog item manually to a draft
-  4. Send button is blocked until the draft has at least one line item and a valid customer phone number
-  5. Contractor can open the history list and view any past quote with its full line items and status — without network
-**Plans**: 3 plans
-Plans:
-- [x] 04-01-PLAN.md -- Backend migration + types + routes + Jest setup + pure utility functions with tests + API client
-- [x] 04-02-PLAN.md -- Mobile UI components: StatusBadge, QuoteRow, LineItemRow, PriceEditSheet, CatalogPickerSheet, QuoteDetail
-- [x] 04-03-PLAN.md -- Screens (history, draft, detail) + tab nav + sync queue wiring + human verification
-**UI hint**: yes
-
-### Phase 5: Voice-to-Quote Pipeline
-**Goal**: Contractor describes a job by voice and receives a catalog-constrained draft in under 10 seconds
-**Depends on**: Phase 3
-**Requirements**: VOICE-01, VOICE-02, VOICE-03, VOICE-04, VOICE-05, VOICE-06, VOICE-07, VOICE-08, VOICE-09
-**Success Criteria** (what must be TRUE):
-  1. Contractor taps record, describes the job, and receives a draft quote mapped to their catalog in under 10 seconds
-  2. Every line item on the draft exists in the contractor's catalog — no AI-invented prices or items appear
-  3. Low-confidence line items are labeled "Review" (amber) or "Needs Input" (red) with no raw percentages shown
-  4. Red-confidence items auto-scroll into view; contractor is never left wondering why the draft looks incomplete
-  5. Voice recording works without network; audio enters the sync queue and processes when signal returns
-**Plans**: 4 plans
-Plans:
-- [x] 05-01-PLAN.md -- Backend voice pipeline: R2 upload, pg-boss worker, Whisper + GPT-4o mapping, catalog validation, polling endpoint
-- [x] 05-02-PLAN.md -- Mobile recording UI: dual FAB, voice-record screen (expo-av), sync queue audio case, ai_processing row, polling
-- [x] 05-03-PLAN.md -- Confidence badges on LineItemRow, auto-scroll to red items, DraftReadyToast, human verification
-- [ ] 05-04-PLAN.md -- Gap closure: confidence column in migration, INSERT fix, GET /draft endpoint, getDraftLineItems polling call
-**UI hint**: yes
-
-### Phase 6: SMS Delivery and Customer Approval
-**Goal**: Contractor sends a quote by SMS; customer approves with one tap; contractor gets notified immediately
-**Depends on**: Phase 4, Phase 5
-**Requirements**: SMS-01, SMS-02, SMS-03, SMS-04, SMS-05, SMS-06, SMS-07, SMS-08, SMS-09, SMS-10
-**Success Criteria** (what must be TRUE):
-  1. Contractor enters a customer phone number and taps Send; customer receives an SMS with an approval link
-  2. Customer opens the link on any mobile browser (no app required) and sees a branded, readable quote
-  3. Customer can approve or decline with one tap; approval is recorded with a timestamp
-  4. Contractor receives a push notification immediately after customer approves
-  5. An expired quote link shows "This quote has expired" — not a broken page or error screen
-**Plans**: TBD
-**UI hint**: yes
-
-### Phase 7: Sync Hardening and Failure Coverage
-**Goal**: The app handles every known failure gracefully — no data loss, no silent failures, no confusing error states
-**Depends on**: Phase 6
-**Requirements**: SYNC-03, SYNC-04, SYNC-05, SYNC-06, FAIL-01, FAIL-02, FAIL-03, FAIL-04, FAIL-05, FAIL-06, FAIL-07, FAIL-08
-**Success Criteria** (what must be TRUE):
-  1. A failed sync item retries on the defined schedule (5s / 15s / 60s / 5m / 15m) and surfaces dead-letter items to the contractor with a plain-language error and retry option
-  2. A draft conflict (pre-send) surfaces as a visible "Review before sending" prompt — not a silent overwrite
-  3. Mic permission denied, audio upload failure, Whisper failure, and GPT-4o timeout each produce a specific, actionable UI state — not a crash or generic error
-  4. An app crash during recording or editing recovers the state from local SQLite on next launch with a "Resume where you left off" prompt
-  5. All 16 failure scenarios from the workflow spec have a verified detection method, UX state, and recovery path
-**Plans**: TBD
-
-## Progress
-
-**Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Foundation | 0/4 | Planned    |  |
-| 2. Onboarding | 1/2 | In Progress|  |
-| 3. Catalog Management | 2/3 | In Progress|  |
-| 4. Quote Review and History | 3/3 | Complete   | 2026-04-02 |
-| 5. Voice-to-Quote Pipeline | 3/4 | In Progress|  |
-| 6. SMS Delivery and Customer Approval | 0/TBD | Not started | - |
-| 7. Sync Hardening and Failure Coverage | 0/TBD | Not started | - |
-
-## Backlog
-
-### Phase 999.1: Shareable demo deployment — backend to Railway + EAS builds (Android now, iOS gated on $99 Apple Developer Program) (BACKLOG)
-
-**Goal:** Produce a demo that can be sent to people (not Expo Go, not USB/LAN local testing), deployed onto the already-documented production architecture so the work is reusable, not throwaway.
-
-**Why Expo Go failed (root cause, not the symptom):** the SDK 52-vs-54 mismatch is a red herring. The app bundles WatermelonDB (native, used across 8 files in `apps/mobile/src/db/`) which is absent from Expo Go at *any* SDK. It requires a custom build. SDK 52→54 upgrade is out of scope (high-risk RN/React/New-Arch migration; would not enable Expo Go anyway).
-
-**Decisions locked this session:**
-- **Backend host = Railway** — already a made decision in PROJECT.md ("Railway + Managed Postgres over AWS/GCP, ~$70/mo at 100 users"). Deploying the demo to Railway *is* production infra step 1, not a throwaway. pg-boss needs a long-lived process → Vercel/serverless is ruled out.
-- **Distribution = EAS Build** — already the documented mechanism; single iOS/Android TS codebase; cloud builds mean **no Mac needed** for iOS builds.
-- **iOS hard gate = Apple Developer Program ($99/yr).** No free shareable iOS path exists: the free Apple-ID path requires a Mac (user is on Windows), expires every 7 days, installs locally only, and can't be sent to people. TestFlight (the only "send to people" iOS route) requires the paid program. EAS removes the Mac requirement for *building* but not the paid-account requirement for *distributing*.
-- **Sequence = Android first (free, shareable today); iOS added later via the same EAS pipeline once the $99 Apple enrollment is paid.** iOS scope decision still open — user was weighing whether the free path could avoid the fee (it can't, for a shareable demo).
-
-**Architecture changes (replace the band-aids permanently):**
-- **Env-driven API URL:** `apps/mobile/src/api/client.ts:3-4` and `voice.ts:3-4` already read `Constants.expoConfig?.extra?.apiUrl` (fallback emulator-only `http://10.0.2.2:3000`). Convert `app.json` → `app.config.ts` reading `process.env.EXPO_PUBLIC_API_URL`; add `eas.json` with profiles (`development`=LAN IP, `preview`=Railway URL, `production`=Railway URL). No source changes to client.ts/voice.ts.
-- **Backend → Railway:** verify `src/index.ts` binds `process.env.PORT` on `0.0.0.0`; provision Node service + managed Postgres plugin; run `npm run migrate` on deploy; set env from `apps/backend/.env.example` (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `R2_*`, `OPENAI_API_KEY`).
-- **EAS builds:** free Expo account + `eas-cli`; `eas build -p android --profile preview` → APK + shareable install link (no Apple account). iOS: `eas build -p ios --profile preview` after Apple enrollment.
-
-**Files to touch:** `apps/mobile/app.json`→`app.config.ts`; new `apps/mobile/eas.json`; verify `apps/backend/src/index.ts` PORT binding; (no client.ts/voice.ts changes). Full plan saved at `~/.claude/plans/managed-to-scan-the-reflective-frog.md`.
-
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
+Do not start Phase 6, Phase 7 product work, or Railway/EAS from this roadmap alone.
