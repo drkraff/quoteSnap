@@ -40,6 +40,23 @@ function fetchCalls(): { path: string; init?: RequestInit }[] {
   }));
 }
 
+function headerRecord(init?: RequestInit): Record<string, string> {
+  const raw = init?.headers;
+  if (!raw) {
+    return {};
+  }
+  if (raw instanceof Headers) {
+    const out: Record<string, string> = {};
+    raw.forEach((value: string, key: string) => {
+      out[key.toLowerCase()] = value;
+    });
+    return out;
+  }
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, string>).map(([key, value]) => [key.toLowerCase(), value]),
+  );
+}
+
 const initialState = {
   contractor: null,
   accessToken: null,
@@ -154,6 +171,44 @@ describe('apiClient auth vs resource 401 handling', () => {
       '/auth/logout',
     ]);
   }, 1000);
+
+  it('retries a multipart resource request after a successful refresh without JSON Content-Type', async () => {
+    useAuthStore.setState({
+      accessToken: 'expired-access',
+      refreshToken: 'valid-refresh',
+      contractor,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    const formData = new FormData();
+    formData.append('audio', 'file-bytes');
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(jsonResponse(401, { error: 'Unauthorized' }, 'Unauthorized'))
+      .mockResolvedValueOnce(
+        jsonResponse(200, { accessToken: 'new-access', refreshToken: 'new-refresh' }),
+      )
+      .mockResolvedValueOnce(jsonResponse(202, { jobId: 'job-1', quoteId: 'quote-1' }));
+
+    await expect(apiClient.post('/voice/upload', formData)).resolves.toEqual({
+      jobId: 'job-1',
+      quoteId: 'quote-1',
+    });
+
+    const calls = fetchCalls();
+    expect(calls.map((call) => call.path)).toEqual([
+      '/voice/upload',
+      '/auth/refresh',
+      '/voice/upload',
+    ]);
+    expect(calls[0]?.init?.body).toBe(formData);
+    expect(calls[2]?.init?.body).toBe(formData);
+    expect(headerRecord(calls[0]?.init)['content-type']).toBeUndefined();
+    expect(headerRecord(calls[2]?.init)).toMatchObject({
+      authorization: 'Bearer new-access',
+    });
+    expect(headerRecord(calls[2]?.init)['content-type']).toBeUndefined();
+    expect(useAuthStore.getState().accessToken).toBe('new-access');
+  });
 
   it('does not logout when refresh fails due to a network error', async () => {
     useAuthStore.setState({
