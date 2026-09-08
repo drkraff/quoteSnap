@@ -22,3 +22,8 @@ export interface UpdateCatalogItemBody {
   unitPriceCents?: number;
   tradeCategory?: string;
 }
+
+/** PATCH /catalog/:id/archive — omit or true archives; false unarchives (A-05). */
+export interface ArchiveCatalogItemBody {
+  archived?: boolean;
+}

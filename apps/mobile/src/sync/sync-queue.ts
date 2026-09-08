@@ -3,7 +3,12 @@ import { SyncQueueItem } from '../db/models/sync-queue-item';
 import { isOnline, onConnectivityChange } from './network-monitor';
 import { Q } from '@nozbe/watermelondb';
 import { parseCatalogUnit } from '../catalog/units';
-import { createCatalogItem, updateCatalogItem, archiveCatalogItem } from '../api/catalog';
+import {
+  archiveCatalogItem,
+  createCatalogItem,
+  unarchiveCatalogItem,
+  updateCatalogItem,
+} from '../api/catalog';
 import { uploadAudio } from '../api/voice';
 import type { Trade } from '../api/onboarding';
 import { CatalogItem } from '../db/models/catalog-item';
@@ -88,9 +93,11 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       if (!serverId) {
         throw new Error('Cannot sync update: no server ID for catalog item');
       }
-      const isArchive = (payload.isArchived as boolean) === true;
-      if (isArchive) {
+      // CAT-03 undo enqueues `{ isArchived: false }` — must PATCH unarchive, not PUT empty fields (A-05).
+      if (payload.isArchived === true) {
         await archiveCatalogItem(serverId);
+      } else if (payload.isArchived === false) {
+        await unarchiveCatalogItem(serverId);
       } else {
         await updateCatalogItem(serverId, {
           name: payload.name as string | undefined,

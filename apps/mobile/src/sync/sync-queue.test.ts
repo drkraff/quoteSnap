@@ -1,4 +1,10 @@
-import { createCatalogItem, fetchCatalogItems, updateCatalogItem } from '../api/catalog';
+import {
+  archiveCatalogItem,
+  createCatalogItem,
+  fetchCatalogItems,
+  unarchiveCatalogItem,
+  updateCatalogItem,
+} from '../api/catalog';
 import { seedCatalog } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
@@ -21,6 +27,7 @@ jest.mock('../api/catalog', () => ({
   createCatalogItem: jest.fn(),
   updateCatalogItem: jest.fn(),
   archiveCatalogItem: jest.fn(),
+  unarchiveCatalogItem: jest.fn(),
   fetchCatalogItems: jest.fn(),
 }));
 
@@ -78,6 +85,8 @@ const mockedDatabase = database as unknown as {
 const mockedIsOnline = isOnline as unknown as jest.Mock;
 const mockedCreateCatalogItem = createCatalogItem as unknown as jest.Mock;
 const mockedUpdateCatalogItem = updateCatalogItem as unknown as jest.Mock;
+const mockedArchiveCatalogItem = archiveCatalogItem as unknown as jest.Mock;
+const mockedUnarchiveCatalogItem = unarchiveCatalogItem as unknown as jest.Mock;
 const mockedUploadAudio = uploadAudio as unknown as jest.Mock;
 const mockedSeedCatalog = seedCatalog as unknown as jest.Mock;
 const mockedFetchCatalogItems = fetchCatalogItems as unknown as jest.Mock;
@@ -133,6 +142,8 @@ describe('processQueue', () => {
     mockedIsOnline.mockReturnValue(true);
     mockedCreateCatalogItem.mockReset();
     mockedUpdateCatalogItem.mockReset();
+    mockedArchiveCatalogItem.mockReset();
+    mockedUnarchiveCatalogItem.mockReset();
     mockedUploadAudio.mockReset();
     mockedSeedCatalog.mockReset();
     mockedFetchCatalogItems.mockReset();
@@ -431,6 +442,58 @@ describe('processQueue', () => {
       'srv-pipe',
       expect.objectContaining({ name: 'Pipe Repair', unit: 'foot', unitPriceCents: 5000 }),
     );
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('archives via PATCH when the payload is isArchived true (CAT-03)', async () => {
+    catalogItems = [
+      {
+        id: 'local-cat-1',
+        serverId: 'srv-pipe',
+        name: 'Pipe Repair',
+        async update() {
+          // no-op
+        },
+      },
+    ];
+    const item = makeQueueItem({
+      action: 'update',
+      payloadJson: JSON.stringify({ isArchived: true }),
+    });
+    queueItems = [item];
+    mockedArchiveCatalogItem.mockResolvedValue(undefined);
+
+    await processQueue();
+
+    expect(mockedArchiveCatalogItem).toHaveBeenCalledWith('srv-pipe');
+    expect(mockedUnarchiveCatalogItem).not.toHaveBeenCalled();
+    expect(mockedUpdateCatalogItem).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('unarchives via PATCH on undo instead of PUT empty fields (A-05)', async () => {
+    catalogItems = [
+      {
+        id: 'local-cat-1',
+        serverId: 'srv-pipe',
+        name: 'Pipe Repair',
+        async update() {
+          // no-op
+        },
+      },
+    ];
+    const item = makeQueueItem({
+      action: 'update',
+      payloadJson: JSON.stringify({ isArchived: false }),
+    });
+    queueItems = [item];
+    mockedUnarchiveCatalogItem.mockResolvedValue(undefined);
+
+    await processQueue();
+
+    expect(mockedUnarchiveCatalogItem).toHaveBeenCalledWith('srv-pipe');
+    expect(mockedArchiveCatalogItem).not.toHaveBeenCalled();
+    expect(mockedUpdateCatalogItem).not.toHaveBeenCalled();
     expect(item.status).toBe('destroyed');
   });
 });
