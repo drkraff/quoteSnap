@@ -11,51 +11,82 @@ import { Q } from '@nozbe/watermelondb';
 import { database } from '../../../src/db';
 import { Quote } from '../../../src/db/models/quote';
 import { Draft } from '../../../src/db/models/draft';
-import { parseLineItems } from '../../../src/utils/line-items';
 import { fetchQuote, QuoteLineItemResponse } from '../../../src/api/quotes';
 import { QuoteDetail } from '../../../src/components/quotes/quote-detail';
+import { isOnline } from '../../../src/sync/network-monitor';
+import {
+  loadQuoteDetail,
+  remoteLineItemsToDraftJson,
+  type QuoteDetailSnapshot,
+} from '../../../src/quotes/load-quote-detail';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quote, setQuote] = useState<QuoteDetailSnapshot | null>(null);
   const [lineItems, setLineItems] = useState<QuoteLineItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    async function load(): Promise<void> {
-      const q = await database.get<Quote>('quotes').find(id);
-      setQuote(q);
-      if (q.serverId) {
-        try {
-          const detail = await fetchQuote(q.serverId);
-          setLineItems(detail.lineItems);
-        } catch {
-          setError('Connect to the internet to view full details');
-        }
-      } else {
-        // No server ID yet — load from local draft as fallback
-        const drafts = await database
-          .get<Draft>('drafts')
-          .query(Q.where('quote_id', id))
-          .fetch();
+    let cancelled = false;
+
+    async function persistRemoteLineItems(
+      items: QuoteLineItemResponse[],
+    ): Promise<void> {
+      const json = remoteLineItemsToDraftJson(items);
+      const draftCollection = database.get<Draft>('drafts');
+      const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
+      await database.write(async () => {
         if (drafts[0]) {
-          const items = parseLineItems(drafts[0].lineItemsJson);
-          setLineItems(
-            items.map((item, i) => ({
-              id: String(i),
-              name: item.name,
-              quantity: item.quantity,
-              unitPriceCents: item.unitPriceCents,
-            })),
-          );
+          await drafts[0].update((record) => {
+            record.lineItemsJson = json;
+          });
+          return;
         }
+        await draftCollection.create((record) => {
+          record.quoteId = id;
+          record.lineItemsJson = json;
+        });
+      });
+    }
+
+    async function load(): Promise<void> {
+      const result = await loadQuoteDetail({
+        findQuote: () => database.get<Quote>('quotes').find(id),
+        findDrafts: () =>
+          database.get<Draft>('drafts').query(Q.where('quote_id', id)).fetch(),
+        fetchRemote: fetchQuote,
+        isOnline,
+        onLocalSnapshot: (local) => {
+          if (cancelled || !local.quote) return;
+          setQuote(local.quote);
+          setLineItems(local.lineItems);
+          setError('');
+          setLoading(false);
+        },
+        persistRemoteLineItems,
+      });
+
+      if (cancelled) return;
+
+      if (!result.found || !result.quote) {
+        setError(result.error ?? 'Quote not found');
+        setLoading(false);
+        return;
       }
+
+      setQuote(result.quote);
+      setLineItems(result.lineItems);
+      setError(result.error ?? '');
       setLoading(false);
     }
+
     void load();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) {
@@ -89,8 +120,8 @@ export default function QuoteDetailScreen(): JSX.Element {
           status: quote.status,
           customerPhone: quote.customerPhone,
           totalCents: quote.totalCents,
-          createdAt: quote.createdAt.toISOString(),
-          sentAt: quote.sentAt?.toISOString() ?? null,
+          createdAt: quote.createdAt,
+          sentAt: quote.sentAt,
         }}
         lineItems={lineItems}
       />
