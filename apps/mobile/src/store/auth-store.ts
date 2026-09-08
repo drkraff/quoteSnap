@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as authApi from '../api/auth';
 import type { ContractorResponse } from '../api/auth';
+import { isUnauthorizedError } from '../api/client';
 
 const KEYS = {
   ACCESS_TOKEN: 'quotesnap_access_token',
@@ -118,18 +119,22 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     if (!refreshToken) return false;
     try {
       const response = await authApi.refresh(refreshToken);
-      const { contractor } = get();
-      if (contractor) {
-        await SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, response.accessToken);
-        await SecureStore.setItemAsync(KEYS.REFRESH_TOKEN, response.refreshToken);
-      }
+      // Persist even when contractor is still null (restoreSession sets tokens first).
+      await Promise.all([
+        SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, response.accessToken),
+        SecureStore.setItemAsync(KEYS.REFRESH_TOKEN, response.refreshToken),
+      ]);
       set({
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
       });
       return true;
-    } catch {
-      return false;
+    } catch (err) {
+      // 401 = refresh token rejected. Transport / 5xx must not look like logout.
+      if (isUnauthorizedError(err)) {
+        return false;
+      }
+      throw err;
     }
   },
 
@@ -162,19 +167,31 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           onboardingComplete,
         });
       } else {
-        // Access token missing — attempt refresh
+        // Access token missing — attempt refresh. Tokens must persist even
+        // while contractor is still unset on this path.
         set({ refreshToken: storedRefreshToken });
-        const refreshed = await get().refreshSession();
-        if (refreshed) {
+        try {
+          const refreshed = await get().refreshSession();
+          if (refreshed) {
+            set({
+              contractor,
+              isAuthenticated: true,
+              isLoading: false,
+              onboardingComplete,
+            });
+          } else {
+            await clearTokens();
+            set({ isLoading: false });
+          }
+        } catch {
+          // Network / server unavailable — keep the local session; do not revoke.
           set({
             contractor,
+            refreshToken: storedRefreshToken,
             isAuthenticated: true,
             isLoading: false,
             onboardingComplete,
           });
-        } else {
-          await clearTokens();
-          set({ isLoading: false });
         }
       }
     } catch {

@@ -3,16 +3,37 @@ import Constants from 'expo-constants';
 const API_BASE_URL: string =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? 'http://10.0.2.2:3000';
 
-interface ApiError {
+export interface ApiError {
   status: number;
   error: string;
 }
 
-function isApiError(value: unknown): value is { error: string } {
-  return typeof value === 'object' && value !== null && 'error' in value;
+function hasErrorMessage(value: unknown): value is { error: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'error' in value &&
+    typeof (value as { error: unknown }).error === 'string'
+  );
 }
 
-// Shared refresh promise — concurrent 401s coalesce into one refresh attempt
+export function isApiError(value: unknown): value is ApiError {
+  return (
+    hasErrorMessage(value) &&
+    'status' in value &&
+    typeof (value as { status: unknown }).status === 'number'
+  );
+}
+
+export function isUnauthorizedError(value: unknown): value is ApiError {
+  return isApiError(value) && value.status === 401;
+}
+
+function isAuthPath(path: string): boolean {
+  return path === '/auth' || path.startsWith('/auth/');
+}
+
+// Shared refresh promise — concurrent resource 401s coalesce into one refresh attempt
 let refreshPromise: Promise<boolean> | null = null;
 
 function getOrRefreshSession(): Promise<boolean> {
@@ -20,9 +41,15 @@ function getOrRefreshSession(): Promise<boolean> {
     // Assign synchronously before any await so concurrent callers share this promise
     refreshPromise = import('../store/auth-store')
       .then(({ useAuthStore }) => useAuthStore.getState().refreshSession())
-      .finally(() => { refreshPromise = null; });
+      .finally(() => {
+        refreshPromise = null;
+      });
   }
   return refreshPromise;
+}
+
+export function resetApiClientForTests(): void {
+  refreshPromise = null;
 }
 
 async function request<T>(
@@ -49,21 +76,23 @@ async function request<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  if (response.status === 401 && !retrying) {
+  // Login/register/refresh/logout 401s are credential or token-body failures.
+  // Running the resource interceptor here maps them to "Session expired" and can
+  // deadlock when /auth/refresh 401s while a refresh is already in flight.
+  if (response.status === 401 && !retrying && !isAuthPath(path)) {
     const refreshed = await getOrRefreshSession();
     if (refreshed) {
       return request<T>(method, path, body, true);
-    } else {
-      await useAuthStore.getState().logout();
-      const apiError: ApiError = { status: 401, error: 'Session expired' };
-      throw apiError;
     }
+    await useAuthStore.getState().logout();
+    const apiError: ApiError = { status: 401, error: 'Session expired' };
+    throw apiError;
   }
 
   const data: unknown = response.status === 204 ? undefined : await response.json();
 
   if (!response.ok) {
-    const errorMessage = isApiError(data) ? data.error : response.statusText;
+    const errorMessage = hasErrorMessage(data) ? data.error : response.statusText;
     const apiError: ApiError = { status: response.status, error: errorMessage };
     throw apiError;
   }
