@@ -37,6 +37,7 @@ import { PriceEditSheet } from '../../../src/components/quotes/price-edit-sheet'
 import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picker-sheet';
 import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
+import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function DraftScreen(): JSX.Element {
@@ -45,6 +46,7 @@ export default function DraftScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
 
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState('');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [phone, setPhone] = useState('');
@@ -59,24 +61,45 @@ export default function DraftScreen(): JSX.Element {
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
-  // Load quote + draft on mount
+  // Load quote + draft on mount. Voice/hydrate usually already wrote a draft;
+  // create an empty one if missing so catalog add works on ai_failed quotes.
   useEffect(() => {
     async function load(): Promise<void> {
       const q = await database.get<Quote>('quotes').find(id);
       setQuote(q);
+      setQuoteStatus(q.status);
       setPhone(q.customerPhone ?? '');
-      const drafts = await database
-        .get<Draft>('drafts')
-        .query(Q.where('quote_id', id))
-        .fetch();
+      const draftCollection = database.get<Draft>('drafts');
+      const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
       if (drafts[0]) {
         setDraft(drafts[0]);
         setLineItems(parseLineItems(drafts[0].lineItemsJson));
+      } else {
+        let createdId = '';
+        await database.write(async () => {
+          const created = await draftCollection.create((r) => {
+            r.quoteId = id;
+            r.lineItemsJson = '[]';
+          });
+          createdId = created.id;
+        });
+        const created = await draftCollection.find(createdId);
+        setDraft(created);
+        setLineItems([]);
       }
       setLoading(false);
     }
     void load();
   }, [id]);
+
+  // Subscribe to quote status (ai_failed → draft_local recovery)
+  useEffect(() => {
+    if (!quote) return;
+    const sub = quote.observe().subscribe((updated) => {
+      setQuoteStatus(updated.status);
+    });
+    return () => sub.unsubscribe();
+  }, [quote]);
 
   // Subscribe to draft changes
   useEffect(() => {
@@ -130,8 +153,26 @@ export default function DraftScreen(): JSX.Element {
     };
   }, []);
 
+  /** Local + queued recovery so A-06 PUT can accept line items / send. */
+  async function recoverFromAiFailed(): Promise<void> {
+    if (!quote || quote.status !== 'ai_failed') return;
+    await database.write(async () => {
+      await quote.update((r) => {
+        r.status = 'draft_local';
+      });
+    });
+    setQuoteStatus('draft_local');
+    await enqueue({
+      entityType: 'quote',
+      entityId: quote.id,
+      action: 'update',
+      payload: { status: 'draft_local' },
+    });
+  }
+
   async function handleQuantityChange(index: number, delta: number): Promise<void> {
     if (!draft || !quote) return;
+    await recoverFromAiFailed();
     const newItems = updateQuantity(lineItems, index, delta);
     const newTotal = recalculateTotal(newItems);
     await database.write(async () => {
@@ -152,6 +193,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handlePriceSave(newPriceCents: number): Promise<void> {
     if (!draft || !quote || priceEditIndex === null) return;
+    await recoverFromAiFailed();
     const newItems = updatePrice(lineItems, priceEditIndex, newPriceCents);
     const newTotal = recalculateTotal(newItems);
     await database.write(async () => {
@@ -173,6 +215,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handleDeleteItem(index: number): Promise<void> {
     if (!draft || !quote) return;
+    await recoverFromAiFailed();
     const deleted = lineItems[index];
     setUndoItem({ item: deleted, index });
     const newItems = removeItem(lineItems, index);
@@ -230,6 +273,7 @@ export default function DraftScreen(): JSX.Element {
     catalogItem: { id: string; name: string; unitPriceCents: number },
   ): Promise<void> {
     if (!draft || !quote) return;
+    await recoverFromAiFailed();
     const newItems = addItem(lineItems, { id: catalogItem.id, name: catalogItem.name, unitPriceCents: catalogItem.unitPriceCents });
     const newTotal = recalculateTotal(newItems);
     await database.write(async () => {
@@ -341,6 +385,17 @@ export default function DraftScreen(): JSX.Element {
           const offset = info.averageItemLength * info.index;
           flatListRef.current?.scrollToOffset({ offset, animated: true });
         }}
+        ListHeaderComponent={
+          quoteStatus === 'ai_failed' ? (
+            <AiFailedBanner
+              onRerecord={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                router.push('/voice-record' as any);
+              }}
+              onAddItems={() => setShowCatalogPicker(true)}
+            />
+          ) : null
+        }
         ListEmptyComponent={
           <EmptyState onAddItem={() => setShowCatalogPicker(true)} />
         }

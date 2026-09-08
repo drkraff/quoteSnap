@@ -5,6 +5,7 @@ import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { isOnline } from '../../sync/network-monitor';
+import { getQuoteStatusDisplay } from '../../quotes/status-display';
 
 interface QuoteRowProps {
   quote: Quote;
@@ -19,11 +20,12 @@ export function QuoteRow({ quote, onPress }: QuoteRowProps): JSX.Element {
   const totalDisplay = `$${(quote.totalCents / 100).toFixed(2)}`;
   const relativeDate = formatRelativeDate(quote.createdAt);
 
+  const statusLabel = getQuoteStatusDisplay(quote.status).label;
   const accessibilityLabel = isAiProcessing
     ? online
       ? 'Quote processing'
       : 'Quote queued, will upload when online'
-    : `Quote status ${quote.status}, total ${totalDisplay}. Double tap to open.`;
+    : `Quote status ${statusLabel}, total ${totalDisplay}. Double tap to open.`;
 
   return (
     <Pressable
@@ -48,7 +50,9 @@ export function QuoteRow({ quote, onPress }: QuoteRowProps): JSX.Element {
       </View>
 
       {/* Center: status badge */}
-      <StatusBadge status={quote.status} />
+      <View style={styles.badgeWrap}>
+        <StatusBadge status={quote.status} />
+      </View>
 
       {/* Right: total price or processing indicator */}
       {isAiProcessing ? (
@@ -92,6 +96,10 @@ const styles = StyleSheet.create({
   },
   leftColumn: {
     flex: 1,
+    marginRight: spacing.sm,
+  },
+  badgeWrap: {
+    flexShrink: 1,
     marginRight: spacing.sm,
   },
   phone: {
