@@ -69,7 +69,7 @@ There is no root `README.md`. Native `android/` and `ios/` are gitignored (Expo 
 | Mount | Role |
 |-------|------|
 | `GET /health` | Liveness |
-| `/auth` | register, login, refresh, logout (rate-limited login/refresh) |
+| `/auth` | register, login, refresh, logout (rate-limited register/login/refresh, 6 / 15 min per IP) |
 | `/onboarding` | trade catalog seed |
 | `/catalog` | CRUD + `PATCH /:id/archive` |
 | `/quotes` | list/create/update quotes + line items |
