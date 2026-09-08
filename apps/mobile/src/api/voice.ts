@@ -1,7 +1,4 @@
-import Constants from 'expo-constants';
-
-const API_BASE_URL: string =
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? 'http://10.0.2.2:3000';
+import { apiClient } from './client';
 
 interface UploadAudioResponse {
   jobId: string;
@@ -15,10 +12,6 @@ export interface VoiceStatusResponse {
 }
 
 export async function uploadAudio(filePath: string, quoteServerId?: string): Promise<UploadAudioResponse> {
-  // Lazy import to avoid circular dependency
-  const { useAuthStore } = await import('../store/auth-store');
-  const accessToken = useAuthStore.getState().accessToken;
-
   const formData = new FormData();
   formData.append('audio', {
     uri: filePath,
@@ -30,20 +23,10 @@ export async function uploadAudio(filePath: string, quoteServerId?: string): Pro
     formData.append('quoteServerId', quoteServerId);
   }
 
-  const response = await fetch(`${API_BASE_URL}/voice/upload`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken ?? ''}`,
-    },
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Upload failed: ${response.status} ${errorBody}`);
-  }
-
-  return response.json() as Promise<UploadAudioResponse>;
+  // FormData goes through apiClient so expired access tokens refresh the same
+  // way as JSON resource calls. The client omits Content-Type so the runtime
+  // can set multipart/form-data with a boundary (multer requires that).
+  return apiClient.post<UploadAudioResponse>('/voice/upload', formData);
 }
 
 export interface DraftLineItemsResponse {
@@ -59,39 +42,9 @@ export interface DraftLineItemsResponse {
 }
 
 export async function getDraftLineItems(quoteId: string): Promise<DraftLineItemsResponse> {
-  const { useAuthStore } = await import('../store/auth-store');
-  const accessToken = useAuthStore.getState().accessToken;
-
-  const response = await fetch(`${API_BASE_URL}/voice/draft/${quoteId}`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken ?? ''}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`getDraftLineItems failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<DraftLineItemsResponse>;
+  return apiClient.get<DraftLineItemsResponse>(`/voice/draft/${quoteId}`);
 }
 
 export async function getVoiceStatus(jobId: string): Promise<VoiceStatusResponse> {
-  const { useAuthStore } = await import('../store/auth-store');
-  const accessToken = useAuthStore.getState().accessToken;
-
-  const response = await fetch(`${API_BASE_URL}/voice/status/${jobId}`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken ?? ''}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Status check failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<VoiceStatusResponse>;
+  return apiClient.get<VoiceStatusResponse>(`/voice/status/${jobId}`);
 }

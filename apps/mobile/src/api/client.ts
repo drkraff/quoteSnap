@@ -37,6 +37,26 @@ function isAuthPath(path: string): boolean {
   return path === '/auth' || path.startsWith('/auth/');
 }
 
+/**
+ * Multipart bodies must not be JSON.stringified, and must not set
+ * Content-Type: application/json (that hides the multipart boundary the
+ * runtime attaches). RN FormData may fail `instanceof` across bundles, so
+ * also accept the `_parts` shape used by React Native's FormData.
+ */
+function isFormDataBody(body: unknown): body is FormData {
+  if (body == null) {
+    return false;
+  }
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    return true;
+  }
+  return (
+    typeof body === 'object' &&
+    typeof (body as { append?: unknown }).append === 'function' &&
+    Array.isArray((body as { _parts?: unknown })._parts)
+  );
+}
+
 function loadAuthStore(): typeof import('../store/auth-store') {
   // Lazy require avoids the auth-store → auth → client cycle at module load.
   // Dynamic import() is not available under jest-expo without vm-modules.
@@ -70,19 +90,26 @@ async function request<T>(
 ): Promise<T> {
   const { useAuthStore } = loadAuthStore();
   const accessToken = useAuthStore.getState().accessToken;
+  const formBody = isFormDataBody(body);
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
+  if (!formBody) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
+  let serializedBody: BodyInit | undefined;
+  if (body !== undefined) {
+    serializedBody = formBody ? body : JSON.stringify(body);
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: serializedBody,
   });
 
   // Login/register/refresh/logout 401s are credential or token-body failures.
