@@ -1,68 +1,51 @@
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
+import { filterUuidCatalogIds } from "../workers/voice-validation.js";
 import type {
   QuoteResponse,
-  QuoteLineItemResponse,
   CreateQuoteBody,
   UpdateQuoteBody,
 } from "../types/quotes.js";
+import {
+  LINE_ITEM_COLUMNS,
+  QUOTE_COLUMNS,
+  lineItemRowToResponse,
+  nestLineItems,
+  quoteRowToResponse,
+  type QuoteLineItemRow,
+  type QuoteRow,
+} from "./quotes-payload.js";
 
 export const router = Router();
 
-type QuoteRow = {
-  id: string;
-  contractor_id: string;
-  status: string;
-  customer_phone: string | null;
-  total_cents: number;
-  created_at: Date;
-  updated_at: Date;
-  sent_at: Date | null;
-};
-
-type QuoteLineItemRow = {
-  id: string;
-  quote_id: string;
-  name: string;
-  quantity: number;
-  unit_price_cents: number;
-  created_at: Date;
-};
-
-function rowToResponse(row: QuoteRow): QuoteResponse {
-  return {
-    id: row.id,
-    status: row.status,
-    customerPhone: row.customer_phone,
-    totalCents: row.total_cents,
-    createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString(),
-    sentAt: row.sent_at ? row.sent_at.toISOString() : null,
-  };
-}
-
-function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemResponse {
-  return {
-    id: row.id,
-    name: row.name,
-    quantity: row.quantity,
-    unitPriceCents: row.unit_price_cents,
-  };
-}
-
-// GET / — list quotes for contractor sorted by recency
+// GET / — list quotes for contractor sorted by recency, with line items + voiceJobId
 router.get("/", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
     const result = await query(
-      `SELECT id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at
+      `SELECT ${QUOTE_COLUMNS}
        FROM quotes
        WHERE contractor_id = $1
        ORDER BY created_at DESC`,
       [contractorId]
     );
-    const quotes = (result.rows as QuoteRow[]).map(rowToResponse);
+    const quoteRows = result.rows as QuoteRow[];
+    const quoteIds = filterUuidCatalogIds(quoteRows.map((row) => row.id));
+
+    let lineItemRows: QuoteLineItemRow[] = [];
+    if (quoteIds.length > 0) {
+      const lineItemsResult = await query(
+        `SELECT ${LINE_ITEM_COLUMNS}
+         FROM quote_line_items
+         WHERE quote_id = ANY($1::uuid[])
+         ORDER BY created_at ASC`,
+        [quoteIds]
+      );
+      lineItemRows = lineItemsResult.rows as QuoteLineItemRow[];
+    }
+
+    const quotes = nestLineItems(quoteRows.map(quoteRowToResponse), lineItemRows);
     res.json({ quotes });
   } catch (err) {
     console.error("GET /quotes error:", err);
@@ -83,11 +66,11 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
     const result = await query(
       `INSERT INTO quotes (contractor_id, status, customer_phone, total_cents)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at`,
+       RETURNING ${QUOTE_COLUMNS}`,
       [contractorId, status, customerPhone, totalCents]
     );
 
-    const quote = rowToResponse(result.rows[0] as QuoteRow);
+    const quote = quoteRowToResponse(result.rows[0] as QuoteRow);
     res.status(201).json({ quote });
   } catch (err) {
     console.error("POST /quotes error:", err);
@@ -102,7 +85,7 @@ router.get("/:id", authenticateToken, async (req: Request, res: Response): Promi
     const { id } = req.params as { id: string };
 
     const quoteResult = await query(
-      `SELECT id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at
+      `SELECT ${QUOTE_COLUMNS}
        FROM quotes
        WHERE id = $1 AND contractor_id = $2`,
       [id, contractorId]
@@ -114,14 +97,14 @@ router.get("/:id", authenticateToken, async (req: Request, res: Response): Promi
     }
 
     const lineItemsResult = await query(
-      `SELECT id, quote_id, name, quantity, unit_price_cents, created_at
+      `SELECT ${LINE_ITEM_COLUMNS}
        FROM quote_line_items
        WHERE quote_id = $1
        ORDER BY created_at ASC`,
       [id]
     );
 
-    const quote = rowToResponse(quoteResult.rows[0] as QuoteRow);
+    const quote = quoteRowToResponse(quoteResult.rows[0] as QuoteRow);
     const lineItems = (lineItemsResult.rows as QuoteLineItemRow[]).map(lineItemRowToResponse);
 
     res.json({ quote, lineItems });
@@ -173,7 +156,7 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
         `UPDATE quotes
          SET ${setClauses.join(", ")}
          WHERE id = $${idParam} AND contractor_id = $${contractorParam}
-         RETURNING id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at`,
+         RETURNING ${QUOTE_COLUMNS}`,
         params
       );
 
@@ -182,11 +165,11 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
         return;
       }
 
-      quote = rowToResponse(result.rows[0] as QuoteRow);
+      quote = quoteRowToResponse(result.rows[0] as QuoteRow);
     } else {
       // No metadata changes, just fetch the quote to verify ownership
       const result = await query(
-        `SELECT id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at
+        `SELECT ${QUOTE_COLUMNS}
          FROM quotes
          WHERE id = $1 AND contractor_id = $2`,
         [id, contractorId]
@@ -197,7 +180,7 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
         return;
       }
 
-      quote = rowToResponse(result.rows[0] as QuoteRow);
+      quote = quoteRowToResponse(result.rows[0] as QuoteRow);
     }
 
     // Replace line items if provided

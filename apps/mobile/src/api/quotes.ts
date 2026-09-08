@@ -8,6 +8,7 @@ export interface QuoteResponse {
   createdAt: string;
   updatedAt: string;
   sentAt: string | null;
+  voiceJobId: string | null;
 }
 
 export interface QuoteLineItemResponse {
@@ -15,10 +16,16 @@ export interface QuoteLineItemResponse {
   name: string;
   quantity: number;
   unitPriceCents: number;
+  confidence?: number | null;
+  catalogItemId?: string | null;
+}
+
+export interface QuoteListItem extends QuoteResponse {
+  lineItems: QuoteLineItemResponse[];
 }
 
 interface QuoteListResponse {
-  quotes: QuoteResponse[];
+  quotes: QuoteListItem[];
 }
 
 interface QuoteDetailResponse {
@@ -30,7 +37,7 @@ interface QuoteSingleResponse {
   quote: QuoteResponse;
 }
 
-export async function fetchQuotes(): Promise<QuoteResponse[]> {
+export async function fetchQuotes(): Promise<QuoteListItem[]> {
   const data = await apiClient.get<QuoteListResponse>('/quotes');
   return data.quotes;
 }
