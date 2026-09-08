@@ -2,6 +2,7 @@ import { Q } from '@nozbe/watermelondb';
 import { fetchCatalogItems } from '../api/catalog';
 import { isConflictError } from '../api/client';
 import { seedCatalog, type SeedResponse, type Trade } from '../api/onboarding';
+import { parseCatalogUnit } from '../catalog/units';
 import { OFFLINE_TRADE_TEMPLATES } from '../data/trade-templates';
 import { database } from '../db';
 import { CatalogItem } from '../db/models/catalog-item';
@@ -60,7 +61,7 @@ export async function persistOnlineSeed(
         record.serverId = item.id;
         record.contractorId = contractorId;
         record.name = item.name;
-        record.unit = item.unit;
+        record.unit = parseCatalogUnit(item.unit) ?? item.unit;
         record.unitPriceCents = item.unitPriceCents;
         record.tradeCategory = item.tradeCategory;
         record.isArchived = false;
@@ -83,7 +84,7 @@ export async function persistOfflineCatalog(contractorId: string, trade: Trade):
         record.serverId = null;
         record.contractorId = contractorId;
         record.name = item.name;
-        record.unit = item.unit;
+        record.unit = parseCatalogUnit(item.unit) ?? item.unit;
         record.unitPriceCents = item.unitPriceCents;
         record.tradeCategory = item.tradeCategory;
         record.isArchived = false;
@@ -112,8 +113,8 @@ export function onboardingSeedEnqueueParams(
 
 /**
  * Queue processor for offline onboarding. Prefer POST /onboarding/seed over
- * per-item POST /catalog: seed sets contractors.trade and inserts template
- * units that the catalog allow-list rejects (A-04). 409 means the original
+ * per-item POST /catalog: seed sets contractors.trade and inserts the
+ * bundled template in one request. 409 means the original
  * request likely succeeded after the 5s client timeout — pull and map ids.
  */
 export async function syncQueuedOnboardingSeed(contractorId: string, trade: Trade): Promise<void> {

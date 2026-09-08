@@ -2,6 +2,7 @@ import { database } from '../db';
 import { SyncQueueItem } from '../db/models/sync-queue-item';
 import { isOnline, onConnectivityChange } from './network-monitor';
 import { Q } from '@nozbe/watermelondb';
+import { parseCatalogUnit } from '../catalog/units';
 import { createCatalogItem, updateCatalogItem, archiveCatalogItem } from '../api/catalog';
 import { uploadAudio } from '../api/voice';
 import type { Trade } from '../api/onboarding';
@@ -66,7 +67,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       }
       const response = await createCatalogItem({
         name: payload.name as string,
-        unit: payload.unit as string,
+        unit: parseCatalogUnit(payload.unit) ?? (payload.unit as string),
         unitPriceCents: payload.unitPriceCents as number,
         tradeCategory: payload.tradeCategory as string | undefined,
       });
@@ -93,7 +94,10 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       } else {
         await updateCatalogItem(serverId, {
           name: payload.name as string | undefined,
-          unit: payload.unit as string | undefined,
+          unit:
+            payload.unit === undefined
+              ? undefined
+              : (parseCatalogUnit(payload.unit) ?? (payload.unit as string)),
           unitPriceCents: payload.unitPriceCents as number | undefined,
         });
       }

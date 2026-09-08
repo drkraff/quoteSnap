@@ -1,6 +1,10 @@
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
+import {
+  catalogUnitErrorMessage,
+  parseCatalogUnit,
+} from "../catalog/units.js";
 import type {
   CatalogItemResponse,
   CreateCatalogItemBody,
@@ -8,8 +12,6 @@ import type {
 } from "../types/catalog.js";
 
 export const router = Router();
-
-const VALID_UNITS = ["each", "hour", "foot", "sqft", "job"] as const;
 
 type CatalogRow = {
   id: string;
@@ -26,7 +28,7 @@ function rowToResponse(row: CatalogRow): CatalogItemResponse {
   return {
     id: row.id,
     name: row.name,
-    unit: row.unit,
+    unit: parseCatalogUnit(row.unit) ?? row.unit,
     unitPriceCents: row.unit_price_cents,
     tradeCategory: row.trade_category,
     isArchived: row.is_archived,
@@ -66,9 +68,9 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
       return;
     }
 
-    // Validate unit
-    if (!body.unit || !(VALID_UNITS as readonly string[]).includes(body.unit)) {
-      res.status(400).json({ error: `unit must be one of: ${VALID_UNITS.join(", ")}` });
+    const unit = parseCatalogUnit(body.unit);
+    if (!unit) {
+      res.status(400).json({ error: catalogUnitErrorMessage() });
       return;
     }
 
@@ -89,7 +91,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
       `INSERT INTO catalog_items (contractor_id, name, unit, unit_price_cents, trade_category)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, name, unit, unit_price_cents, trade_category, is_archived, created_at, updated_at`,
-      [contractorId, body.name.trim(), body.unit, body.unitPriceCents, tradeCategory]
+      [contractorId, body.name.trim(), unit, body.unitPriceCents, tradeCategory]
     );
 
     const item = rowToResponse(result.rows[0] as CatalogRow);
@@ -120,11 +122,12 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
     }
 
     if (body.unit !== undefined) {
-      if (!(VALID_UNITS as readonly string[]).includes(body.unit)) {
-        res.status(400).json({ error: `unit must be one of: ${VALID_UNITS.join(", ")}` });
+      const unit = parseCatalogUnit(body.unit);
+      if (!unit) {
+        res.status(400).json({ error: catalogUnitErrorMessage() });
         return;
       }
-      params.push(body.unit);
+      params.push(unit);
       setClauses.push(`unit = $${params.length}`);
     }
 

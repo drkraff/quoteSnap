@@ -1,5 +1,6 @@
 import { Q } from '@nozbe/watermelondb';
 import { fetchCatalogItems, type CatalogItemResponse } from '../api/catalog';
+import { parseCatalogUnit } from '../catalog/units';
 import { fetchQuotes, type QuoteLineItemResponse, type QuoteListItem } from '../api/quotes';
 import { database } from '../db';
 import type { CatalogItem } from '../db/models/catalog-item';
@@ -92,7 +93,7 @@ export async function upsertCatalogItems(
         }
         await local.update((record) => {
           record.name = item.name;
-          record.unit = item.unit;
+          record.unit = parseCatalogUnit(item.unit) ?? item.unit;
           record.unitPriceCents = item.unitPriceCents;
           record.tradeCategory = item.tradeCategory;
           record.isArchived = item.isArchived;
@@ -117,7 +118,7 @@ export async function upsertCatalogItems(
           await nameMatch.update((record) => {
             record.serverId = item.id;
             record.name = item.name;
-            record.unit = item.unit;
+            record.unit = parseCatalogUnit(item.unit) ?? item.unit;
             record.unitPriceCents = item.unitPriceCents;
             record.tradeCategory = item.tradeCategory;
             record.isArchived = item.isArchived;
@@ -132,7 +133,7 @@ export async function upsertCatalogItems(
         record.serverId = item.id;
         record.contractorId = contractorId;
         record.name = item.name;
-        record.unit = item.unit;
+        record.unit = parseCatalogUnit(item.unit) ?? item.unit;
         record.unitPriceCents = item.unitPriceCents;
         record.tradeCategory = item.tradeCategory;
         record.isArchived = item.isArchived;

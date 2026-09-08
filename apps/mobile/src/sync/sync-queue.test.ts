@@ -1,4 +1,4 @@
-import { createCatalogItem, fetchCatalogItems } from '../api/catalog';
+import { createCatalogItem, fetchCatalogItems, updateCatalogItem } from '../api/catalog';
 import { seedCatalog } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
@@ -77,6 +77,7 @@ const mockedDatabase = database as unknown as {
 };
 const mockedIsOnline = isOnline as unknown as jest.Mock;
 const mockedCreateCatalogItem = createCatalogItem as unknown as jest.Mock;
+const mockedUpdateCatalogItem = updateCatalogItem as unknown as jest.Mock;
 const mockedUploadAudio = uploadAudio as unknown as jest.Mock;
 const mockedSeedCatalog = seedCatalog as unknown as jest.Mock;
 const mockedFetchCatalogItems = fetchCatalogItems as unknown as jest.Mock;
@@ -131,6 +132,7 @@ describe('processQueue', () => {
     catalogItems = [];
     mockedIsOnline.mockReturnValue(true);
     mockedCreateCatalogItem.mockReset();
+    mockedUpdateCatalogItem.mockReset();
     mockedUploadAudio.mockReset();
     mockedSeedCatalog.mockReset();
     mockedFetchCatalogItems.mockReset();
@@ -379,6 +381,56 @@ describe('processQueue', () => {
     await processQueue();
 
     expect(mockedCreateCatalogItem).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('maps seeded alias units to canonical units on catalog create (A-04)', async () => {
+    const item = makeQueueItem({
+      payloadJson: JSON.stringify({
+        name: 'Pipe Repair',
+        unit: 'per foot',
+        unitPriceCents: 4500,
+      }),
+    });
+    queueItems = [item];
+    mockedCreateCatalogItem.mockResolvedValue({ id: 'server-1' });
+
+    await processQueue();
+
+    expect(mockedCreateCatalogItem).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Pipe Repair', unit: 'foot', unitPriceCents: 4500 }),
+    );
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('maps seeded alias units to canonical units on catalog update (A-04 CAT-02)', async () => {
+    catalogItems = [
+      {
+        id: 'local-cat-1',
+        serverId: 'srv-pipe',
+        name: 'Pipe Repair',
+        async update() {
+          // no-op
+        },
+      },
+    ];
+    const item = makeQueueItem({
+      action: 'update',
+      payloadJson: JSON.stringify({
+        name: 'Pipe Repair',
+        unit: 'per foot',
+        unitPriceCents: 5000,
+      }),
+    });
+    queueItems = [item];
+    mockedUpdateCatalogItem.mockResolvedValue({ id: 'srv-pipe' });
+
+    await processQueue();
+
+    expect(mockedUpdateCatalogItem).toHaveBeenCalledWith(
+      'srv-pipe',
+      expect.objectContaining({ name: 'Pipe Repair', unit: 'foot', unitPriceCents: 5000 }),
+    );
     expect(item.status).toBe('destroyed');
   });
 });

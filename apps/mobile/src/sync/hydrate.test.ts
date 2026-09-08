@@ -444,6 +444,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(catalogItems[1]).toMatchObject({
       serverId: 'srv-pipe',
       name: 'Pipe Repair',
+      unit: 'foot',
     });
   });
 

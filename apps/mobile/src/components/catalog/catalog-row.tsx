@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
+import { parseCatalogUnit } from '../../catalog/units';
 import { CatalogItem } from '../../db/models/catalog-item';
 import { UnitBadge } from './unit-badge';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
@@ -13,7 +14,8 @@ interface CatalogRowProps {
 
 export function CatalogRow({ item, onPress, onArchive }: CatalogRowProps): JSX.Element {
   const formattedPrice = `$${(item.unitPriceCents / 100).toFixed(2)}`;
-  const accessibilityLabel = `${item.name}, ${formattedPrice} per ${item.unit}. Double tap to edit.`;
+  const unitLabel = parseCatalogUnit(item.unit) ?? item.unit;
+  const accessibilityLabel = `${item.name}, ${formattedPrice} per ${unitLabel}. Double tap to edit.`;
 
   function renderRightActions(): JSX.Element {
     return (
