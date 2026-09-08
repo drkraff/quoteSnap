@@ -12,11 +12,12 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { VALID_UNITS, parseCatalogUnit, type CatalogUnit } from '../../catalog/units';
 import { CatalogItem } from '../../db/models/catalog-item';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 
-const UNITS = ['each', 'hour', 'foot', 'sqft', 'job'] as const;
-type Unit = (typeof UNITS)[number];
+const UNITS = VALID_UNITS;
+type Unit = CatalogUnit;
 
 interface ItemFormSheetProps {
   visible: boolean;
@@ -45,7 +46,7 @@ export function ItemFormSheet({
   useEffect(() => {
     if (editingItem) {
       setName(editingItem.name);
-      setSelectedUnit((editingItem.unit as Unit) ?? null);
+      setSelectedUnit(parseCatalogUnit(editingItem.unit));
       const dollars = (editingItem.unitPriceCents / 100).toFixed(2);
       setPriceDisplay(dollars);
       setPriceCents(editingItem.unitPriceCents);

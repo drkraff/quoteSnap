@@ -1,3 +1,5 @@
+import type { CatalogUnit } from "../catalog/units.js";
+
 export interface SeedBody {
   trade: "plumbing" | "electrical" | "hvac";
 }
@@ -6,7 +8,7 @@ export type Trade = SeedBody["trade"];
 
 export interface TradeTemplateItem {
   name: string;
-  unit: string;
+  unit: CatalogUnit;
   unitPriceCents: number;
   tradeCategory: string;
 }

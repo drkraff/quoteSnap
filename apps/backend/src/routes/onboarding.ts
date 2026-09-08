@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
+import { parseCatalogUnit } from "../catalog/units.js";
 import { TRADE_TEMPLATES } from "../data/trade-templates.js";
 import type { SeedBody, SeedResponse, Trade } from "../types/onboarding.js";
 
@@ -40,11 +41,15 @@ router.post("/seed", authenticateToken, async (req: Request, res: Response): Pro
     const insertedItems: SeedResponse["items"] = [];
 
     for (const item of template) {
+      const unit = parseCatalogUnit(item.unit);
+      if (!unit) {
+        throw new Error(`Invalid catalog unit in trade template: ${item.name} (${item.unit})`);
+      }
       const result = await query(
         `INSERT INTO catalog_items (contractor_id, name, unit, unit_price_cents, trade_category)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, name, unit, unit_price_cents, trade_category`,
-        [contractorId, item.name, item.unit, item.unitPriceCents, item.tradeCategory]
+        [contractorId, item.name, unit, item.unitPriceCents, item.tradeCategory]
       );
       const row = result.rows[0] as {
         id: string;
@@ -56,7 +61,7 @@ router.post("/seed", authenticateToken, async (req: Request, res: Response): Pro
       insertedItems.push({
         id: row.id,
         name: row.name,
-        unit: row.unit,
+        unit: parseCatalogUnit(row.unit) ?? row.unit,
         unitPriceCents: row.unit_price_cents,
         tradeCategory: row.trade_category,
       });
