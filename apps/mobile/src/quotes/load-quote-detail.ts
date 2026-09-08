@@ -170,7 +170,7 @@ export function resolveQuoteDetailView(input: {
 
 export type LoadQuoteDetailDeps = {
   findQuote: () => Promise<LocalQuoteRecord>;
-  findDrafts: () => Promise<Array<{ lineItemsJson: string }>>;
+  findDrafts: () => Promise<{ lineItemsJson: string }[]>;
   fetchRemote?: (
     serverId: string,
   ) => Promise<{ quote: QuoteResponse; lineItems: QuoteLineItemResponse[] }>;
