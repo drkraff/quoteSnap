@@ -29,6 +29,10 @@ export function isUnauthorizedError(value: unknown): value is ApiError {
   return isApiError(value) && value.status === 401;
 }
 
+export function isConflictError(value: unknown): value is ApiError {
+  return isApiError(value) && value.status === 409;
+}
+
 function isAuthPath(path: string): boolean {
   return path === '/auth' || path.startsWith('/auth/');
 }

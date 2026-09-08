@@ -73,9 +73,14 @@ export async function upsertCatalogItems(
   await database.write(async () => {
     const existing = await collection.query(Q.where('contractor_id', contractorId)).fetch();
     const byServerId = new Map<string, CatalogItem>();
+    const unmatchedByName = new Map<string, CatalogItem[]>();
     for (const row of existing) {
       if (row.serverId) {
         byServerId.set(row.serverId, row);
+      } else {
+        const list = unmatchedByName.get(row.name) ?? [];
+        list.push(row);
+        unmatchedByName.set(row.name, list);
       }
     }
 
@@ -93,6 +98,33 @@ export async function upsertCatalogItems(
           record.isArchived = item.isArchived;
           record.updatedAt = parseMs(item.updatedAt);
         });
+        continue;
+      }
+
+      // A-03: local-only offline seed rows share names with a later server seed.
+      // Adopt them instead of inserting a second local copy. Leave unmatched
+      // local-only rows (custom SKUs) alone.
+      const nameMatches = unmatchedByName.get(item.name);
+      const nameMatch = nameMatches?.shift();
+      if (nameMatch) {
+        if (blockedIds.has(nameMatch.id)) {
+          // Queued write owns fields; still attach the server id so a later
+          // catalog update/create can push without POSTing a duplicate.
+          await nameMatch.update((record) => {
+            record.serverId = item.id;
+          });
+        } else {
+          await nameMatch.update((record) => {
+            record.serverId = item.id;
+            record.name = item.name;
+            record.unit = item.unit;
+            record.unitPriceCents = item.unitPriceCents;
+            record.tradeCategory = item.tradeCategory;
+            record.isArchived = item.isArchived;
+            record.updatedAt = parseMs(item.updatedAt);
+          });
+        }
+        byServerId.set(item.id, nameMatch);
         continue;
       }
 
@@ -206,6 +238,8 @@ async function hydrateOnce(contractorId: string): Promise<void> {
 /**
  * Pull the contractor's server catalog and quotes into WatermelonDB.
  * Idempotent: rows are keyed by server_id and re-running does not duplicate.
+ * Local-only rows (server_id null) are left alone unless a pulled item shares
+ * a name — then the local row is adopted (A-03 offline seed de-dupe).
  * Does not touch the write queue. Failures propagate to the caller.
  */
 export async function hydrateFromServer(contractorId: string): Promise<void> {

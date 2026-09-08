@@ -36,6 +36,7 @@ Recent **merged** work to reflect if you mention status:
 - **PR #5** — CI workflow + typecheck/test scripts.
 - **PR #7** — login identifier lock-down (D1), UUID filter before catalog `ANY($2::uuid[])` (D2), R2 delete after successful GPT+DB commit (D3), `ai_failed` on upload/enqueue failure (D7), Whisper default English (D8), AI failures write `ai_failed` not `failed_send` (D9).
 - **PR #12** — `apiClient` no longer treats `/auth/*` 401s as session expiry (audit **A-01**).
+- **PR #13** — login/restore hydrate of catalog + quotes (audit **A-02**). Local-only `server_id` null rows are left alone unless a later server seed matches by name (A-03).
 - **PR #8** — mobile sync queue: failures stay `pending` with `nextRetryAt` backoff; `dead_letter` after the 15m attempt fails; `createSingleFlight` so overlapping `processQueue` calls do not double-write; `resolveAudioQuoteServerId` (no empty parent id on `/voice/upload`); NetInfo unsubscribe + root-layout teardown. Also picks up pre-existing `failed` rows. Dead-letter UI (`SYNC-04`) unchanged.
 - **PR #9** — pg-boss cron `ai-processing-reaper` (`* * * * *` UTC) marks quotes still `ai_processing` older than `AI_PROCESSING_TIMEOUT_MS` (default 15 minutes) as `ai_failed`. `GET /voice/status/:jobId` returns `{ status: 'failed' }` when the owned quote is already `ai_failed`, even if the pg-boss job is still active or gone, so the mobile poller stops.
 
@@ -138,16 +139,15 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, and quotes list payload nesting (`voiceJobId` + line items). Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue`, auth 401 handling, and login/restore catalog+quote hydrate.
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, and quotes list payload nesting (`voiceJobId` + line items). Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue`, auth 401 handling, login/restore catalog+quote hydrate, and offline onboarding seed enqueue / 409 de-dupe.
 
 ---
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master` after PRs #8, #9, and #12**. Do not re-implement retry/single-flight, the reaper, or the auth 401 interceptor.
+These are **on `master` after PRs #8, #9, #12, and #13**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, or login/restore hydrate.
 
 - **Dead-letter UX (`SYNC-04`) and draft conflict UX (`SYNC-05`)** are not built. Queue items can reach `dead_letter`; there is no contractor-facing retry screen.
-- **Offline onboarding seed still does not enqueue** (audit **A-03**). Returning users are hydrated from Postgres after login/restore; a first-run offline seed still never reaches the server.
 - **Local `ai_processing` without `voiceJobId` is still not polled** (`quotes.tsx` requires `voiceJobId`). Hydrate now copies `voice_job_id` when the server has it. The server reaper will mark the **server** row `ai_failed` after the timeout; a local row that never received a job id will not learn that unless a later poll/sync path exists. A 500 after enqueue can still insert a second server quote on client retry (PR #7 leftover).
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).
