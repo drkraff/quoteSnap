@@ -41,8 +41,9 @@ const config: ExpoConfig = {
           'QuoteSnap needs microphone access to record voice quotes.',
       },
     ],
-    // Wires WatermelonDB native Gradle dependency + JSI bridging into android/.
-    // Required for SQLiteAdapter({ jsi: true }) to link correctly on SDK 52.
+    // Wires WatermelonDB native Gradle into android/. Keep SQLiteAdapter jsi: false
+    // (apps/mobile/src/db/index.ts) and newArchEnabled: false — do not flip without
+    // a native rebuild and device verification (RN 0.76).
     '@morrowdigital/watermelondb-expo-plugin',
     // Pins the Android Kotlin version the WatermelonDB native build needs.
     ['expo-build-properties', { android: { kotlinVersion: '1.9.24' } }],
