@@ -2,16 +2,8 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { rateLimit } from "express-rate-limit";
 import { query } from "../db/connection.js";
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 6,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many attempts, please try again later" },
-});
+import { authLimiter } from "../auth/auth-limiter.js";
 import {
   ContractorPayload,
   RegisterBody,
@@ -60,7 +52,7 @@ async function issueTokenPair(contractorId: string, email: string | null, phone:
 
 // ── POST /register ────────────────────────────────────────────────────────────
 
-router.post("/register", async (req: Request, res: Response): Promise<void> => {
+router.post("/register", authLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as RegisterBody;
     const { email, phone, password, displayName } = body;
