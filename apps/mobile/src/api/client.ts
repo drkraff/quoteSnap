@@ -33,17 +33,23 @@ function isAuthPath(path: string): boolean {
   return path === '/auth' || path.startsWith('/auth/');
 }
 
+function loadAuthStore(): typeof import('../store/auth-store') {
+  // Lazy require avoids the auth-store → auth → client cycle at module load.
+  // Dynamic import() is not available under jest-expo without vm-modules.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('../store/auth-store') as typeof import('../store/auth-store');
+}
+
 // Shared refresh promise — concurrent resource 401s coalesce into one refresh attempt
 let refreshPromise: Promise<boolean> | null = null;
 
 function getOrRefreshSession(): Promise<boolean> {
   if (!refreshPromise) {
     // Assign synchronously before any await so concurrent callers share this promise
-    refreshPromise = import('../store/auth-store')
-      .then(({ useAuthStore }) => useAuthStore.getState().refreshSession())
-      .finally(() => {
-        refreshPromise = null;
-      });
+    const { useAuthStore } = loadAuthStore();
+    refreshPromise = useAuthStore.getState().refreshSession().finally(() => {
+      refreshPromise = null;
+    });
   }
   return refreshPromise;
 }
@@ -58,8 +64,7 @@ async function request<T>(
   body?: unknown,
   retrying = false,
 ): Promise<T> {
-  // Lazy import to avoid circular dependency at module load time
-  const { useAuthStore } = await import('../store/auth-store');
+  const { useAuthStore } = loadAuthStore();
   const accessToken = useAuthStore.getState().accessToken;
 
   const headers: Record<string, string> = {

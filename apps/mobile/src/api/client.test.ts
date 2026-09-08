@@ -33,7 +33,7 @@ function requestPath(input: RequestInfo | URL): string {
   return slash === -1 ? '/' : fromHost.slice(slash);
 }
 
-function fetchCalls(): Array<{ path: string; init?: RequestInit }> {
+function fetchCalls(): { path: string; init?: RequestInit }[] {
   return (global.fetch as jest.Mock).mock.calls.map(([input, init]: [RequestInfo | URL, RequestInit?]) => ({
     path: requestPath(input),
     init,
