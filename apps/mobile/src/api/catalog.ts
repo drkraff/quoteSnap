@@ -43,5 +43,13 @@ export async function updateCatalogItem(
 }
 
 export async function archiveCatalogItem(serverId: string): Promise<void> {
-  await apiClient.patch<{ archived: boolean }>(`/catalog/${serverId}/archive`);
+  await apiClient.patch<{ archived: boolean }>(`/catalog/${serverId}/archive`, {
+    archived: true,
+  });
+}
+
+export async function unarchiveCatalogItem(serverId: string): Promise<void> {
+  await apiClient.patch<{ archived: boolean }>(`/catalog/${serverId}/archive`, {
+    archived: false,
+  });
 }

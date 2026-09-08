@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
+import { applyCatalogArchivePatch } from "../catalog/archive.js";
 import {
   catalogUnitErrorMessage,
   parseCatalogUnit,
@@ -176,26 +177,17 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
   }
 });
 
-// PATCH /:id/archive — soft-delete item
+// PATCH /:id/archive — soft-delete or undo-unarchive (`{ archived: false }`)
 router.patch("/:id/archive", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
     const { id } = req.params as { id: string };
-
-    const result = await query(
-      `UPDATE catalog_items
-       SET is_archived = TRUE
-       WHERE id = $1 AND contractor_id = $2 AND is_archived = FALSE
-       RETURNING id`,
-      [id, contractorId]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: "Item not found" });
-      return;
-    }
-
-    res.json({ archived: true });
+    const outcome = await applyCatalogArchivePatch(query, {
+      itemId: id,
+      contractorId,
+      body: req.body,
+    });
+    res.status(outcome.status).json(outcome.json);
   } catch (err) {
     console.error("PATCH /catalog/:id/archive error:", err);
     res.status(500).json({ error: "Internal server error" });
