@@ -47,7 +47,7 @@ function headerRecord(init?: RequestInit): Record<string, string> {
   }
   if (raw instanceof Headers) {
     const out: Record<string, string> = {};
-    raw.forEach((value, key) => {
+    raw.forEach((value: string, key: string) => {
       out[key.toLowerCase()] = value;
     });
     return out;

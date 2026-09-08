@@ -48,7 +48,7 @@ function headerRecord(init?: RequestInit): Record<string, string> {
   }
   if (raw instanceof Headers) {
     const out: Record<string, string> = {};
-    raw.forEach((value, key) => {
+    raw.forEach((value: string, key: string) => {
       out[key.toLowerCase()] = value;
     });
     return out;
@@ -62,7 +62,7 @@ function formDataHas(body: unknown, key: string): boolean {
   if (typeof FormData !== 'undefined' && body instanceof FormData && typeof body.has === 'function') {
     return body.has(key);
   }
-  const parts = (body as { _parts?: Array<[string, unknown]> })._parts;
+  const parts = (body as { _parts?: [string, unknown][] })._parts;
   if (Array.isArray(parts)) {
     return parts.some(([name]) => name === key);
   }
