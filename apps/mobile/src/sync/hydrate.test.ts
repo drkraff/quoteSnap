@@ -371,6 +371,119 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(catalogItems[0]!.unitPriceCents).toBe(999);
   });
 
+  it('adopts a local-only row with the same name instead of creating a duplicate', async () => {
+    const existing = attachUpdate<FakeCatalogItem>({
+      id: 'local-offline-faucet',
+      serverId: null,
+      contractorId,
+      name: 'Faucet Repair',
+      unit: 'each',
+      unitPriceCents: 8500,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    catalogItems = [existing];
+
+    await upsertCatalogItems(contractorId, [
+      {
+        id: 'srv-faucet',
+        name: 'Faucet Repair',
+        unit: 'each',
+        unitPriceCents: 8500,
+        tradeCategory: 'plumbing',
+        isArchived: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+
+    expect(catalogItems).toHaveLength(1);
+    expect(catalogItems[0]).toMatchObject({
+      id: 'local-offline-faucet',
+      serverId: 'srv-faucet',
+      name: 'Faucet Repair',
+    });
+  });
+
+  it('leaves unmatched local-only rows alone when hydrate pulls unrelated server items', async () => {
+    const existing = attachUpdate<FakeCatalogItem>({
+      id: 'local-custom',
+      serverId: null,
+      contractorId,
+      name: 'Custom Valve',
+      unit: 'each',
+      unitPriceCents: 100,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    catalogItems = [existing];
+
+    await upsertCatalogItems(contractorId, [
+      {
+        id: 'srv-pipe',
+        name: 'Pipe Repair',
+        unit: 'per foot',
+        unitPriceCents: 4500,
+        tradeCategory: 'plumbing',
+        isArchived: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+
+    expect(catalogItems).toHaveLength(2);
+    expect(catalogItems[0]).toMatchObject({
+      id: 'local-custom',
+      serverId: null,
+      name: 'Custom Valve',
+    });
+    expect(catalogItems[1]).toMatchObject({
+      serverId: 'srv-pipe',
+      name: 'Pipe Repair',
+    });
+  });
+
+  it('attaches server id to a blocked local-only row without clobbering queued fields', async () => {
+    const existing = attachUpdate<FakeCatalogItem>({
+      id: 'local-offline-edit',
+      serverId: null,
+      contractorId,
+      name: 'Faucet Repair',
+      unit: 'each',
+      unitPriceCents: 999,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    catalogItems = [existing];
+    queueItems = [{ entityType: 'catalog_item', entityId: 'local-offline-edit', status: 'pending' }];
+
+    await upsertCatalogItems(contractorId, [
+      {
+        id: 'srv-faucet',
+        name: 'Faucet Repair',
+        unit: 'each',
+        unitPriceCents: 8500,
+        tradeCategory: 'plumbing',
+        isArchived: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+
+    expect(catalogItems).toHaveLength(1);
+    expect(catalogItems[0]).toMatchObject({
+      id: 'local-offline-edit',
+      serverId: 'srv-faucet',
+      unitPriceCents: 999,
+    });
+  });
+
   it('stores voiceJobId so ai_processing quotes can be polled after restore', async () => {
     await upsertQuotes(contractorId, [
       {

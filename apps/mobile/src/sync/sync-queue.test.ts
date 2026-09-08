@@ -1,4 +1,5 @@
-import { createCatalogItem } from '../api/catalog';
+import { createCatalogItem, fetchCatalogItems } from '../api/catalog';
+import { seedCatalog } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
@@ -20,6 +21,11 @@ jest.mock('../api/catalog', () => ({
   createCatalogItem: jest.fn(),
   updateCatalogItem: jest.fn(),
   archiveCatalogItem: jest.fn(),
+  fetchCatalogItems: jest.fn(),
+}));
+
+jest.mock('../api/onboarding', () => ({
+  seedCatalog: jest.fn(),
 }));
 
 jest.mock('../api/voice', () => ({
@@ -58,6 +64,13 @@ type FakeDraft = {
   quoteId: string;
 };
 
+type FakeCatalogItem = {
+  id: string;
+  serverId: string | null;
+  name: string;
+  update: (fn: (record: FakeCatalogItem) => void) => Promise<void>;
+};
+
 const mockedDatabase = database as unknown as {
   write: jest.Mock;
   get: jest.Mock;
@@ -65,6 +78,8 @@ const mockedDatabase = database as unknown as {
 const mockedIsOnline = isOnline as unknown as jest.Mock;
 const mockedCreateCatalogItem = createCatalogItem as unknown as jest.Mock;
 const mockedUploadAudio = uploadAudio as unknown as jest.Mock;
+const mockedSeedCatalog = seedCatalog as unknown as jest.Mock;
+const mockedFetchCatalogItems = fetchCatalogItems as unknown as jest.Mock;
 
 function makeQueueItem(overrides: Partial<FakeQueueItem> = {}): FakeQueueItem {
   const item: FakeQueueItem = {
@@ -106,21 +121,26 @@ describe('processQueue', () => {
   let queueItems: FakeQueueItem[];
   let quotes: FakeQuote[];
   let drafts: FakeDraft[];
+  let catalogItems: FakeCatalogItem[];
 
   beforeEach(() => {
     resetSyncQueueForTests();
     queueItems = [];
     quotes = [];
     drafts = [];
+    catalogItems = [];
     mockedIsOnline.mockReturnValue(true);
     mockedCreateCatalogItem.mockReset();
     mockedUploadAudio.mockReset();
+    mockedSeedCatalog.mockReset();
+    mockedFetchCatalogItems.mockReset();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
         fetch: async () => {
           if (table === 'sync_queue_items') return queueItems.filter((i) => i.status !== 'destroyed');
           if (table === 'quotes') return quotes;
           if (table === 'drafts') return drafts;
+          if (table === 'catalog_items') return catalogItems;
           return [];
         },
         fetchCount: async () => queueItems.filter((i) => i.status === 'pending').length,
@@ -259,6 +279,106 @@ describe('processQueue', () => {
     expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
     expect(quote.serverId).toBe('server-q1');
     expect(quote.voiceJobId).toBe('job-1');
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('processes an onboarding seed job and stamps local catalog ids', async () => {
+    const local = {
+      id: 'local-cat-1',
+      serverId: null as string | null,
+      name: 'Faucet Repair',
+      async update(fn: (record: FakeCatalogItem) => void) {
+        fn(local);
+      },
+    };
+    catalogItems = [local];
+    const item = makeQueueItem({
+      entityType: 'onboarding',
+      entityId: 'contractor-1',
+      action: 'seed',
+      payloadJson: JSON.stringify({ trade: 'plumbing' }),
+    });
+    queueItems = [item];
+    mockedSeedCatalog.mockResolvedValue({
+      trade: 'plumbing',
+      itemCount: 1,
+      items: [{ id: 'srv-1', name: 'Faucet Repair' }],
+    });
+
+    await processQueue();
+
+    expect(mockedSeedCatalog).toHaveBeenCalledWith('plumbing');
+    expect(mockedCreateCatalogItem).not.toHaveBeenCalled();
+    expect(local.serverId).toBe('srv-1');
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('treats a 409 seed as already-seeded and maps GET /catalog instead of creating', async () => {
+    const local = {
+      id: 'local-cat-1',
+      serverId: null as string | null,
+      name: 'Faucet Repair',
+      async update(fn: (record: FakeCatalogItem) => void) {
+        fn(local);
+      },
+    };
+    catalogItems = [local];
+    const item = makeQueueItem({
+      entityType: 'onboarding',
+      entityId: 'contractor-1',
+      action: 'seed',
+      payloadJson: JSON.stringify({ trade: 'plumbing' }),
+    });
+    queueItems = [item];
+    mockedSeedCatalog.mockRejectedValue({ status: 409, error: 'Catalog already seeded' });
+    mockedFetchCatalogItems.mockResolvedValue([{ id: 'srv-existing', name: 'Faucet Repair' }]);
+
+    await processQueue();
+
+    expect(mockedFetchCatalogItems).toHaveBeenCalledTimes(1);
+    expect(mockedCreateCatalogItem).not.toHaveBeenCalled();
+    expect(local.serverId).toBe('srv-existing');
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('retries a failed onboarding seed with the same backoff as other queue items', async () => {
+    const item = makeQueueItem({
+      entityType: 'onboarding',
+      entityId: 'contractor-1',
+      action: 'seed',
+      payloadJson: JSON.stringify({ trade: 'hvac' }),
+    });
+    queueItems = [item];
+    mockedSeedCatalog.mockRejectedValue({ status: 500, error: 'Internal server error' });
+
+    await processQueue();
+
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(1);
+    expect(item.nextRetryAt).toBeInstanceOf(Date);
+  });
+
+  it('skips POST /catalog when a queued create already has a server id (seed de-dupe)', async () => {
+    catalogItems = [
+      {
+        id: 'local-cat-1',
+        serverId: 'srv-already',
+        name: 'Faucet Repair',
+        async update() {
+          // no-op
+        },
+      },
+    ];
+    const item = makeQueueItem({
+      entityType: 'catalog_item',
+      entityId: 'local-cat-1',
+      action: 'create',
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedCreateCatalogItem).not.toHaveBeenCalled();
     expect(item.status).toBe('destroyed');
   });
 });

@@ -47,10 +47,10 @@ export const schema = appSchema({
       name: 'sync_queue_items',
       columns: [
         { name: 'entity_type', type: 'string' },
-        // entity_type: quote | catalog_item | draft | audio
+        // entity_type: quote | catalog_item | draft | audio | onboarding
         { name: 'entity_id', type: 'string' },
         { name: 'action', type: 'string' },
-        // action: create | update | delete
+        // action: create | update | delete | seed
         { name: 'payload_json', type: 'string' },
         { name: 'status', type: 'string' },
         // status: pending | in_progress | failed | dead_letter

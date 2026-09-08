@@ -3,10 +3,13 @@ import { ActivityIndicator, SafeAreaView, StyleSheet, Text } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { seedCatalog } from '../../../src/api/onboarding';
 import type { Trade } from '../../../src/api/onboarding';
-import { OFFLINE_TRADE_TEMPLATES } from '../../../src/data/trade-templates';
-import { database } from '../../../src/db/index';
-import { CatalogItem } from '../../../src/db/models/catalog-item';
 import { useAuthStore } from '../../../src/store/auth-store';
+import {
+  onboardingSeedEnqueueParams,
+  persistOfflineCatalog,
+  persistOnlineSeed,
+} from '../../../src/sync/offline-onboarding-seed';
+import { enqueue } from '../../../src/sync/sync-queue';
 
 export default function SeedingScreen(): JSX.Element {
   const { trade } = useLocalSearchParams<{ trade: Trade }>();
@@ -26,53 +29,27 @@ export default function SeedingScreen(): JSX.Element {
       try {
         const response = await Promise.race([seedCatalog(trade), timeoutPromise]);
 
-        // Online seed succeeded — write to WatermelonDB
-        const catalogCollection = database.get<CatalogItem>('catalog_items');
-        await database.write(async () => {
-          for (const item of response.items) {
-            await catalogCollection.create((record) => {
-              record.serverId = item.id;
-              record.contractorId = contractorId;
-              record.name = item.name;
-              record.unit = item.unit;
-              record.unitPriceCents = item.unitPriceCents;
-              record.tradeCategory = item.tradeCategory;
-              record.isArchived = false;
-            });
-          }
-        });
+        // Online seed succeeded — write to WatermelonDB with server ids. Do not enqueue.
+        await persistOnlineSeed(contractorId, response.items);
 
         router.replace({
           pathname: '/(auth)/onboarding/ready',
           params: { trade, itemCount: String(response.itemCount) },
         });
       } catch {
-        // Fetch failed or timed out — use bundled template
+        // Fetch failed or timed out — bundled template locally, seed when back online.
         setOfflineNotice(true);
         setStatusText('Loading starter catalog...');
 
-        const template = OFFLINE_TRADE_TEMPLATES[trade];
-        const catalogCollection = database.get<CatalogItem>('catalog_items');
-        await database.write(async () => {
-          for (const item of template) {
-            await catalogCollection.create((record) => {
-              record.serverId = null;
-              record.contractorId = contractorId;
-              record.name = item.name;
-              record.unit = item.unit;
-              record.unitPriceCents = item.unitPriceCents;
-              record.tradeCategory = item.tradeCategory;
-              record.isArchived = false;
-            });
-          }
-        });
+        const itemCount = await persistOfflineCatalog(contractorId, trade);
+        await enqueue(onboardingSeedEnqueueParams(contractorId, trade));
 
         // Wait 1 second before advancing
         await new Promise<void>((resolve) => setTimeout(resolve, 1000));
 
         router.replace({
           pathname: '/(auth)/onboarding/ready',
-          params: { trade, itemCount: String(template.length) },
+          params: { trade, itemCount: String(itemCount) },
         });
       }
     }

@@ -4,6 +4,7 @@ import { isOnline, onConnectivityChange } from './network-monitor';
 import { Q } from '@nozbe/watermelondb';
 import { createCatalogItem, updateCatalogItem, archiveCatalogItem } from '../api/catalog';
 import { uploadAudio } from '../api/voice';
+import type { Trade } from '../api/onboarding';
 import { CatalogItem } from '../db/models/catalog-item';
 import { createQuoteOnServer, updateQuoteOnServer } from '../api/quotes';
 import { Quote } from '../db/models/quote';
@@ -11,14 +12,15 @@ import { Draft } from '../db/models/draft';
 import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
 import { createSingleFlight } from './single-flight';
 import { resolveAudioQuoteServerId } from './audio-parent';
+import { syncQueuedOnboardingSeed } from './offline-onboarding-seed';
 
 const queueFlight = createSingleFlight();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface SyncEnqueueParams {
-  entityType: 'quote' | 'catalog_item' | 'draft' | 'audio';
+  entityType: 'quote' | 'catalog_item' | 'draft' | 'audio' | 'onboarding';
   entityId: string;
-  action: 'create' | 'update' | 'delete';
+  action: 'create' | 'update' | 'delete' | 'seed';
   payload: Record<string, unknown>;
 }
 
@@ -47,8 +49,21 @@ export async function enqueue(params: SyncEnqueueParams): Promise<void> {
 async function pushToServer(item: SyncQueueItem): Promise<void> {
   const payload = JSON.parse(item.payloadJson) as Record<string, unknown>;
 
+  if (item.entityType === 'onboarding' && item.action === 'seed') {
+    await syncQueuedOnboardingSeed(item.entityId, payload.trade as Trade);
+    return;
+  }
+
   if (item.entityType === 'catalog_item') {
     if (item.action === 'create') {
+      const catalogCollection = database.get<CatalogItem>('catalog_items');
+      const localItems = await catalogCollection
+        .query(Q.where('id', item.entityId))
+        .fetch();
+      // Seed/hydrate may have already mapped this local-only row (A-03 de-dupe).
+      if (localItems[0]?.serverId) {
+        return;
+      }
       const response = await createCatalogItem({
         name: payload.name as string,
         unit: payload.unit as string,
@@ -56,10 +71,6 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         tradeCategory: payload.tradeCategory as string | undefined,
       });
       // Update local record with server ID
-      const catalogCollection = database.get<CatalogItem>('catalog_items');
-      const localItems = await catalogCollection
-        .query(Q.where('id', item.entityId))
-        .fetch();
       if (localItems[0]) {
         await database.write(async () => {
           await localItems[0].update((record) => {
