@@ -10,7 +10,7 @@ import {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** HIST-01 statuses. Voice worker/reaper own ai_* ; Phase 6 owns sent/approved/declined/expired/failed_send. */
+/** HIST-01 statuses. Voice worker/reaper own ai_processing; contractors may recover ai_failed into a manual draft (A-10). Phase 6 owns sent/approved/declined/expired/failed_send. */
 export const CLIENT_QUOTE_STATUSES = ["draft_local", "draft_queued"] as const;
 export type ClientQuoteStatus = (typeof CLIENT_QUOTE_STATUSES)[number];
 
@@ -69,12 +69,13 @@ export function isClientQuoteStatus(value: string): value is ClientQuoteStatus {
 }
 
 export function isQuoteEditable(status: string): boolean {
-  return isClientQuoteStatus(status);
+  return isClientQuoteStatus(status) || status === "ai_failed";
 }
 
 /**
  * Client PUT/POST may only write draft_local / draft_queued.
- * Phase 6 statuses and ai_* are rejected so a client cannot self-approve or spoof the voice pipeline.
+ * Phase 6 statuses and ai_processing are rejected so a client cannot self-approve or spoof the voice pipeline.
+ * ai_failed is writable so the contractor can recover into a manual draft (A-10).
  */
 export function parseClientQuoteStatus(value: unknown): { ok: true; status: ClientQuoteStatus } | { ok: false; error: string } {
   if (typeof value !== "string" || !isClientQuoteStatus(value)) {

@@ -91,6 +91,11 @@ describe("assertStatusTransition", () => {
     assert.deepEqual(assertStatusTransition("draft_local", "draft_local"), { ok: true });
   });
 
+  it("allows recovering ai_failed into a manual draft or queued send (A-10)", () => {
+    assert.deepEqual(assertStatusTransition("ai_failed", "draft_local"), { ok: true });
+    assert.deepEqual(assertStatusTransition("ai_failed", "draft_queued"), { ok: true });
+  });
+
   it("rejects transitions off ai_processing / sent (voice worker and Phase 6 own those)", () => {
     assert.deepEqual(assertStatusTransition("ai_processing", "draft_local"), {
       ok: false,
@@ -98,6 +103,11 @@ describe("assertStatusTransition", () => {
       error: "Quote cannot be updated in its current status",
     });
     assert.deepEqual(assertStatusTransition("sent", "draft_queued"), {
+      ok: false,
+      status: 409,
+      error: "Quote cannot be updated in its current status",
+    });
+    assert.deepEqual(assertStatusTransition("failed_send", "draft_local"), {
       ok: false,
       status: 409,
       error: "Quote cannot be updated in its current status",
@@ -488,6 +498,30 @@ describe("applyQuotePut", () => {
     assert.equal(
       calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL),
       false,
+    );
+  });
+
+  it("allows line-item replace on ai_failed so the contractor can recover (A-10)", async () => {
+    const { queryFn, calls } = mockDb({
+      quote: quoteRow({ status: "ai_failed", total_cents: 0 }),
+      existingLines: [],
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        status: "draft_local",
+        lineItems: [{ name: "Elbow", quantity: 1, unitPriceCents: 400 }],
+      },
+    });
+    assert.equal(outcome.status, 200);
+    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.ok(update);
+    assert.match(update!.sql, /status = \$/);
+    assert.equal(update!.params?.[0], "draft_local");
+    assert.equal(
+      calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL),
+      true,
     );
   });
 

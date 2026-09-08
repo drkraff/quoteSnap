@@ -22,6 +22,7 @@ import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { isOnline } from '../../src/sync/network-monitor';
+import { quotePressTarget } from '../../src/quotes/status-display';
 
 // Tab bar height constant (safe default for both iOS/Android)
 const TAB_BAR_HEIGHT = 56;
@@ -113,16 +114,17 @@ export default function QuotesScreen(): JSX.Element {
   }, [quotes]);
 
   function handleQuotePress(quote: Quote): void {
-    // ai_processing quotes are not interactive
-    if (quote.status === 'ai_processing') return;
+    const target = quotePressTarget(quote.status);
+    if (target === 'none') return;
 
-    if (quote.status === 'draft_local') {
+    if (target === 'draft') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       router.push(`/draft/${quote.id}` as any);
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      router.push(`/quote/${quote.id}` as any);
+      return;
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    router.push(`/quote/${quote.id}` as any);
   }
 
   async function handleManualQuotePress(): Promise<void> {
