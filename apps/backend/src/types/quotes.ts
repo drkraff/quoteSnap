@@ -28,9 +28,19 @@ export interface CreateQuoteBody {
   totalCents?: number;
 }
 
+export interface UpdateQuoteLineItemBody {
+  name: string;
+  quantity: number;
+  unitPriceCents: number;
+  /** Omit to preserve existing AI confidence; null clears. */
+  confidence?: number | null;
+  /** Omit to preserve existing catalog_item_id; null clears. */
+  catalogItemId?: string | null;
+}
+
 export interface UpdateQuoteBody {
   status?: string;
   customerPhone?: string;
   totalCents?: number;
-  lineItems?: Array<{ name: string; quantity: number; unitPriceCents: number }>;
+  lineItems?: UpdateQuoteLineItemBody[];
 }
