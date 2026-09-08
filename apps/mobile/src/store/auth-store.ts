@@ -57,6 +57,18 @@ async function clearTokens(): Promise<void> {
   ]);
 }
 
+/** Pull catalog/quotes after auth. Failures must not undo a successful login/restore. */
+async function pullLocalState(contractorId: string): Promise<void> {
+  try {
+    // Lazy require avoids loading WatermelonDB when auth-store is imported from API tests.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { hydrateFromServer } = require('../sync/hydrate') as typeof import('../sync/hydrate');
+    await hydrateFromServer(contractorId);
+  } catch {
+    // Offline or server error — local DB stays as-is; next restore retries.
+  }
+}
+
 export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   contractor: null,
   accessToken: null,
@@ -80,6 +92,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       isAuthenticated: true,
       onboardingComplete: alreadyOnboarded,
     });
+    await pullLocalState(response.contractor.id);
   },
 
   async register(params) {
@@ -166,6 +179,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           isLoading: false,
           onboardingComplete,
         });
+        await pullLocalState(contractor.id);
       } else {
         // Access token missing — attempt refresh. Tokens must persist even
         // while contractor is still unset on this path.
@@ -179,6 +193,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
               isLoading: false,
               onboardingComplete,
             });
+            await pullLocalState(contractor.id);
           } else {
             await clearTokens();
             set({ isLoading: false });
@@ -192,6 +207,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
             isLoading: false,
             onboardingComplete,
           });
+          await pullLocalState(contractor.id);
         }
       }
     } catch {

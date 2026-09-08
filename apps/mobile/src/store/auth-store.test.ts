@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import * as authApi from '../api/auth';
+import { hydrateFromServer } from '../sync/hydrate';
 import { useAuthStore } from './auth-store';
 
 jest.mock('expo-secure-store', () => ({
@@ -13,6 +14,10 @@ jest.mock('../api/auth', () => ({
   register: jest.fn(),
   refresh: jest.fn(),
   logout: jest.fn(),
+}));
+
+jest.mock('../sync/hydrate', () => ({
+  hydrateFromServer: jest.fn(() => Promise.resolve()),
 }));
 
 const contractor = {
@@ -44,6 +49,10 @@ describe('auth-store refreshSession', () => {
     useAuthStore.setState(initialState);
     jest.mocked(authApi.refresh).mockReset();
     jest.mocked(authApi.logout).mockReset();
+    jest.mocked(authApi.login).mockReset();
+    jest.mocked(authApi.register).mockReset();
+    jest.mocked(hydrateFromServer).mockReset();
+    jest.mocked(hydrateFromServer).mockResolvedValue(undefined);
     jest.mocked(SecureStore.setItemAsync).mockClear();
     jest.mocked(SecureStore.getItemAsync).mockReset();
     jest.mocked(SecureStore.deleteItemAsync).mockClear();
@@ -119,6 +128,7 @@ describe('auth-store refreshSession', () => {
       isLoading: false,
       onboardingComplete: true,
     });
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
   });
 
   it('restoreSession keeps the local session when refresh fails over the network', async () => {
@@ -148,5 +158,99 @@ describe('auth-store refreshSession', () => {
       isAuthenticated: true,
       isLoading: false,
     });
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
+  });
+});
+
+describe('auth-store login/restore hydrate', () => {
+  beforeEach(() => {
+    useAuthStore.setState(initialState);
+    jest.mocked(authApi.login).mockReset();
+    jest.mocked(authApi.register).mockReset();
+    jest.mocked(authApi.refresh).mockReset();
+    jest.mocked(hydrateFromServer).mockReset();
+    jest.mocked(hydrateFromServer).mockResolvedValue(undefined);
+    jest.mocked(SecureStore.setItemAsync).mockClear();
+    jest.mocked(SecureStore.getItemAsync).mockReset();
+    jest.mocked(SecureStore.deleteItemAsync).mockClear();
+  });
+
+  it('pulls catalog and quotes after a successful login', async () => {
+    jest.mocked(authApi.login).mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      contractor,
+    });
+
+    await useAuthStore.getState().login({ email: 'ada@example.com', password: 'secret' });
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(useAuthStore.getState().onboardingComplete).toBe(true);
+    expect(hydrateFromServer).toHaveBeenCalledTimes(1);
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
+  });
+
+  it('still logs in when hydrate fails (offline / empty local until next restore)', async () => {
+    jest.mocked(authApi.login).mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      contractor,
+    });
+    jest.mocked(hydrateFromServer).mockRejectedValue(new TypeError('Network request failed'));
+
+    await expect(
+      useAuthStore.getState().login({ email: 'ada@example.com', password: 'secret' }),
+    ).resolves.toBeUndefined();
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
+  });
+
+  it('does not hydrate on register (onboarding seed writes the catalog)', async () => {
+    jest.mocked(authApi.register).mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      contractor: { ...contractor, trade: null },
+    });
+
+    await useAuthStore.getState().register({
+      email: 'ada@example.com',
+      password: 'secret',
+    });
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(hydrateFromServer).not.toHaveBeenCalled();
+  });
+
+  it('pulls catalog and quotes after a successful session restore', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return 'stored-access';
+        case KEYS.REFRESH_TOKEN:
+          return 'stored-refresh';
+        case KEYS.CONTRACTOR:
+          return JSON.stringify(contractor);
+        case KEYS.ONBOARDING_COMPLETE:
+          return 'true';
+        default:
+          return null;
+      }
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(hydrateFromServer).toHaveBeenCalledTimes(1);
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
+  });
+
+  it('does not hydrate when restore finds no session', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(hydrateFromServer).not.toHaveBeenCalled();
   });
 });

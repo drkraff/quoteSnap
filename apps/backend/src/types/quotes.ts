@@ -6,6 +6,7 @@ export interface QuoteResponse {
   createdAt: string;
   updatedAt: string;
   sentAt: string | null;
+  voiceJobId: string | null;
 }
 
 export interface QuoteLineItemResponse {
@@ -13,6 +14,12 @@ export interface QuoteLineItemResponse {
   name: string;
   quantity: number;
   unitPriceCents: number;
+  confidence: number | null;
+  catalogItemId: string | null;
+}
+
+export interface QuoteListItemResponse extends QuoteResponse {
+  lineItems: QuoteLineItemResponse[];
 }
 
 export interface CreateQuoteBody {
