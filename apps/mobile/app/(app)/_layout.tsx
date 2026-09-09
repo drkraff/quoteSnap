@@ -1,6 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+/** Default tab is Quotes (A-12). `/(app)` without a child still maps to index. */
+export const unstable_settings = {
+  initialRouteName: 'quotes',
+};
+
 export default function AppLayout(): JSX.Element {
   return (
     <Tabs
@@ -20,12 +25,13 @@ export default function AppLayout(): JSX.Element {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="quotes"
         options={{
-          title: 'Home',
+          title: 'Quotes',
+          headerTitle: 'Quote History',
           tabBarIcon: ({ focused, color }) => (
             <Ionicons
-              name={focused ? 'home' : 'home-outline'}
+              name={focused ? 'document-text' : 'document-text-outline'}
               size={24}
               color={color}
             />
@@ -47,13 +53,12 @@ export default function AppLayout(): JSX.Element {
         }}
       />
       <Tabs.Screen
-        name="quotes"
+        name="index"
         options={{
-          title: 'Quotes',
-          headerTitle: 'Quote History',
+          title: 'Home',
           tabBarIcon: ({ focused, color }) => (
             <Ionicons
-              name={focused ? 'document-text' : 'document-text-outline'}
+              name={focused ? 'home' : 'home-outline'}
               size={24}
               color={color}
             />

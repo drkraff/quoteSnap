@@ -3,6 +3,7 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '../src/store/auth-store';
+import { resolveSessionRedirect } from '../src/navigation/authenticated-entry';
 import { initNetworkMonitor } from '../src/sync/network-monitor';
 import { initSyncQueue } from '../src/sync/sync-queue';
 
@@ -27,24 +28,14 @@ export default function RootLayout(): JSX.Element {
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const inAppGroup = segments[0] === '(app)';
     const isAuthenticated = contractor !== null && accessToken !== null;
-
-    if (!isAuthenticated && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (isAuthenticated && !onboardingComplete && !inAuthGroup) {
-      // Authenticated but hasn't completed onboarding
-      router.replace('/(auth)/onboarding/trade-selection');
-    } else if (isAuthenticated && !onboardingComplete && inAuthGroup) {
-      // In auth group during onboarding -- allow navigation within onboarding screens
-      // Only redirect to trade-selection if not already in an onboarding screen
-      const inOnboarding = (segments as string[])[1] === 'onboarding';
-      if (!inOnboarding) {
-        router.replace('/(auth)/onboarding/trade-selection');
-      }
-    } else if (isAuthenticated && onboardingComplete && !inAppGroup) {
-      router.replace('/(app)');
+    const href = resolveSessionRedirect({
+      isAuthenticated,
+      onboardingComplete,
+      segments,
+    });
+    if (href !== null) {
+      router.replace(href);
     }
   }, [isLoading, contractor, accessToken, onboardingComplete, segments]);
 

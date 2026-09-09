@@ -80,7 +80,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 ### Mobile screens (`apps/mobile/app`)
 
 - `(auth)` — login, register, onboarding (trade / seeding / ready)
-- `(app)` — quotes list, catalog, `voice-record`, `draft/[id]`, `quote/[id]`
+- `(app)` — quotes list (default authenticated entry after login/restore/onboarding), catalog, `voice-record`, `draft/[id]`, `quote/[id]`. Home tab is still a logout stub.
 
 ---
 

@@ -1,5 +1,6 @@
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { AUTHENTICATED_ENTRY_HREF } from '../../../src/navigation/authenticated-entry';
 import { useAuthStore } from '../../../src/store/auth-store';
 
 export default function ReadyScreen(): JSX.Element {
@@ -11,14 +12,14 @@ export default function ReadyScreen(): JSX.Element {
 
   async function handleStartQuoting(): Promise<void> {
     await setOnboardingComplete(trade ?? '');
-    router.replace('/(app)');
+    router.replace(AUTHENTICATED_ENTRY_HREF);
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.heading}>You're ready to quote</Text>
       <Text style={styles.body}>
-        Your {tradeName} catalog has {itemCount} items. Start quoting or customize it in Settings.
+        Your {tradeName} catalog has {itemCount} items. Start quoting or customize it in My Catalog.
       </Text>
       <TouchableOpacity
         style={styles.cta}
