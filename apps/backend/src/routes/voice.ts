@@ -6,6 +6,7 @@ import { uploadToR2, deleteFromR2 } from '../services/r2.js';
 import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
+import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
 
 export const router = Router();
 
@@ -20,12 +21,13 @@ type QuoteRow = {
   status: string;
 };
 
-// POST /upload — upload audio, create ai_processing quote, send pg-boss job
+// POST /upload — upload audio, reuse or create ai_processing quote, send pg-boss job
 router.post(
   '/upload',
   authenticateToken,
   upload.single('audio'),
   async (req: Request, res: Response): Promise<void> => {
+    let quoteId: string | undefined;
     try {
       const contractorId = req.contractor!.contractorId;
 
@@ -34,14 +36,27 @@ router.post(
         return;
       }
 
-      const r2Key = `audio/${contractorId}/${uuidv4()}.m4a`;
-
-      // Create quote with ai_processing status
-      const quoteResult = await query(
-        `INSERT INTO quotes (contractor_id, status, total_cents) VALUES ($1, 'ai_processing', 0) RETURNING id`,
-        [contractorId]
+      const parsedParent = parseQuoteServerId(
+        (req.body as { quoteServerId?: unknown } | undefined)?.quoteServerId,
       );
-      const quoteId = (quoteResult.rows[0] as { id: string }).id;
+      if (!parsedParent.ok) {
+        res.status(400).json({ error: parsedParent.error });
+        return;
+      }
+
+      const resolved = await resolveVoiceUploadQuote(
+        query,
+        contractorId,
+        parsedParent.quoteServerId,
+      );
+      if (!resolved.ok) {
+        res.status(resolved.status).json({ error: resolved.error });
+        return;
+      }
+      quoteId = resolved.quoteId;
+      const created = resolved.created;
+
+      const r2Key = `audio/${contractorId}/${uuidv4()}.m4a`;
 
       let audioUploaded = false;
       let jobEnqueued = false;
@@ -59,15 +74,18 @@ router.post(
 
         res.status(202).json({ jobId, quoteId });
       } catch (pipelineErr) {
-        // If the job never queued, the quote would otherwise sit in ai_processing forever.
+        // If the job never queued, a brand-new quote would otherwise sit in
+        // ai_processing forever. Reused quotes may already have a running job.
         if (!jobEnqueued) {
-          try {
-            await query(
-              `UPDATE quotes SET status = 'ai_failed' WHERE id = $1 AND status = 'ai_processing'`,
-              [quoteId]
-            );
-          } catch (markErr) {
-            console.error('Failed to mark quote ai_failed after upload/enqueue error:', markErr);
+          if (created) {
+            try {
+              await query(
+                `UPDATE quotes SET status = 'ai_failed' WHERE id = $1 AND status = 'ai_processing'`,
+                [quoteId]
+              );
+            } catch (markErr) {
+              console.error('Failed to mark quote ai_failed after upload/enqueue error:', markErr);
+            }
           }
           if (audioUploaded) {
             try {
@@ -81,7 +99,13 @@ router.post(
       }
     } catch (err) {
       console.error('POST /voice/upload error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      // Include quoteId so a client that never got 202 can stamp serverId and
+      // retry against the same row instead of INSERT-ing a duplicate.
+      res.status(500).json(
+        quoteId
+          ? { error: 'Internal server error', quoteId }
+          : { error: 'Internal server error' },
+      );
     }
   }
 );

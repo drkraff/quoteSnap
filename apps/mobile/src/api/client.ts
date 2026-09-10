@@ -6,6 +6,8 @@ const API_BASE_URL: string =
 export interface ApiError {
   status: number;
   error: string;
+  /** Present on POST /voice/upload 500s after a quote row exists. */
+  quoteId?: string;
 }
 
 function hasErrorMessage(value: unknown): value is { error: string } {
@@ -15,6 +17,18 @@ function hasErrorMessage(value: unknown): value is { error: string } {
     'error' in value &&
     typeof (value as { error: unknown }).error === 'string'
   );
+}
+
+function optionalQuoteId(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null || !('quoteId' in data)) {
+    return undefined;
+  }
+  const value = (data as { quoteId: unknown }).quoteId;
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 export function isApiError(value: unknown): value is ApiError {
@@ -130,6 +144,10 @@ async function request<T>(
   if (!response.ok) {
     const errorMessage = hasErrorMessage(data) ? data.error : response.statusText;
     const apiError: ApiError = { status: response.status, error: errorMessage };
+    const quoteId = optionalQuoteId(data);
+    if (quoteId) {
+      apiError.quoteId = quoteId;
+    }
     throw apiError;
   }
 

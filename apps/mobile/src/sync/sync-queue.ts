@@ -18,7 +18,7 @@ import { Quote } from '../db/models/quote';
 import { Draft } from '../db/models/draft';
 import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
 import { createSingleFlight } from './single-flight';
-import { resolveAudioQuoteServerId } from './audio-parent';
+import { resolveAudioQuoteServerId, quoteServerIdFromUploadError } from './audio-parent';
 import { syncQueuedOnboardingSeed } from './offline-onboarding-seed';
 import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
 
@@ -170,15 +170,32 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     if (!quote) throw new Error('Cannot sync audio: quote not found');
 
     const quoteServerId = resolveAudioQuoteServerId(quote);
-    const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quoteServerId);
+    try {
+      const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quoteServerId);
 
-    // Store jobId and serverId on local quote
-    await database.write(async () => {
-      await quote.update((r) => {
-        r.voiceJobId = jobId;
-        r.serverId = serverQuoteId;
+      // Store jobId and serverId on local quote
+      await database.write(async () => {
+        await quote.update((r) => {
+          r.voiceJobId = jobId;
+          r.serverId = serverQuoteId;
+        });
       });
-    });
+    } catch (error) {
+      const knownServerId = quoteServerIdFromUploadError(error);
+      if (knownServerId && quote.serverId !== knownServerId) {
+        try {
+          await database.write(async () => {
+            await quote.update((r) => {
+              r.serverId = knownServerId;
+            });
+          });
+        } catch (stampErr) {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to stamp quote serverId after voice upload error:', stampErr);
+        }
+      }
+      throw error;
+    }
     return;
   }
 
