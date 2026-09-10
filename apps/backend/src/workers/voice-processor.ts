@@ -52,7 +52,10 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
       ...(whisperLanguage ? { language: whisperLanguage } : {}),
     });
     const transcript = transcription.text;
-    console.log(`[voice] transcript: "${transcript}"`);
+    // PII: do not log transcript text (CONTEXT invariant 11). Length only.
+    console.log(
+      `[voice] job ${job.id} quote ${quoteId} transcript chars=${transcript.length}`
+    );
 
     // Audio stays in R2 until GPT + DB write succeed so pg-boss retries can
     // re-fetch it. Deleted after commit (see below).
