@@ -75,12 +75,12 @@ There is no root `README.md`. Native `android/` and `ios/` are gitignored (Expo 
 | `/quotes` | list/create/update quotes + line items |
 | `/voice` | `POST /upload`, `GET /status/:jobId`, `GET /draft/:quoteId` |
 
-Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing-reaper.ts` (queue `ai-processing-reaper`, every minute). No Twilio, FCM, or approval-page routes.
+Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing-reaper.ts` (queue `ai-processing-reaper`, every minute). No Twilio, FCM, or approval-page routes. Postgres `contractors.fcm_token` is reserved for FAIL-08 / SMS-08 (COMMENT in migration `008`); unused — do not drop or implement FCM.
 
 ### Mobile screens (`apps/mobile/app`)
 
 - `(auth)` — login, register, onboarding (trade / seeding / ready)
-- `(app)` — quotes list (default authenticated entry after login/restore/onboarding), catalog, `voice-record`, `draft/[id]`, `quote/[id]`. Home tab is still a logout stub.
+- `(app)` — quotes list (default authenticated entry after login/restore/onboarding), catalog, `voice-record`, `draft/[id]`, `quote/[id]`. No Home tab; **Log Out** is a nav-header action (A-19). `/(app)` / index redirects to Quotes.
 
 ---
 
@@ -93,7 +93,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 5. **Confidence in the UI is tiers, never raw floats.** `confidenceTier()`: `≥0.85` clean (no badge), `0.60–0.84` “Review” (amber), `<0.60` “Needs Input” (red, auto-scroll). `LineItemRow` takes `'review' | 'needs_input'`.
 6. **Offline-first.** Quotes, catalog, drafts, and `sync_queue_items` live in WatermelonDB. Retrofitting online-first is a rewrite.
 7. **Backend ESM.** `apps/backend/package.json` has `"type": "module"`; `tsconfig` is NodeNext. Relative imports **must** use `.js` extensions (`from "./routes/auth.js"`).
-8. **WatermelonDB adapter:** `newArchEnabled: false` in `apps/mobile/app.config.ts`; `SQLiteAdapter({ jsi: false })` in `apps/mobile/src/db/index.ts`. Do not flip these without a native rebuild and device verification. (An early decision to enable JSI was reversed for RN 0.76.)
+8. **WatermelonDB adapter:** `newArchEnabled: false` in `apps/mobile/app.config.ts`; `SQLiteAdapter({ jsi: false })` in `apps/mobile/src/db/index.ts`. Do not flip these without a native rebuild and device verification. (An early decision to enable JSI was reversed for RN 0.76.) There is no Expo `web` target — product is mobile-first and the API has no CORS.
 9. **SQL is parameterized and tenant-scoped.** Catalog/quote lookups always include `contractor_id` from the JWT.
 10. **`failed_send` ≠ `ai_failed`.** `ai_failed` is the voice pipeline; `failed_send` is reserved for SMS (Phase 6).
 11. **Audio PII:** delete from R2 **after** Whisper + GPT + DB commit succeed, not immediately after transcription. Delete failures after success are logged; they must not fail the job (avoids duplicate line items on retry).

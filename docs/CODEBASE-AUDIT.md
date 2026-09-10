@@ -261,10 +261,12 @@ If an access token **is** present and `/auth/refresh` itself 401s, `getOrRefresh
 |------|--------|
 | `contractors.fcm_token` | Column only; FAIL-08 / SMS-08 not started |
 | Twilio / approval routes | None; Phase 6 |
-| `fetchCatalogItems` / `fetchQuotes` | Dead until A-02 |
+| `fetchCatalogItems` / `fetchQuotes` | Were unused at audit time; **now used by A-02 hydrate — keep them** |
 | Expo `web` in `app.config.ts` | Product is mobile-first; no CORS on the API |
 | `.gitignore` `review code/` | Leftover tooling path |
 | Quotes empty state | Reuses catalog “Add Item” copy |
+
+**Addressed (hygiene PR, not Phase 6):** Home tab removed (index redirects to Quotes; logout is a header action); quotes empty copy is quote-specific; Expo `web` dropped; `review code/` gitignore line removed; `fcm_token` COMMENT in migration `008` (column kept). Twilio/approval/FCM still not built.
 
 ### A-20 — Transcript logging
 

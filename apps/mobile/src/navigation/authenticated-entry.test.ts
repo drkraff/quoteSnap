@@ -99,19 +99,36 @@ describe('resolveSessionRedirect', () => {
     ).toBe(AUTHENTICATED_ENTRY_HREF);
   });
 
-  it('does not redirect when already in the app group', () => {
+  it('bounces the hidden Home index to Quotes (A-19)', () => {
     expect(
       resolveSessionRedirect({
         isAuthenticated: true,
         onboardingComplete: true,
         segments: ['(app)'],
       }),
-    ).toBeNull();
+    ).toBe(AUTHENTICATED_ENTRY_HREF);
+    expect(
+      resolveSessionRedirect({
+        isAuthenticated: true,
+        onboardingComplete: true,
+        segments: ['(app)', 'index'],
+      }),
+    ).toBe(AUTHENTICATED_ENTRY_HREF);
+  });
+
+  it('does not redirect when already on a product app screen', () => {
     expect(
       resolveSessionRedirect({
         isAuthenticated: true,
         onboardingComplete: true,
         segments: ['(app)', 'quotes'],
+      }),
+    ).toBeNull();
+    expect(
+      resolveSessionRedirect({
+        isAuthenticated: true,
+        onboardingComplete: true,
+        segments: ['(app)', 'catalog'],
       }),
     ).toBeNull();
   });

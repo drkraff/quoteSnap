@@ -27,11 +27,7 @@ const config: ExpoConfig = {
     },
     package: 'com.quotesnap.app',
   },
-  web: {
-    bundler: 'metro',
-    output: 'static',
-    favicon: './assets/favicon.png',
-  },
+  // No Expo web target (A-19). Product is mobile-first; the API has no CORS.
   plugins: [
     'expo-router',
     [

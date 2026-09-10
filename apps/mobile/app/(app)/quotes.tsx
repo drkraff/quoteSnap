@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  View,
   Text,
   FlatList,
   Pressable,
@@ -17,7 +16,7 @@ import { Draft } from '../../src/db/models/draft';
 import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
-import { EmptyState } from '../../src/components/catalog/empty-state';
+import { QuotesEmptyState } from '../../src/components/quotes/empty-state';
 import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
@@ -168,9 +167,7 @@ export default function QuotesScreen(): JSX.Element {
         renderItem={({ item }) => (
           <QuoteRow quote={item} onPress={handleQuotePress} />
         )}
-        ListEmptyComponent={
-          <EmptyState onAddItem={() => { void handleManualQuotePress(); }} />
-        }
+        ListEmptyComponent={<QuotesEmptyState />}
         contentContainerStyle={
           quotes.length === 0
             ? styles.emptyContent
