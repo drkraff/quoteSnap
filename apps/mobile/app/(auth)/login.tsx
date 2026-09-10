@@ -1,25 +1,34 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, Button, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
+import {
+  credentialsFromIdentifier,
+  parseAuthIdentifier,
+} from '../../src/auth/auth-identifier';
 import { useAuthStore } from '../../src/store/auth-store';
 
 export default function Login(): JSX.Element {
   const store = useAuthStore();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(): Promise<void> {
-    if (!email || !password) {
-      setError('Email and password are required.');
+    if (!identifier.trim() || !password) {
+      setError('Email or phone and password are required.');
+      return;
+    }
+    const parsed = parseAuthIdentifier(identifier);
+    if (!parsed.ok) {
+      setError(parsed.error);
       return;
     }
     setError(null);
     setLoading(true);
     try {
-      await store.login({ email, password });
+      await store.login(credentialsFromIdentifier(parsed.identifier, password));
     } catch (err: unknown) {
       const message =
         err !== null &&
@@ -41,12 +50,14 @@ export default function Login(): JSX.Element {
 
       <TextInput
         style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
+        placeholder="Email or phone number"
+        value={identifier}
+        onChangeText={setIdentifier}
         autoCapitalize="none"
-        keyboardType="email-address"
-        autoComplete="email"
+        autoCorrect={false}
+        keyboardType="default"
+        autoComplete="username"
+        textContentType="username"
       />
 
       <TextInput

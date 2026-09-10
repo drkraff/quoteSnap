@@ -12,6 +12,7 @@ import {
   TokenPair,
 } from "../types/auth.js";
 import { resolveLoginIdentifier } from "../auth/login-lookup.js";
+import { normalizeAuthPhone } from "../auth/auth-phone.js";
 import {
   INSERT_REFRESH_TOKEN_SQL,
   generateRefreshToken,
@@ -48,14 +49,16 @@ async function issueTokenPair(contractorId: string, email: string | null, phone:
 router.post("/register", authLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as RegisterBody;
-    const { email, phone, password, displayName } = body;
+    const { password, displayName } = body;
+    const email = typeof body.email === "string" ? body.email.trim() : "";
+    const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
 
     // Validate: password required, at least one of email or phone
     if (!password || password.length < 8) {
       res.status(400).json({ error: "Password must be at least 8 characters" });
       return;
     }
-    if (!email && !phone) {
+    if (!email && !phoneRaw) {
       res.status(400).json({ error: "Email or phone is required" });
       return;
     }
@@ -63,9 +66,14 @@ router.post("/register", authLimiter, async (req: Request, res: Response): Promi
       res.status(400).json({ error: "Invalid email format" });
       return;
     }
-    if (phone !== undefined && phone !== null && phone.trim() === "") {
-      res.status(400).json({ error: "Phone cannot be empty" });
-      return;
+
+    let phone: string | null = null;
+    if (phoneRaw) {
+      phone = normalizeAuthPhone(phoneRaw);
+      if (!phone) {
+        res.status(400).json({ error: "Invalid phone format" });
+        return;
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -74,7 +82,7 @@ router.post("/register", authLimiter, async (req: Request, res: Response): Promi
       `INSERT INTO contractors (email, phone, password_hash, display_name)
        VALUES ($1, $2, $3, $4)
        RETURNING id, email, phone, display_name, trade`,
-      [email ?? null, phone ?? null, passwordHash, displayName ?? null]
+      [email || null, phone, passwordHash, displayName ?? null]
     );
 
     const contractor = result.rows[0] as {
@@ -120,10 +128,20 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
       return;
     }
 
-    const identifier = resolveLoginIdentifier(email, phone);
-    if (!identifier) {
+    const resolved = resolveLoginIdentifier(email, phone);
+    if (!resolved) {
       res.status(400).json({ error: "Email or phone is required" });
       return;
+    }
+
+    let identifier = resolved;
+    if (identifier.field === "phone") {
+      const normalized = normalizeAuthPhone(identifier.value);
+      if (!normalized) {
+        res.status(400).json({ error: "Invalid phone format" });
+        return;
+      }
+      identifier = { field: "phone", value: normalized };
     }
 
     // Look up by exactly one identifier. An OR across email|phone with LIMIT 1

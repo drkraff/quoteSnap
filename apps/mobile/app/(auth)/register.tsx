@@ -1,32 +1,40 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
+import { Text, TextInput, Button, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
+import {
+  credentialsFromIdentifier,
+  parseAuthIdentifier,
+} from '../../src/auth/auth-identifier';
 import { useAuthStore } from '../../src/store/auth-store';
 
 export default function Register(): JSX.Element {
   const store = useAuthStore();
   const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleRegister(): Promise<void> {
-    if (!email || !password) {
-      setError('Email and password are required.');
+    if (!identifier.trim() || !password) {
+      setError('Email or phone and password are required.');
       return;
     }
     if (password.length < 8) {
       setError('Password must be at least 8 characters.');
       return;
     }
+    const parsed = parseAuthIdentifier(identifier);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
       await store.register({
-        email,
-        password,
+        ...credentialsFromIdentifier(parsed.identifier, password),
         displayName: displayName.trim() || undefined,
       });
     } catch (err: unknown) {
@@ -59,12 +67,14 @@ export default function Register(): JSX.Element {
 
       <TextInput
         style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
+        placeholder="Email or phone number"
+        value={identifier}
+        onChangeText={setIdentifier}
         autoCapitalize="none"
-        keyboardType="email-address"
-        autoComplete="email"
+        autoCorrect={false}
+        keyboardType="default"
+        autoComplete="username"
+        textContentType="username"
       />
 
       <TextInput
