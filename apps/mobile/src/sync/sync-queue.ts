@@ -3,6 +3,7 @@ import { SyncQueueItem } from '../db/models/sync-queue-item';
 import { isOnline, onConnectivityChange } from './network-monitor';
 import { Q } from '@nozbe/watermelondb';
 import { parseCatalogUnit } from '../catalog/units';
+import { catalogUpdateFromQueuePayload, catalogCreateSyncPayload } from '../catalog/create-sync-payload';
 import {
   archiveCatalogItem,
   createCatalogItem,
@@ -70,12 +71,16 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       if (localItems[0]?.serverId) {
         return;
       }
-      const response = await createCatalogItem({
-        name: payload.name as string,
-        unit: parseCatalogUnit(payload.unit) ?? (payload.unit as string),
-        unitPriceCents: payload.unitPriceCents as number,
-        tradeCategory: payload.tradeCategory as string | undefined,
-      });
+      const response = await createCatalogItem(
+        catalogCreateSyncPayload(
+          {
+            name: payload.name as string,
+            unit: parseCatalogUnit(payload.unit) ?? (payload.unit as string),
+            unitPriceCents: payload.unitPriceCents as number,
+          },
+          typeof payload.tradeCategory === 'string' ? payload.tradeCategory : null,
+        ),
+      );
       // Update local record with server ID
       if (localItems[0]) {
         await database.write(async () => {
@@ -99,14 +104,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       } else if (payload.isArchived === false) {
         await unarchiveCatalogItem(serverId);
       } else {
-        await updateCatalogItem(serverId, {
-          name: payload.name as string | undefined,
-          unit:
-            payload.unit === undefined
-              ? undefined
-              : (parseCatalogUnit(payload.unit) ?? (payload.unit as string)),
-          unitPriceCents: payload.unitPriceCents as number | undefined,
-        });
+        await updateCatalogItem(serverId, catalogUpdateFromQueuePayload(payload));
       }
     }
     return;
