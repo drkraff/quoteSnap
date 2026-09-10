@@ -3,6 +3,7 @@ import { fetchQuotes } from '../api/quotes';
 import { database } from '../db';
 import {
   hydrateFromServer,
+  mergeHydratedTradeCategory,
   resetHydrateForTests,
   toDraftLineItems,
   upsertCatalogItems,
@@ -92,6 +93,17 @@ function attachUpdate<T extends { update: (fn: (record: T) => void) => Promise<v
   };
   return row;
 }
+
+describe('mergeHydratedTradeCategory', () => {
+  it('keeps a local tradeCategory when the server stored null (A-15)', () => {
+    expect(mergeHydratedTradeCategory('plumbing', null)).toBe('plumbing');
+  });
+
+  it('uses the server category when it is present', () => {
+    expect(mergeHydratedTradeCategory('plumbing', 'electrical')).toBe('electrical');
+    expect(mergeHydratedTradeCategory(null, 'hvac')).toBe('hvac');
+  });
+});
 
 describe('toDraftLineItems', () => {
   it('remaps server catalog ids to local watermelon ids and keeps confidence', () => {
@@ -335,6 +347,38 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       name: 'Copper pipe',
       catalogItemId: catalogItems[0]!.id,
     });
+  });
+
+  it('does not wipe a local tradeCategory when the server row is null (A-15)', async () => {
+    const existing = attachUpdate<FakeCatalogItem>({
+      id: 'local-cat-keep',
+      serverId: 'srv-cat-1',
+      contractorId,
+      name: 'Custom Valve',
+      unit: 'each',
+      unitPriceCents: 12500,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    catalogItems = [existing];
+
+    await upsertCatalogItems(contractorId, [
+      {
+        id: 'srv-cat-1',
+        name: 'Custom Valve',
+        unit: 'each',
+        unitPriceCents: 12500,
+        tradeCategory: null,
+        isArchived: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+
+    expect(catalogItems).toHaveLength(1);
+    expect(catalogItems[0]!.tradeCategory).toBe('plumbing');
   });
 
   it('does not overwrite a local row that still has a pending write-queue item', async () => {

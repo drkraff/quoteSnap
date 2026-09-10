@@ -8,6 +8,7 @@ import {
 import { Q } from '@nozbe/watermelondb';
 import { database } from '../../src/db';
 import { CatalogItem } from '../../src/db/models/catalog-item';
+import { catalogCreateSyncPayload } from '../../src/catalog/create-sync-payload';
 import { enqueue, getPendingCount } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { CatalogRow } from '../../src/components/catalog/catalog-row';
@@ -138,11 +139,7 @@ export default function CatalogScreen(): JSX.Element {
           entityType: 'catalog_item',
           entityId: newItem.id,
           action: 'create',
-          payload: {
-            name: data.name,
-            unit: data.unit,
-            unitPriceCents: data.unitPriceCents,
-          },
+          payload: catalogCreateSyncPayload(data, trade),
         });
       }
       setSheetVisible(false);

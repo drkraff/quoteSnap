@@ -414,6 +414,29 @@ describe('processQueue', () => {
     expect(item.status).toBe('destroyed');
   });
 
+  it('forwards tradeCategory on catalog create so POST /catalog can persist it (A-15)', async () => {
+    const item = makeQueueItem({
+      payloadJson: JSON.stringify({
+        name: 'Custom Valve',
+        unit: 'each',
+        unitPriceCents: 12500,
+        tradeCategory: 'plumbing',
+      }),
+    });
+    queueItems = [item];
+    mockedCreateCatalogItem.mockResolvedValue({ id: 'server-1' });
+
+    await processQueue();
+
+    expect(mockedCreateCatalogItem).toHaveBeenCalledWith({
+      name: 'Custom Valve',
+      unit: 'each',
+      unitPriceCents: 12500,
+      tradeCategory: 'plumbing',
+    });
+    expect(item.status).toBe('destroyed');
+  });
+
   it('maps seeded alias units to canonical units on catalog update (A-04 CAT-02)', async () => {
     catalogItems = [
       {
@@ -438,10 +461,11 @@ describe('processQueue', () => {
 
     await processQueue();
 
-    expect(mockedUpdateCatalogItem).toHaveBeenCalledWith(
-      'srv-pipe',
-      expect.objectContaining({ name: 'Pipe Repair', unit: 'foot', unitPriceCents: 5000 }),
-    );
+    expect(mockedUpdateCatalogItem).toHaveBeenCalledWith('srv-pipe', {
+      name: 'Pipe Repair',
+      unit: 'foot',
+      unitPriceCents: 5000,
+    });
     expect(item.status).toBe('destroyed');
   });
 

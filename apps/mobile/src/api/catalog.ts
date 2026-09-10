@@ -36,7 +36,7 @@ export async function createCatalogItem(body: {
 
 export async function updateCatalogItem(
   serverId: string,
-  body: { name?: string; unit?: string; unitPriceCents?: number },
+  body: { name?: string; unit?: string; unitPriceCents?: number; tradeCategory?: string },
 ): Promise<CatalogItemResponse> {
   const data = await apiClient.put<CatalogCreateResponse>(`/catalog/${serverId}`, body);
   return data.item;

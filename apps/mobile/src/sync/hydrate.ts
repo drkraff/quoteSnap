@@ -23,6 +23,23 @@ function parseMs(iso: string): Date {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+/**
+ * Server-as-truth when the pull has a category. A null server value must not
+ * overwrite a local tradeCategory (A-15: create used to persist NULL).
+ */
+export function mergeHydratedTradeCategory(
+  local: string | null | undefined,
+  server: string | null,
+): string | null {
+  if (typeof server === 'string' && server.trim() !== '') {
+    return server;
+  }
+  if (typeof local === 'string' && local.trim() !== '') {
+    return local;
+  }
+  return server ?? local ?? null;
+}
+
 function catalogLocalIdByServerId(items: CatalogItem[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const item of items) {
@@ -95,7 +112,10 @@ export async function upsertCatalogItems(
           record.name = item.name;
           record.unit = parseCatalogUnit(item.unit) ?? item.unit;
           record.unitPriceCents = item.unitPriceCents;
-          record.tradeCategory = item.tradeCategory;
+          record.tradeCategory = mergeHydratedTradeCategory(
+            record.tradeCategory,
+            item.tradeCategory,
+          );
           record.isArchived = item.isArchived;
           record.updatedAt = parseMs(item.updatedAt);
         });
@@ -120,7 +140,10 @@ export async function upsertCatalogItems(
             record.name = item.name;
             record.unit = parseCatalogUnit(item.unit) ?? item.unit;
             record.unitPriceCents = item.unitPriceCents;
-            record.tradeCategory = item.tradeCategory;
+            record.tradeCategory = mergeHydratedTradeCategory(
+              record.tradeCategory,
+              item.tradeCategory,
+            );
             record.isArchived = item.isArchived;
             record.updatedAt = parseMs(item.updatedAt);
           });
@@ -135,7 +158,7 @@ export async function upsertCatalogItems(
         record.name = item.name;
         record.unit = parseCatalogUnit(item.unit) ?? item.unit;
         record.unitPriceCents = item.unitPriceCents;
-        record.tradeCategory = item.tradeCategory;
+        record.tradeCategory = mergeHydratedTradeCategory(null, item.tradeCategory);
         record.isArchived = item.isArchived;
         record.createdAt = parseMs(item.createdAt);
         record.updatedAt = parseMs(item.updatedAt);

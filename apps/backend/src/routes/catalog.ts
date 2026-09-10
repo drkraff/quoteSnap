@@ -3,6 +3,11 @@ import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
 import { applyCatalogArchivePatch } from "../catalog/archive.js";
 import {
+  INSERT_CATALOG_ITEM_SQL,
+  catalogCreateInsertParams,
+} from "../catalog/create.js";
+import { catalogUpdateAssignments } from "../catalog/update.js";
+import {
   catalogUnitErrorMessage,
   parseCatalogUnit,
 } from "../catalog/units.js";
@@ -86,13 +91,14 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
       return;
     }
 
-    const tradeCategory = body.tradeCategory ?? null;
-
     const result = await query(
-      `INSERT INTO catalog_items (contractor_id, name, unit, unit_price_cents, trade_category)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, unit, unit_price_cents, trade_category, is_archived, created_at, updated_at`,
-      [contractorId, body.name.trim(), unit, body.unitPriceCents, tradeCategory]
+      INSERT_CATALOG_ITEM_SQL,
+      catalogCreateInsertParams(contractorId, {
+        name: body.name,
+        unit,
+        unitPriceCents: body.unitPriceCents,
+        tradeCategory: body.tradeCategory,
+      })
     );
 
     const item = rowToResponse(result.rows[0] as CatalogRow);
@@ -110,16 +116,14 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
     const { id } = req.params as { id: string };
     const body = req.body as UpdateCatalogItemBody;
 
-    const setClauses: string[] = [];
-    const params: unknown[] = [];
+    const validated: UpdateCatalogItemBody = {};
 
     if (body.name !== undefined) {
       if (typeof body.name !== "string" || body.name.trim() === "") {
         res.status(400).json({ error: "name must be a non-empty string" });
         return;
       }
-      params.push(body.name.trim());
-      setClauses.push(`name = $${params.length}`);
+      validated.name = body.name.trim();
     }
 
     if (body.unit !== undefined) {
@@ -128,8 +132,7 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
         res.status(400).json({ error: catalogUnitErrorMessage() });
         return;
       }
-      params.push(unit);
-      setClauses.push(`unit = $${params.length}`);
+      validated.unit = unit;
     }
 
     if (body.unitPriceCents !== undefined) {
@@ -137,14 +140,14 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
         res.status(400).json({ error: "unitPriceCents must be an integer greater than 0" });
         return;
       }
-      params.push(body.unitPriceCents);
-      setClauses.push(`unit_price_cents = $${params.length}`);
+      validated.unitPriceCents = body.unitPriceCents;
     }
 
     if (body.tradeCategory !== undefined) {
-      params.push(body.tradeCategory);
-      setClauses.push(`trade_category = $${params.length}`);
+      validated.tradeCategory = body.tradeCategory;
     }
+
+    const { setClauses, params } = catalogUpdateAssignments(validated);
 
     if (setClauses.length === 0) {
       res.status(400).json({ error: "At least one field required" });
