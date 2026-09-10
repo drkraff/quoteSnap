@@ -21,6 +21,9 @@ import { createSingleFlight } from './single-flight';
 import { resolveAudioQuoteServerId, quoteServerIdFromUploadError } from './audio-parent';
 import { syncQueuedOnboardingSeed } from './offline-onboarding-seed';
 import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
+import { lineItemsFromQueuePayload } from './draft-conflict';
+import { fetchAndResolveDraftFork } from './draft-conflict-sync';
+import { rememberServerRevision } from './server-revision';
 
 const queueFlight = createSingleFlight();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -127,17 +130,32 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           });
         });
       }
+      rememberServerRevision(response.id, response.updatedAt);
     } else if (item.action === 'update') {
       const quoteCollection = database.get<Quote>('quotes');
       const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
       const serverId = localItems[0]?.serverId;
       if (!serverId) throw new Error('Cannot sync update: no server ID for quote');
-      await updateQuoteOnServer(serverId, {
+      const payloadLines = lineItemsFromQueuePayload(payload);
+      if (payloadLines && localItems[0]) {
+        const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', localItems[0].id)).fetch();
+        const parentDraft = drafts[0];
+        if (parentDraft) {
+          const outcome = await fetchAndResolveDraftFork({
+            quote: localItems[0],
+            draft: parentDraft,
+            localLines: payloadLines,
+          });
+          if (outcome === 'conflict') return;
+        }
+      }
+      const updated = await updateQuoteOnServer(serverId, {
         status: payload.status as string | undefined,
         customerPhone: payload.customerPhone as string | undefined,
         totalCents: payload.totalCents as number | undefined,
         lineItems: payload.lineItems as Array<{ name: string; quantity: number; unitPriceCents: number }> | undefined,
       });
+      rememberServerRevision(serverId, updated.updatedAt);
     }
     return;
   }
@@ -157,7 +175,15 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     const lineItemsRaw = payload.lineItemsJson as string | undefined;
     if (lineItemsRaw) {
       const items = JSON.parse(lineItemsRaw) as Array<{ name: string; quantity: number; unitPriceCents: number }>;
-      await updateQuoteOnServer(quote.serverId, { lineItems: items, totalCents: payload.totalCents as number | undefined });
+      const payloadLines = lineItemsFromQueuePayload(payload) ?? [];
+      const outcome = await fetchAndResolveDraftFork({
+        quote,
+        draft,
+        localLines: payloadLines,
+      });
+      if (outcome === 'conflict') return;
+      const updated = await updateQuoteOnServer(quote.serverId, { lineItems: items, totalCents: payload.totalCents as number | undefined });
+      rememberServerRevision(quote.serverId, updated.updatedAt);
     }
     return;
   }

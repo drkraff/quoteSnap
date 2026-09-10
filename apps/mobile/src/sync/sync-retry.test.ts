@@ -59,9 +59,10 @@ describe('isQueueItemDue', () => {
     expect(isQueueItemDue({ status: 'pending', nextRetryAtMs: now - 1 }, now)).toBe(true);
   });
 
-  it('treats in_progress as due (stale claim) and never retries dead_letter', () => {
+  it('treats in_progress as due (stale claim), never retries dead_letter, and leaves needs_review parked', () => {
     expect(isQueueItemDue({ status: 'in_progress', nextRetryAtMs: now + 99_000 }, now)).toBe(true);
     expect(isQueueItemDue({ status: 'dead_letter', nextRetryAtMs: null }, now)).toBe(false);
+    expect(isQueueItemDue({ status: 'needs_review', nextRetryAtMs: null }, now)).toBe(false);
   });
 });
 

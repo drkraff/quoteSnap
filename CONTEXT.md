@@ -16,9 +16,9 @@ Core loop on `master`: register/login → trade onboarding + catalog seed → ca
 
 ---
 
-## Status on `master` (2026-09-07)
+## Status on `master` (2026-09-10)
 
-Verified against HEAD `7d841fd` (merges of GitHub PRs #8 and #9 on top of #7). Re-check GitHub before treating anything else as landed.
+Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#33** plus **SYNC-05** (draft conflict UX) in this tree.
 
 | Phase | In code? | Honest status |
 |-------|----------|----------------|
@@ -28,7 +28,7 @@ Verified against HEAD `7d841fd` (merges of GitHub PRs #8 and #9 on top of #7). R
 | 4 Quote review + history | Yes | Shipped (`REVIEW-*`, `HIST-*`). |
 | 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
 | 6 SMS + customer approval | No | Not started (`SMS-01`…`SMS-10`). |
-| 7 Sync hardening + 16 failure scenarios | Partial | **PR #8 landed `SYNC-03`:** retry/backoff then `dead_letter`. **`SYNC-04` dead-letter UI** lists stuck items with Retry. Conflict UX (`SYNC-05`) and `FAIL-*` coverage are **not** done. |
+| 7 Sync hardening + 16 failure scenarios | Partial | **`SYNC-03`** retry/backoff then `dead_letter`. **`SYNC-04`** dead-letter UI. **`SYNC-05`** server-as-truth + “Review before sending” on pre-send draft forks. **`SYNC-06`** and **`FAIL-*`** are **not** done. |
 | Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` scripts exist for Railway. `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `eas.json` / `railway.toml` in the repo.** Do not claim a live demo deploy. |
 
 Recent **merged** work to reflect if you mention status:
@@ -40,6 +40,8 @@ Recent **merged** work to reflect if you mention status:
 - **PR #8** — mobile sync queue: failures stay `pending` with `nextRetryAt` backoff; `dead_letter` after the 15m attempt fails; `createSingleFlight` so overlapping `processQueue` calls do not double-write; `resolveAudioQuoteServerId` (no empty parent id on `/voice/upload`); NetInfo unsubscribe + root-layout teardown. Also picks up pre-existing `failed` rows.
 - **PR #9** — pg-boss cron `ai-processing-reaper` (`* * * * *` UTC) marks quotes still `ai_processing` older than `AI_PROCESSING_TIMEOUT_MS` (default 15 minutes) as `ai_failed`. `GET /voice/status/:jobId` returns `{ status: 'failed' }` when the owned quote is already `ai_failed`, even if the pg-boss job is still active or gone, so the mobile poller stops.
 - **SYNC-04** — Quotes/Catalog banner + header warning open a Sync issues screen of `dead_letter` queue items (plain-language entity/action + Retry). Live WatermelonDB observe; Retry resets to `pending` and kicks `processQueue`.
+- **PR #33** — quotes-list poller recovers `ai_processing` rows that have a `serverId` but no `voiceJobId` (`GET /quotes/:id`).
+- **SYNC-05** — WatermelonDB pull is server-as-truth. A dirty pre-send draft whose line items disagree with the server is **not** last-write-wins: local is replaced from the server and Send is blocked behind a visible **Review before sending** prompt (`needs_review` queue marker, not dead-letter). Backend `PUT /quotes` 409 remains status-lock only (`Quote cannot be updated in its current status`). Content forks are detected client-side (hydrate + GET-before-PUT / GET-before-send vs last observed `updatedAt`).
 
 **Still open (docs, not these fixes):**
 
@@ -59,7 +61,7 @@ apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
 apps/backend/src/db/migrations/   001_foundation … 007_money_status_checks
 apps/mobile/src/db/               schema v2, models, SQLiteAdapter
-apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate
+apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate (server-as-truth; SYNC-05 draft forks → needs_review)
 .github/workflows/ci.yml
 ```
 
@@ -140,15 +142,14 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), and voice upload quote reuse vs create. Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue`, auth 401 handling, login/restore catalog+quote hydrate, offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, and quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`).
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), and voice upload quote reuse vs create. Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue`, auth 401 handling, login/restore catalog+quote hydrate, offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), and SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`).
 
 ---
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master` after PRs #8, #9, #12, and #13**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, or login/restore hydrate.
+These are **on `master` after PRs #8, #9, #12, #13, #31, #32, and #33**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, or SYNC-05 draft-conflict handling.
 
-- **Draft conflict UX (`SYNC-05`)** is not built. Dead-letter UI (`SYNC-04`) lists stuck queue items with Retry.
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).
 - **Mic denied** shows an in-app Alert + Settings link (`voice-record.tsx`); other `FAIL-*` scenarios are incomplete. `WORKFLOW-failure-edge-cases.md` is referenced by `FAIL-01` and **is not in the repo**.

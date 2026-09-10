@@ -31,6 +31,18 @@ import {
 } from '../../../src/utils/line-items';
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
+import { isOnline } from '../../../src/sync/network-monitor';
+import {
+  REVIEW_BEFORE_SENDING,
+  comparableLineItems,
+  sendBlockedByReview,
+} from '../../../src/sync/draft-conflict';
+import { fetchAndResolveDraftFork } from '../../../src/sync/draft-conflict-sync';
+import {
+  acknowledgeDraftReview,
+  isNeedsReviewForDraft,
+} from '../../../src/sync/draft-conflict-queue';
+import { SyncQueueItem } from '../../../src/db/models/sync-queue-item';
 import { useAuthStore } from '../../../src/store/auth-store';
 import { createDraftPhoneSync } from '../../../src/quotes/draft-phone-sync';
 import { QUOTE_NOT_FOUND, findQuoteRecord } from '../../../src/quotes/find-quote';
@@ -40,6 +52,7 @@ import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picke
 import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
+import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review-before-sending-banner';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function DraftScreen(): JSX.Element {
@@ -60,6 +73,7 @@ export default function DraftScreen(): JSX.Element {
   const [showUndo, setShowUndo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [needsReview, setNeedsReview] = useState(false);
 
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -151,6 +165,19 @@ export default function DraftScreen(): JSX.Element {
     const sub = draft.observe().subscribe((updated) => {
       setLineItems(parseLineItems(updated.lineItemsJson));
     });
+    return () => sub.unsubscribe();
+  }, [draft]);
+
+  // SYNC-05: live needs_review flag for this draft
+  useEffect(() => {
+    if (!draft) return;
+    const sub = database
+      .get<SyncQueueItem>('sync_queue_items')
+      .query()
+      .observe()
+      .subscribe((items) => {
+        setNeedsReview(items.some((item) => isNeedsReviewForDraft(item, draft.id)));
+      });
     return () => sub.unsubscribe();
   }, [draft]);
 
@@ -363,6 +390,10 @@ export default function DraftScreen(): JSX.Element {
       setValidationError('Draft not loaded — please go back and try again');
       return;
     }
+    if (sendBlockedByReview(needsReview)) {
+      setValidationError(REVIEW_BEFORE_SENDING);
+      return;
+    }
     if (!canSend(lineItems.length, phone)) {
       if (lineItems.length === 0) {
         setValidationError('Add at least one item before sending');
@@ -370,6 +401,18 @@ export default function DraftScreen(): JSX.Element {
         setValidationError('Enter a valid phone number to continue');
       }
       return;
+    }
+    if (isOnline() && quote.serverId) {
+      const outcome = await fetchAndResolveDraftFork({
+        quote,
+        draft,
+        localLines: comparableLineItems(lineItems),
+      });
+      if (outcome === 'conflict') {
+        setNeedsReview(true);
+        setValidationError(REVIEW_BEFORE_SENDING);
+        return;
+      }
     }
     await database.write(async () => {
       await quote.update((r) => {
@@ -411,7 +454,7 @@ export default function DraftScreen(): JSX.Element {
     );
   }
 
-  const sendEnabled = canSend(lineItems.length, phone);
+  const sendEnabled = canSend(lineItems.length, phone) && !needsReview;
 
   return (
     <KeyboardAvoidingView
@@ -442,15 +485,28 @@ export default function DraftScreen(): JSX.Element {
           flatListRef.current?.scrollToOffset({ offset, animated: true });
         }}
         ListHeaderComponent={
-          quoteStatus === 'ai_failed' ? (
-            <AiFailedBanner
-              onRerecord={() => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                router.push('/voice-record' as any);
-              }}
-              onAddItems={() => setShowCatalogPicker(true)}
-            />
-          ) : null
+          <>
+            {needsReview ? (
+              <ReviewBeforeSendingBanner
+                onAcknowledge={() => {
+                  if (!draft) return;
+                  void acknowledgeDraftReview(draft.id).then(() => {
+                    setNeedsReview(false);
+                    setValidationError('');
+                  });
+                }}
+              />
+            ) : null}
+            {quoteStatus === 'ai_failed' ? (
+              <AiFailedBanner
+                onRerecord={() => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  router.push('/voice-record' as any);
+                }}
+                onAddItems={() => setShowCatalogPicker(true)}
+              />
+            ) : null}
+          </>
         }
         ListEmptyComponent={
           <EmptyState onAddItem={() => setShowCatalogPicker(true)} />

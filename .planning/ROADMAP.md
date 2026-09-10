@@ -16,7 +16,7 @@ Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-07 again
 | 4 Quote review + history | REVIEW-01…06, HIST-01…04 | Yes | |
 | 5 Voice-to-quote | VOICE-01…09 | Yes | Code-complete; physical Android UAT still open |
 | 6 SMS + approval | SMS-01…10 | No | Do not implement unless asked |
-| 7 Sync hardening | SYNC-03…06, FAIL-01…08 | Partial | SYNC-03 retry/backoff/`dead_letter` (PR #8); SYNC-04 dead-letter UI; SYNC-05 and FAIL-* not done |
+| 7 Sync hardening | SYNC-03…06, FAIL-01…08 | Partial | SYNC-03 retry/backoff/`dead_letter` (PR #8); SYNC-04 dead-letter UI; SYNC-05 draft conflict UX; SYNC-06 and FAIL-* not done |
 | Backlog 999.1 Railway + EAS | — | Partial | Root `build`/`start` + `EXPO_PUBLIC_API_URL`; no `eas.json` in repo |
 
 Do not start Phase 6, Phase 7 product work, or Railway/EAS from this roadmap alone.

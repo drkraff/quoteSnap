@@ -53,7 +53,7 @@ export const schema = appSchema({
         // action: create | update | delete | seed
         { name: 'payload_json', type: 'string' },
         { name: 'status', type: 'string' },
-        // status: pending | in_progress | failed | dead_letter
+        // status: pending | in_progress | failed | dead_letter | needs_review
         { name: 'retry_count', type: 'number' },
         { name: 'last_error', type: 'string', isOptional: true },
         { name: 'created_at', type: 'number' },

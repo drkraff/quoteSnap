@@ -9,6 +9,8 @@ import {
   upsertCatalogItems,
   upsertQuotes,
 } from './hydrate';
+import { NEEDS_REVIEW_STATUS } from './draft-conflict';
+import { resetServerRevisionsForTests } from './server-revision';
 
 jest.mock('../db', () => ({
   database: {
@@ -70,9 +72,15 @@ type FakeDraft = {
 };
 
 type FakeQueueItem = {
+  id?: string;
   entityType: string;
   entityId: string;
+  action?: string;
   status: string;
+  payloadJson?: string;
+  retryCount?: number;
+  nextRetryAt?: Date | null;
+  destroyPermanently?: () => Promise<void>;
 };
 
 const mockedDatabase = database as unknown as {
@@ -156,6 +164,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
 
   beforeEach(() => {
     resetHydrateForTests();
+    resetServerRevisionsForTests();
     catalogItems = [];
     quotes = [];
     drafts = [];
@@ -218,6 +227,24 @@ describe('upsertCatalogItems / upsertQuotes', () => {
           });
           writer(record);
           drafts.push(record);
+          return record;
+        }
+        if (table === 'sync_queue_items') {
+          const record: FakeQueueItem = {
+            id: `local-queue-${createSeq}`,
+            entityType: '',
+            entityId: '',
+            action: '',
+            payloadJson: '',
+            status: '',
+            retryCount: 0,
+            nextRetryAt: null,
+            async destroyPermanently() {
+              queueItems = queueItems.filter((item) => item !== record);
+            },
+          };
+          writer(record as unknown as Record<string, unknown>);
+          queueItems.push(record);
           return record;
         }
         throw new Error(`unexpected create on ${table}`);
@@ -549,6 +576,129 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       status: 'ai_processing',
       voiceJobId: 'job-xyz',
     });
+  });
+
+  it('applies server line items on a dirty draft fork and parks needs_review (SYNC-05)', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Pipe', quantity: 2, unitPriceCents: 1500 },
+        { name: 'Elbow', quantity: 1, unitPriceCents: 400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    const pending: FakeQueueItem = {
+      entityType: 'draft',
+      entityId: 'local-draft-1',
+      action: 'update',
+      status: 'pending',
+      async destroyPermanently() {
+        pending.status = 'destroyed';
+      },
+    };
+    queueItems = [pending];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          {
+            id: 'li-1',
+            name: 'Pipe',
+            quantity: 1,
+            unitPriceCents: 1500,
+          },
+        ],
+      },
+    ]);
+
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+    ]);
+    expect(localQuote.customerPhone).toBe('+15550001111');
+    expect(pending.status).toBe('destroyed');
+    const review = queueItems.find((item) => item.status === NEEDS_REVIEW_STATUS);
+    expect(review).toMatchObject({
+      entityType: 'draft',
+      entityId: 'local-draft-1',
+      status: NEEDS_REVIEW_STATUS,
+    });
+  });
+
+  it('does not park needs_review when a dirty draft already matches the server', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 1500,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [{ entityType: 'draft', entityId: 'local-draft-1', action: 'update', status: 'pending' }];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          {
+            id: 'li-1',
+            name: 'Pipe',
+            quantity: 1,
+            unitPriceCents: 1500,
+          },
+        ],
+      },
+    ]);
+
+    expect(localDraft.lineItemsJson).toContain('Pipe');
+    expect(queueItems).toHaveLength(1);
+    expect(queueItems[0]!.status).toBe('pending');
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
   });
 });
 
