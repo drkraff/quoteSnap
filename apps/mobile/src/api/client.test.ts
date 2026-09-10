@@ -229,4 +229,27 @@ describe('apiClient auth vs resource 401 handling', () => {
     expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
     expect(fetchCalls().map((call) => call.path)).toEqual(['/quotes', '/auth/refresh']);
   });
+
+  it('preserves quoteId on a 500 so voice upload retries can reuse the server quote', async () => {
+    useAuthStore.setState({
+      accessToken: 'valid-access',
+      refreshToken: 'valid-refresh',
+      contractor,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    (global.fetch as jest.Mock).mockResolvedValueOnce(
+      jsonResponse(
+        500,
+        { error: 'Internal server error', quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+        'Internal Server Error',
+      ),
+    );
+
+    await expect(apiClient.post('/voice/upload', { unused: true })).rejects.toMatchObject({
+      status: 500,
+      error: 'Internal server error',
+      quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+  });
 });

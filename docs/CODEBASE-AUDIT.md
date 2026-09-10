@@ -57,8 +57,8 @@ Do **not** re-open these as primary work unless a new regression shows up. Verif
 |----|---------------------------|--------------------------------------------------|
 | **#5** | CI workflow, typecheck/test scripts | — |
 | **#6** | Phase 5 physical UAT runbook (`docs/UAT-PHASE5.md`) | Device UAT not signed off |
-| **#7** | Login identifier lock-down; UUID catalog filter; R2 delete after commit; `ai_failed` on upload/enqueue failure; Whisper default `en`; AI failures ≠ `failed_send` | **`POST /voice/upload` still ignores `quoteServerId` and always INSERTs a new quote.** A 500 after enqueue can still insert a second server quote on client retry. Local `ai_processing` without `voiceJobId` is still not polled. |
-| **#8** | Sync retry/backoff/`dead_letter`, single-flight `processQueue`, audio parent guard, NetInfo unsubscribe | Dead-letter **UI** (`SYNC-04`) and draft conflict UX (`SYNC-05`) are not built. `getDeadLetterItems()` exists with no screen. |
+| **#7** | Login identifier lock-down; UUID catalog filter; R2 delete after commit; `ai_failed` on upload/enqueue failure; Whisper default `en`; AI failures ≠ `failed_send` | **`quoteServerId` reuse is implemented** (`POST /voice/upload` + mobile retry stamp). Local `ai_processing` without `voiceJobId` is still not polled. |
+| **#8** | Sync retry/backoff/`dead_letter`, single-flight `processQueue`, audio parent guard, NetInfo unsubscribe | Dead-letter **UI** (`SYNC-04`) shipped (PR #31). Draft conflict UX (`SYNC-05`) is not built. |
 | **#9** | `ai-processing-reaper`; `/voice/status` returns `failed` when quote is `ai_failed` | Poller still requires `voiceJobId` (see #7 leftover) |
 | **#10** | `CONTEXT.md` / planning stubs | — |
 

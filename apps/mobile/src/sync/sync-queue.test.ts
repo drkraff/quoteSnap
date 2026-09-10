@@ -377,6 +377,74 @@ describe('processQueue', () => {
     expect(item.status).toBe('destroyed');
   });
 
+  it('passes a known quote server id so a retry does not create a second quote', async () => {
+    const quote = makeQuote({
+      status: 'ai_processing',
+      serverId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'audio',
+      entityId: quote.id,
+      payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: quote.id }),
+    });
+    queueItems = [item];
+    mockedUploadAudio.mockResolvedValue({
+      jobId: 'job-2',
+      quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+
+    await processQueue();
+
+    expect(mockedUploadAudio).toHaveBeenCalledWith(
+      '/tmp/a.m4a',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    );
+    expect(quote.serverId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    expect(quote.voiceJobId).toBe('job-2');
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('stamps quoteId from a 500 so the next retry can reuse the server row', async () => {
+    const quote = makeQuote({ status: 'ai_processing', serverId: null });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'audio',
+      entityId: quote.id,
+      payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: quote.id }),
+    });
+    queueItems = [item];
+    mockedUploadAudio.mockRejectedValue({
+      status: 500,
+      error: 'Internal server error',
+      quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+
+    await processQueue();
+
+    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
+    expect(quote.serverId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    expect(quote.voiceJobId).toBeNull();
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(1);
+
+    mockedUploadAudio.mockReset();
+    mockedUploadAudio.mockResolvedValue({
+      jobId: 'job-2',
+      quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+    item.nextRetryAt = new Date(Date.now() - 1);
+
+    await processQueue();
+
+    expect(mockedUploadAudio).toHaveBeenCalledWith(
+      '/tmp/a.m4a',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    );
+    expect(quote.voiceJobId).toBe('job-2');
+    expect(item.status).toBe('destroyed');
+  });
+
   it('processes an onboarding seed job and stamps local catalog ids', async () => {
     const local = {
       id: 'local-cat-1',

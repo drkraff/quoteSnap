@@ -140,7 +140,7 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, and quotes list payload nesting (`voiceJobId` + line items). Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue`, auth 401 handling, login/restore catalog+quote hydrate, and offline onboarding seed enqueue / 409 de-dupe.
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), and voice upload quote reuse vs create. Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue`, auth 401 handling, login/restore catalog+quote hydrate, offline onboarding seed enqueue / 409 de-dupe, and voice-upload retry passing `quoteServerId`.
 
 ---
 
@@ -149,7 +149,7 @@ Root `package.json` has no `test` script; CI invokes workspaces. On current `mas
 These are **on `master` after PRs #8, #9, #12, and #13**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, or login/restore hydrate.
 
 - **Draft conflict UX (`SYNC-05`)** is not built. Dead-letter UI (`SYNC-04`) lists stuck queue items with Retry.
-- **Local `ai_processing` without `voiceJobId` is still not polled** (`quotes.tsx` requires `voiceJobId`). Hydrate now copies `voice_job_id` when the server has it. The server reaper will mark the **server** row `ai_failed` after the timeout; a local row that never received a job id will not learn that unless a later poll/sync path exists. A 500 after enqueue can still insert a second server quote on client retry (PR #7 leftover).
+- **Local `ai_processing` without `voiceJobId` is still not polled** (`quotes.tsx` requires `voiceJobId`). Hydrate now copies `voice_job_id` when the server has it. The server reaper will mark the **server** row `ai_failed` after the timeout; a local row that never received a job id will not learn that unless a later poll/sync path exists. `POST /voice/upload` reuses a tenant-owned `quoteServerId` instead of always INSERT-ing (PR #7 leftover).
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).
 - **Mic denied** shows an in-app Alert + Settings link (`voice-record.tsx`); other `FAIL-*` scenarios are incomplete. `WORKFLOW-failure-edge-cases.md` is referenced by `FAIL-01` and **is not in the repo**.

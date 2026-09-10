@@ -208,4 +208,20 @@ describe('voice API uses apiClient refresh', () => {
       '/auth/logout',
     ]);
   });
+
+  it('surfaces quoteId from a 500 so the queue can stamp serverId before retry', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(
+      jsonResponse(
+        500,
+        { error: 'Internal server error', quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+        'Internal Server Error',
+      ),
+    );
+
+    await expect(uploadAudio('file:///recordings/job.m4a')).rejects.toMatchObject({
+      status: 500,
+      error: 'Internal server error',
+      quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+  });
 });
