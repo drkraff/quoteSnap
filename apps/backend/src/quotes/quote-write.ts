@@ -6,15 +6,17 @@ import {
   type QuoteLineItemRow,
   type QuoteRow,
 } from "../routes/quotes-payload.js";
+import {
+  CLIENT_QUOTE_STATUSES,
+  isClientQuoteStatus,
+  type ClientQuoteStatus,
+} from "./statuses.js";
+
+export { CLIENT_QUOTE_STATUSES, isClientQuoteStatus };
+export type { ClientQuoteStatus };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** HIST-01 statuses. Voice worker/reaper own ai_processing; contractors may recover ai_failed into a manual draft (A-10). Phase 6 owns sent/approved/declined/expired/failed_send. */
-export const CLIENT_QUOTE_STATUSES = ["draft_local", "draft_queued"] as const;
-export type ClientQuoteStatus = (typeof CLIENT_QUOTE_STATUSES)[number];
-
-const CLIENT_QUOTE_STATUS_SET: ReadonlySet<string> = new Set(CLIENT_QUOTE_STATUSES);
 
 export type QuoteWriteQueryFn = (
   text: string,
@@ -63,10 +65,6 @@ export type ParsedQuoteCreateBody =
 export type QuotePutOutcome =
   | { status: 400 | 409 | 404; json: { error: string } }
   | { status: 200; json: { quote: QuoteResponse } };
-
-export function isClientQuoteStatus(value: string): value is ClientQuoteStatus {
-  return CLIENT_QUOTE_STATUS_SET.has(value);
-}
 
 export function isQuoteEditable(status: string): boolean {
   return isClientQuoteStatus(status) || status === "ai_failed";
