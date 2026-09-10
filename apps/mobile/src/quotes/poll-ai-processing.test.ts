@@ -1,7 +1,6 @@
 import {
   pollOneAiProcessingQuote,
   shouldPollAiProcessing,
-  type PollAiProcessingDeps,
   type PollableAiQuote,
 } from './poll-ai-processing';
 
@@ -15,14 +14,16 @@ function quote(overrides: Partial<PollableAiQuote> = {}): PollableAiQuote {
   };
 }
 
-function deps(overrides: Partial<PollAiProcessingDeps> = {}): PollAiProcessingDeps & {
+type TestDeps = {
   getVoiceStatus: jest.Mock;
   fetchQuote: jest.Mock;
   getDraftLineItems: jest.Mock;
   markDraftReady: jest.Mock;
   markFailed: jest.Mock;
   stampVoiceJobId: jest.Mock;
-} {
+};
+
+function deps(overrides: Partial<TestDeps> = {}): TestDeps {
   return {
     getVoiceStatus: jest.fn(),
     fetchQuote: jest.fn(),
