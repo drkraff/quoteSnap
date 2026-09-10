@@ -56,7 +56,7 @@ npm workspaces, two apps:
 ```
 apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
-apps/backend/src/db/migrations/   001_foundation … 005_ai_failed
+apps/backend/src/db/migrations/   001_foundation … 007_money_status_checks
 apps/mobile/src/db/               schema v2, models, SQLiteAdapter
 apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate
 .github/workflows/ci.yml
@@ -108,7 +108,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 - `.env.example` shows Postgres on **5432**.
 - Local convention documented in this repo: Docker container `quotesnap-db` is published on **5433** so it does not collide with a host Postgres on 5432. Match the port in the `.env` you actually use.
 - Start DB before the API: `docker start quotesnap-db`
-- Migrations: `cd apps/backend && npm run migrate` (files `001`…`005`).
+- Migrations: `cd apps/backend && npm run migrate` (files `001`…`007`).
 
 ### Backend
 
