@@ -22,8 +22,13 @@ import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
 import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
+import { fetchQuote } from '../../src/api/quotes';
 import { isOnline } from '../../src/sync/network-monitor';
 import { quotePressTarget } from '../../src/quotes/status-display';
+import {
+  pollOneAiProcessingQuote,
+  shouldPollAiProcessing,
+} from '../../src/quotes/poll-ai-processing';
 
 // Tab bar height constant (safe default for both iOS/Android)
 const TAB_BAR_HEIGHT = 56;
@@ -50,9 +55,9 @@ export default function QuotesScreen(): JSX.Element {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Polling for ai_processing quotes
+  // Polling for ai_processing quotes (job id, or serverId so we can recover one)
   useEffect(() => {
-    const processingQuotes = quotes.filter((q) => q.status === 'ai_processing' && q.voiceJobId);
+    const processingQuotes = quotes.filter(shouldPollAiProcessing);
 
     if (processingQuotes.length === 0) {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
@@ -61,46 +66,55 @@ export default function QuotesScreen(): JSX.Element {
 
     async function pollProcessing(): Promise<void> {
       for (const q of processingQuotes) {
-        if (!q.voiceJobId) continue;
         try {
-          const result = await getVoiceStatus(q.voiceJobId);
-          if (result.status === 'complete' && result.draftId) {
-            try {
-              const draftData = await getDraftLineItems(result.draftId);
-              await database.write(async () => {
-                // Write line items JSON to the draft record BEFORE updating quote status
-                const draftCollection = database.get<Draft>('drafts');
-                const drafts = await draftCollection.query(Q.where('quote_id', q.id)).fetch();
-                if (drafts.length > 0) {
-                  const draft = drafts[0]!;
-                  await draft.update((d) => {
-                    d.lineItemsJson = JSON.stringify(draftData.lineItems);
+          const outcome = await pollOneAiProcessingQuote(
+            {
+              id: q.id,
+              status: q.status,
+              serverId: q.serverId,
+              voiceJobId: q.voiceJobId,
+            },
+            {
+              getVoiceStatus,
+              fetchQuote,
+              getDraftLineItems,
+              async markDraftReady(_quote, lineItemsJson) {
+                await database.write(async () => {
+                  // Write line items JSON to the draft record BEFORE updating quote status
+                  const draftCollection = database.get<Draft>('drafts');
+                  const drafts = await draftCollection.query(Q.where('quote_id', q.id)).fetch();
+                  if (drafts.length > 0) {
+                    const draft = drafts[0]!;
+                    await draft.update((d) => {
+                      d.lineItemsJson = lineItemsJson;
+                    });
+                  }
+                  await q.update((r) => {
+                    r.status = 'draft_local';
                   });
-                }
-                // Then transition the quote status so the UI updates
-                await q.update((r) => {
-                  r.status = 'draft_local';
                 });
-              });
-            } catch {
-              // If getDraftLineItems fails (network), still transition status so the quote
-              // is not stuck in ai_processing forever. lineItemsJson stays '[]'.
-              await database.write(async () => {
-                await q.update((r) => {
-                  r.status = 'draft_local';
+              },
+              async markFailed() {
+                await database.write(async () => {
+                  await q.update((r) => {
+                    r.status = 'ai_failed';
+                  });
                 });
-              });
-            }
+              },
+              async stampVoiceJobId(_quote, jobId) {
+                await database.write(async () => {
+                  await q.update((r) => {
+                    r.voiceJobId = jobId;
+                  });
+                });
+              },
+            },
+          );
+          if (outcome === 'draft_ready') {
             setReadyDraftId(q.id);
-          } else if (result.status === 'failed') {
-            await database.write(async () => {
-              await q.update((r) => {
-                r.status = 'ai_failed';
-              });
-            });
           }
         } catch {
-          // Network error — will retry next poll
+          // Network / DB error — will retry next poll
         }
       }
       pollTimerRef.current = setTimeout(() => { void pollProcessing(); }, 1500);
