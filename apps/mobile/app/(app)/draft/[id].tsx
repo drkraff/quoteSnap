@@ -32,6 +32,8 @@ import {
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
 import { useAuthStore } from '../../../src/store/auth-store';
+import { createDraftPhoneSync } from '../../../src/quotes/draft-phone-sync';
+import { QUOTE_NOT_FOUND, findQuoteRecord } from '../../../src/quotes/find-quote';
 import { LineItemRow } from '../../../src/components/quotes/line-item-row';
 import { PriceEditSheet } from '../../../src/components/quotes/price-edit-sheet';
 import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picker-sheet';
@@ -57,40 +59,82 @@ export default function DraftScreen(): JSX.Element {
   const [undoItem, setUndoItem] = useState<{ item: LineItem; index: number } | null>(null);
   const [showUndo, setShowUndo] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const quoteRef = useRef<Quote | null>(null);
+  const phoneWriteGen = useRef(0);
+  const phoneSync = useRef(
+    createDraftPhoneSync(async ({ quoteId, customerPhone }) => {
+      await enqueue({
+        entityType: 'quote',
+        entityId: quoteId,
+        action: 'update',
+        payload: { customerPhone },
+      });
+    }),
+  ).current;
 
   // Load quote + draft on mount. Voice/hydrate usually already wrote a draft;
   // create an empty one if missing so catalog add works on ai_failed quotes.
   useEffect(() => {
+    let cancelled = false;
+
     async function load(): Promise<void> {
-      const q = await database.get<Quote>('quotes').find(id);
-      setQuote(q);
-      setQuoteStatus(q.status);
-      setPhone(q.customerPhone ?? '');
-      const draftCollection = database.get<Draft>('drafts');
-      const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
-      if (drafts[0]) {
-        setDraft(drafts[0]);
-        setLineItems(parseLineItems(drafts[0].lineItemsJson));
-      } else {
-        let createdId = '';
-        await database.write(async () => {
-          const created = await draftCollection.create((r) => {
-            r.quoteId = id;
-            r.lineItemsJson = '[]';
-          });
-          createdId = created.id;
-        });
-        const created = await draftCollection.find(createdId);
-        setDraft(created);
-        setLineItems([]);
+      const found = await findQuoteRecord(() =>
+        database.get<Quote>('quotes').find(id),
+      );
+      if (cancelled) return;
+      if (!found.ok) {
+        setLoadError(found.error);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      try {
+        const q = found.record;
+        quoteRef.current = q;
+        phoneSync.markSynced({
+          quoteId: q.id,
+          customerPhone: q.customerPhone ?? '',
+        });
+        setQuote(q);
+        setQuoteStatus(q.status);
+        setPhone(q.customerPhone ?? '');
+        const draftCollection = database.get<Draft>('drafts');
+        const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
+        if (cancelled) return;
+        if (drafts[0]) {
+          setDraft(drafts[0]);
+          setLineItems(parseLineItems(drafts[0].lineItemsJson));
+        } else {
+          let createdId = '';
+          await database.write(async () => {
+            const created = await draftCollection.create((r) => {
+              r.quoteId = id;
+              r.lineItemsJson = '[]';
+            });
+            createdId = created.id;
+          });
+          const created = await draftCollection.find(createdId);
+          if (cancelled) return;
+          setDraft(created);
+          setLineItems([]);
+        }
+        setLoading(false);
+      } catch {
+        if (cancelled) return;
+        setLoadError(QUOTE_NOT_FOUND);
+        setLoading(false);
+      }
     }
+
     void load();
-  }, [id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, phoneSync]);
 
   // Subscribe to quote status (ai_failed → draft_local recovery)
   useEffect(() => {
@@ -144,14 +188,15 @@ export default function DraftScreen(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineItems.length]); // Only on initial load, not every edit
 
-  // Clean up undo timer on unmount
+  // Clean up undo timer and flush a pending phone enqueue on unmount
   useEffect(() => {
     return () => {
       if (undoTimerRef.current) {
         clearTimeout(undoTimerRef.current);
       }
+      void phoneSync.flush();
     };
-  }, []);
+  }, [phoneSync]);
 
   /** Local + queued recovery so A-06 PUT can accept line items / send. */
   async function recoverFromAiFailed(): Promise<void> {
@@ -293,24 +338,27 @@ export default function DraftScreen(): JSX.Element {
     setShowCatalogPicker(false);
   }
 
-  async function handlePhoneChange(text: string): Promise<void> {
-    setPhone(text);
-    setValidationError('');
-    if (!quote) return;
+  async function persistPhoneLocal(q: Quote, text: string): Promise<void> {
+    const gen = ++phoneWriteGen.current;
     await database.write(async () => {
-      await quote.update((r) => {
+      if (gen !== phoneWriteGen.current) return;
+      await q.update((r) => {
         r.customerPhone = text;
       });
     });
-    await enqueue({
-      entityType: 'quote',
-      entityId: quote.id,
-      action: 'update',
-      payload: { customerPhone: text },
-    });
+  }
+
+  function handlePhoneChange(text: string): void {
+    setPhone(text);
+    setValidationError('');
+    const q = quoteRef.current;
+    if (!q) return;
+    void persistPhoneLocal(q, text);
+    phoneSync.schedule({ quoteId: q.id, customerPhone: text });
   }
 
   async function handleSendPress(): Promise<void> {
+    await phoneSync.flush();
     if (!quote || !draft) {
       setValidationError('Draft not loaded — please go back and try again');
       return;
@@ -351,6 +399,14 @@ export default function DraftScreen(): JSX.Element {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (loadError || !quote) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>{loadError || QUOTE_NOT_FOUND}</Text>
       </View>
     );
   }
@@ -426,7 +482,8 @@ export default function DraftScreen(): JSX.Element {
           placeholder="Customer phone number"
           placeholderTextColor={colors.mutedText}
           value={phone}
-          onChangeText={(text) => { void handlePhoneChange(text); }}
+          onChangeText={handlePhoneChange}
+          onBlur={() => { void phoneSync.flush(); }}
           returnKeyType="done"
         />
         {validationError.length > 0 && (
@@ -487,6 +544,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: spacing.xl,
     backgroundColor: colors.dominant,
   },
   addItemButton: {
@@ -525,6 +583,14 @@ const styles = StyleSheet.create({
   },
   phoneInputDefault: {
     borderColor: colors.border,
+  },
+  errorText: {
+    fontSize: typography.body.fontSize,
+    fontWeight: typography.body.fontWeight,
+    lineHeight: typography.body.lineHeight,
+    color: colors.mutedText,
+    textAlign: 'center',
+    paddingHorizontal: spacing.xl,
   },
   validationError: {
     fontSize: typography.label.fontSize,
