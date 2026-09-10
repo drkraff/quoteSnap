@@ -1,4 +1,6 @@
-/** Quotes is the contractor-facing product surface (A-12). Not the Home stub. */
+import { isHiddenAppIndex } from './app-tabs';
+
+/** Quotes is the contractor-facing product surface (A-12). Home is gone (A-19). */
 export const AUTHENTICATED_ENTRY_HREF = '/(app)/quotes' as const;
 
 export const LOGIN_HREF = '/(auth)/login' as const;
@@ -35,6 +37,9 @@ export function resolveSessionRedirect(args: {
   }
 
   if (inAppGroup) {
+    if (isHiddenAppIndex(args.segments)) {
+      return AUTHENTICATED_ENTRY_HREF;
+    }
     return null;
   }
 
