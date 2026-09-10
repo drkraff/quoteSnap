@@ -1,8 +1,7 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
-import { query } from "../db/connection.js";
+import { query, withTransaction } from "../db/connection.js";
 import { authLimiter } from "../auth/auth-limiter.js";
 import {
   ContractorPayload,
@@ -13,6 +12,12 @@ import {
   TokenPair,
 } from "../types/auth.js";
 import { resolveLoginIdentifier } from "../auth/login-lookup.js";
+import {
+  INSERT_REFRESH_TOKEN_SQL,
+  generateRefreshToken,
+  hashRefreshToken,
+  rotateRefreshToken,
+} from "../auth/refresh.js";
 
 export const router = Router();
 
@@ -27,25 +32,13 @@ function generateAccessToken(payload: ContractorPayload): string {
   return jwt.sign(payload, secret, { expiresIn: "15m" });
 }
 
-function generateRefreshToken(): string {
-  return crypto.randomBytes(32).toString("hex");
-}
-
-function hashToken(token: string): string {
-  return crypto.createHash("sha256").update(token).digest("hex");
-}
-
 async function issueTokenPair(contractorId: string, email: string | null, phone: string | null): Promise<TokenPair> {
   const payload: ContractorPayload = { contractorId, email, phone };
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken();
-  const tokenHash = hashToken(refreshToken);
+  const tokenHash = hashRefreshToken(refreshToken);
 
-  await query(
-    `INSERT INTO refresh_tokens (contractor_id, token_hash, expires_at)
-     VALUES ($1, $2, NOW() + INTERVAL '30 days')`,
-    [contractorId, tokenHash]
-  );
+  await query(INSERT_REFRESH_TOKEN_SQL, [contractorId, tokenHash]);
 
   return { accessToken, refreshToken };
 }
@@ -202,49 +195,14 @@ router.post("/refresh", authLimiter, async (req: Request, res: Response): Promis
       return;
     }
 
-    const tokenHash = hashToken(refreshToken);
-
-    const tokenResult = await query(
-      `SELECT rt.id, rt.contractor_id
-       FROM refresh_tokens rt
-       WHERE rt.token_hash = $1
-         AND rt.revoked_at IS NULL
-         AND rt.expires_at > NOW()`,
-      [tokenHash]
+    const outcome = await withTransaction((txQuery) =>
+      rotateRefreshToken(txQuery, {
+        refreshToken,
+        signAccessToken: generateAccessToken,
+      }),
     );
 
-    if (tokenResult.rows.length === 0) {
-      res.status(401).json({ error: "Invalid or expired refresh token" });
-      return;
-    }
-
-    const tokenRow = tokenResult.rows[0] as { id: string; contractor_id: string };
-
-    const contractorResult = await query(
-      `SELECT id, email, phone FROM contractors WHERE id = $1`,
-      [tokenRow.contractor_id]
-    );
-
-    if (contractorResult.rows.length === 0) {
-      res.status(401).json({ error: "Invalid or expired refresh token" });
-      return;
-    }
-
-    const contractor = contractorResult.rows[0] as {
-      id: string;
-      email: string | null;
-      phone: string | null;
-    };
-
-    // Revoke old refresh token (token rotation)
-    await query(
-      `UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1`,
-      [tokenRow.id]
-    );
-
-    const tokens = await issueTokenPair(contractor.id, contractor.email, contractor.phone);
-
-    res.status(200).json(tokens);
+    res.status(outcome.status).json(outcome.json);
   } catch (err) {
     console.error("Refresh error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -259,7 +217,7 @@ router.post("/logout", async (req: Request, res: Response): Promise<void> => {
     const { refreshToken } = body;
 
     if (refreshToken) {
-      const tokenHash = hashToken(refreshToken);
+      const tokenHash = hashRefreshToken(refreshToken);
       await query(
         `UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1`,
         [tokenHash]

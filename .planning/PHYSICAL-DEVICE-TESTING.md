@@ -32,7 +32,7 @@ Run through this before plugging anything in. All items must be true.
 | 4 | `adb devices` lists the phone as `device` (not `unauthorized` or `offline`) | Run from any terminal: `adb devices` |
 | 5 | Docker Desktop is running | `docker ps` returns without error |
 | 6 | `quotesnap-db` container is up on port 5433 | `docker ps --filter "name=quotesnap-db"` |
-| 7 | Backend `apps/backend/.env` has all required keys | At minimum: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `OPENAI_API_KEY`, R2 keys |
+| 7 | Backend `apps/backend/.env` has all required keys | At minimum: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `OPENAI_API_KEY`, R2 keys (`JWT_REFRESH_SECRET` is unused) |
 | 8 | Mobile API base URL points to your laptop's LAN IP, not `10.0.2.2` | See **Critical: API base URL** below |
 
 ---
