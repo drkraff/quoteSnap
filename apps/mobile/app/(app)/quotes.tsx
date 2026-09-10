@@ -24,6 +24,7 @@ import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { fetchQuote } from '../../src/api/quotes';
 import { isOnline } from '../../src/sync/network-monitor';
+import { rememberServerRevision } from '../../src/sync/server-revision';
 import { quotePressTarget } from '../../src/quotes/status-display';
 import {
   pollOneAiProcessingQuote,
@@ -112,6 +113,16 @@ export default function QuotesScreen(): JSX.Element {
           );
           if (outcome === 'draft_ready') {
             setReadyDraftId(q.id);
+            const serverId = q.serverId;
+            if (serverId) {
+              void fetchQuote(serverId)
+                .then((remote) => {
+                  rememberServerRevision(serverId, remote.quote.updatedAt);
+                })
+                .catch(() => {
+                  // Offline — next hydrate/GET will stamp the revision.
+                });
+            }
           }
         } catch {
           // Network / DB error — will retry next poll

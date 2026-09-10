@@ -1,14 +1,27 @@
 import { Q } from '@nozbe/watermelondb';
 import { fetchCatalogItems, type CatalogItemResponse } from '../api/catalog';
 import { parseCatalogUnit } from '../catalog/units';
-import { fetchQuotes, type QuoteLineItemResponse, type QuoteListItem } from '../api/quotes';
+import { fetchQuotes, type QuoteListItem } from '../api/quotes';
 import { database } from '../db';
 import type { CatalogItem } from '../db/models/catalog-item';
 import type { Draft } from '../db/models/draft';
 import type { Quote } from '../db/models/quote';
 import type { SyncQueueItem } from '../db/models/sync-queue-item';
-import { serializeLineItems, type LineItem } from '../utils/line-items';
+import { parseLineItems, serializeLineItems } from '../utils/line-items';
+import { applyServerQuoteInWrite } from './apply-server-quote';
+import {
+  comparableLineItems,
+  shouldApplyHydrateDraftConflict,
+} from './draft-conflict';
+import {
+  dropPendingQuoteDraftUpdatesInWrite,
+  ensureNeedsReviewInWrite,
+} from './draft-conflict-queue';
+import { toDraftLineItems } from './draft-line-items';
+import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
+
+export { toDraftLineItems } from './draft-line-items';
 
 const hydrateFlight = createSingleFlight();
 
@@ -48,28 +61,6 @@ function catalogLocalIdByServerId(items: CatalogItem[]): Map<string, string> {
     }
   }
   return map;
-}
-
-export function toDraftLineItems(
-  lineItems: QuoteLineItemResponse[],
-  localIdByServerCatalogId: Map<string, string>,
-): LineItem[] {
-  return lineItems.map((item) => {
-    const serverCatalogId = item.catalogItemId ?? '';
-    const localCatalogId = serverCatalogId
-      ? (localIdByServerCatalogId.get(serverCatalogId) ?? serverCatalogId)
-      : '';
-    const line: LineItem = {
-      catalogItemId: localCatalogId,
-      name: item.name,
-      quantity: item.quantity,
-      unitPriceCents: item.unitPriceCents,
-    };
-    if (item.confidence != null) {
-      line.confidence = item.confidence;
-    }
-    return line;
-  });
 }
 
 async function blockingEntityIds(entityType: string): Promise<Set<string>> {
@@ -202,19 +193,10 @@ export async function upsertQuotes(
     }
 
     for (const quote of quotes) {
+      rememberServerRevision(quote.id, quote.updatedAt);
+
       let local = quoteByServerId.get(quote.id);
-      if (local) {
-        if (!blockedQuoteIds.has(local.id)) {
-          await local.update((record) => {
-            record.status = quote.status;
-            record.customerPhone = quote.customerPhone;
-            record.totalCents = quote.totalCents;
-            record.updatedAt = parseMs(quote.updatedAt);
-            record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
-            record.voiceJobId = quote.voiceJobId;
-          });
-        }
-      } else {
+      if (!local) {
         local = await quoteCollection.create((record) => {
           record.serverId = quote.id;
           record.contractorId = contractorId;
@@ -230,10 +212,39 @@ export async function upsertQuotes(
       }
       const localQuote = local;
 
-      const lineItemsJson = serializeLineItems(
-        toDraftLineItems(quote.lineItems ?? [], localCatalogIds),
-      );
+      const serverLineItems = toDraftLineItems(quote.lineItems ?? [], localCatalogIds);
+      const lineItemsJson = serializeLineItems(serverLineItems);
       const draft = draftByQuoteId.get(localQuote.id);
+      const dirty =
+        blockedQuoteIds.has(localQuote.id)
+        || (draft != null && blockedDraftIds.has(draft.id));
+      const forked =
+        draft != null
+        && shouldApplyHydrateDraftConflict({
+          dirty,
+          serverStatus: quote.status,
+          localLines: comparableLineItems(parseLineItems(draft.lineItemsJson)),
+          serverLines: comparableLineItems(serverLineItems),
+        });
+
+      if (forked && draft) {
+        // SYNC-05: server-as-truth, then park Review-before-sending (do not leave the PUT in the queue).
+        await applyServerQuoteInWrite(localQuote, draft, quote, lineItemsJson);
+        await dropPendingQuoteDraftUpdatesInWrite(localQuote.id, draft.id);
+        await ensureNeedsReviewInWrite(draft.id);
+        continue;
+      }
+
+      if (!blockedQuoteIds.has(localQuote.id)) {
+        await localQuote.update((record) => {
+          record.status = quote.status;
+          record.customerPhone = quote.customerPhone;
+          record.totalCents = quote.totalCents;
+          record.updatedAt = parseMs(quote.updatedAt);
+          record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
+          record.voiceJobId = quote.voiceJobId;
+        });
+      }
       if (draft) {
         if (!blockedDraftIds.has(draft.id)) {
           await draft.update((record) => {
@@ -264,7 +275,9 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * Idempotent: rows are keyed by server_id and re-running does not duplicate.
  * Local-only rows (server_id null) are left alone unless a pulled item shares
  * a name — then the local row is adopted (A-03 offline seed de-dupe).
- * Does not touch the write queue. Failures propagate to the caller.
+ * Catalog and unblocked quotes are server-as-truth. A dirty pre-send draft whose
+ * line items disagree with the server is applied from the server and parked as
+ * `needs_review` (SYNC-05) instead of a silent queue overwrite. Failures propagate.
  */
 export async function hydrateFromServer(contractorId: string): Promise<void> {
   return hydrateFlight.run(() => hydrateOnce(contractorId));

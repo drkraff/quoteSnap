@@ -10,6 +10,9 @@ import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
 import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems } from './sync-queue';
+import { fetchQuote, updateQuoteOnServer } from '../api/quotes';
+import { NEEDS_REVIEW_STATUS } from './draft-conflict';
+import { rememberServerRevision, resetServerRevisionsForTests } from './server-revision';
 
 jest.mock('../db', () => ({
   database: {
@@ -42,6 +45,7 @@ jest.mock('../api/voice', () => ({
 jest.mock('../api/quotes', () => ({
   createQuoteOnServer: jest.fn(),
   updateQuoteOnServer: jest.fn(),
+  fetchQuote: jest.fn(),
 }));
 
 type FakeQueueItem = {
@@ -61,7 +65,12 @@ type FakeQueueItem = {
 type FakeQuote = {
   id: string;
   serverId: string | null;
+  contractorId: string;
   status: string;
+  customerPhone: string | null;
+  totalCents: number;
+  updatedAt: Date;
+  sentAt: Date | null;
   voiceJobId: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
@@ -69,6 +78,9 @@ type FakeQuote = {
 type FakeDraft = {
   id: string;
   quoteId: string;
+  lineItemsJson: string;
+  updatedAt: Date;
+  update: (fn: (record: FakeDraft) => void) => Promise<void>;
 };
 
 type FakeCatalogItem = {
@@ -90,6 +102,8 @@ const mockedUnarchiveCatalogItem = unarchiveCatalogItem as unknown as jest.Mock;
 const mockedUploadAudio = uploadAudio as unknown as jest.Mock;
 const mockedSeedCatalog = seedCatalog as unknown as jest.Mock;
 const mockedFetchCatalogItems = fetchCatalogItems as unknown as jest.Mock;
+const mockedFetchQuote = fetchQuote as unknown as jest.Mock;
+const mockedUpdateQuoteOnServer = updateQuoteOnServer as unknown as jest.Mock;
 
 function makeQueueItem(overrides: Partial<FakeQueueItem> = {}): FakeQueueItem {
   const item: FakeQueueItem = {
@@ -117,7 +131,12 @@ function makeQuote(overrides: Partial<FakeQuote> = {}): FakeQuote {
   const quote: FakeQuote = {
     id: 'local-quote-1',
     serverId: null,
+    contractorId: 'contractor-1',
     status: 'ai_processing',
+    customerPhone: null,
+    totalCents: 0,
+    updatedAt: new Date(0),
+    sentAt: null,
     voiceJobId: null,
     async update(fn) {
       fn(quote);
@@ -125,6 +144,20 @@ function makeQuote(overrides: Partial<FakeQuote> = {}): FakeQuote {
     ...overrides,
   };
   return quote;
+}
+
+function makeDraft(overrides: Partial<FakeDraft> = {}): FakeDraft {
+  const draft: FakeDraft = {
+    id: 'd1',
+    quoteId: 'q1',
+    lineItemsJson: '[]',
+    updatedAt: new Date(0),
+    async update(fn) {
+      fn(draft);
+    },
+    ...overrides,
+  };
+  return draft;
 }
 
 describe('processQueue', () => {
@@ -147,6 +180,9 @@ describe('processQueue', () => {
     mockedUploadAudio.mockReset();
     mockedSeedCatalog.mockReset();
     mockedFetchCatalogItems.mockReset();
+    mockedFetchQuote.mockReset();
+    mockedUpdateQuoteOnServer.mockReset();
+    resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
         fetch: async () => {
@@ -158,6 +194,18 @@ describe('processQueue', () => {
         },
         fetchCount: async () => queueItems.filter((i) => i.status === 'pending').length,
       }),
+      create: async (writer: (record: FakeQueueItem) => void) => {
+        const record = makeQueueItem({
+          entityType: '',
+          entityId: '',
+          action: '',
+          payloadJson: '',
+          status: '',
+        });
+        writer(record);
+        queueItems.push(record);
+        return record;
+      },
     }));
   });
 
@@ -343,7 +391,7 @@ describe('processQueue', () => {
   it('does not destroy a draft when the parent quote has not synced yet', async () => {
     const quote = makeQuote({ id: 'q1', status: 'draft_local', serverId: null });
     quotes = [quote];
-    drafts = [{ id: 'd1', quoteId: 'q1' }];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
     const item = makeQueueItem({
       entityType: 'draft',
       entityId: 'd1',
@@ -669,5 +717,130 @@ describe('processQueue', () => {
     expect(mockedArchiveCatalogItem).not.toHaveBeenCalled();
     expect(mockedUpdateCatalogItem).not.toHaveBeenCalled();
     expect(item.status).toBe('destroyed');
+  });
+
+  it('PUTs a draft when the server revision is unchanged (unpushed local edits)', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T12:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+      },
+      lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+    });
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+        totalCents: 3000,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(item.status).toBe('destroyed');
+    expect(queueItems.some((row) => row.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
+  it('still PUTs a draft when the conflict GET fails', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    mockedFetchQuote.mockRejectedValue(new Error('network down'));
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+        totalCents: 3000,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('does not PUT a forked draft; applies server lines and parks needs_review', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    const draft = makeDraft({
+      id: 'd1',
+      quoteId: 'q1',
+      lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+    });
+    quotes = [quote];
+    drafts = [draft];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T13:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+      },
+      lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+        totalCents: 3000,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+    expect(JSON.parse(draft.lineItemsJson)).toEqual([
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+    ]);
+    expect(quote.customerPhone).toBe('+15550001111');
+    expect(queueItems.some((row) => row.status === NEEDS_REVIEW_STATUS)).toBe(true);
   });
 });
