@@ -88,10 +88,10 @@ describe("007_money_status_checks.sql", () => {
 
   it("repairs out-of-range rows before ADD CONSTRAINT so existing data can migrate", () => {
     const sql = loadMigration();
-    const addConstraintAt = sql.indexOf("ADD CONSTRAINT");
-    assert.ok(addConstraintAt > 0);
+    const alterAt = sql.search(/^ALTER TABLE /m);
+    assert.ok(alterAt > 0);
 
-    const preamble = sql.slice(0, addConstraintAt);
+    const preamble = sql.slice(0, alterAt);
     assert.match(preamble, /UPDATE catalog_items/);
     assert.match(preamble, /UPDATE quotes[\s\S]*total_cents = 0/);
     assert.match(preamble, /UPDATE quote_line_items[\s\S]*quantity = 1/);
