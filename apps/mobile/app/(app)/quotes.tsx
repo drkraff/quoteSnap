@@ -17,7 +17,9 @@ import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
 import { QuotesEmptyState } from '../../src/components/quotes/empty-state';
+import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
 import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
+import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { isOnline } from '../../src/sync/network-monitor';
@@ -33,6 +35,7 @@ export default function QuotesScreen(): JSX.Element {
   const [isCreating, setIsCreating] = useState(false);
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deadLetterItems = useDeadLetterItems();
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
@@ -167,6 +170,15 @@ export default function QuotesScreen(): JSX.Element {
         renderItem={({ item }) => (
           <QuoteRow quote={item} onPress={handleQuotePress} />
         )}
+        ListHeaderComponent={
+          <DeadLetterBanner
+            count={deadLetterItems.length}
+            onPress={() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              router.push('/sync-issues' as any);
+            }}
+          />
+        }
         ListEmptyComponent={<QuotesEmptyState />}
         contentContainerStyle={
           quotes.length === 0

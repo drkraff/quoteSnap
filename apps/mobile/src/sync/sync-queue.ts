@@ -20,6 +20,7 @@ import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sy
 import { createSingleFlight } from './single-flight';
 import { resolveAudioQuoteServerId } from './audio-parent';
 import { syncQueuedOnboardingSeed } from './offline-onboarding-seed';
+import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
 
 const queueFlight = createSingleFlight();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -298,9 +299,28 @@ export async function getPendingCount(): Promise<number> {
   return collection.query(Q.where('status', 'pending')).fetchCount();
 }
 
+export function deadLetterItemsQuery() {
+  return database
+    .get<SyncQueueItem>('sync_queue_items')
+    .query(Q.where('status', 'dead_letter'), Q.sortBy('created_at', 'desc'));
+}
+
 export async function getDeadLetterItems(): Promise<SyncQueueItem[]> {
-  const collection = database.get<SyncQueueItem>('sync_queue_items');
-  return collection.query(Q.where('status', 'dead_letter')).fetch();
+  return deadLetterItemsQuery().fetch();
+}
+
+/** SYNC-04: re-queue a dead-letter item and kick `processQueue`. */
+export async function retryDeadLetterItem(item: SyncQueueItem): Promise<void> {
+  if (!canRetryDeadLetter(item.status)) return;
+  const patch = deadLetterRetryPatch();
+  await database.write(async () => {
+    await item.update((record) => {
+      record.status = patch.status;
+      record.retryCount = patch.retryCount;
+      record.nextRetryAt = patch.nextRetryAt;
+    });
+  });
+  await processQueue();
 }
 
 export function resetSyncQueueForTests(): void {

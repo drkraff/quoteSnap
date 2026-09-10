@@ -6,6 +6,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Q } from '@nozbe/watermelondb';
+import { useRouter } from 'expo-router';
 import { database } from '../../src/db';
 import { CatalogItem } from '../../src/db/models/catalog-item';
 import { catalogCreateSyncPayload } from '../../src/catalog/create-sync-payload';
@@ -17,6 +18,8 @@ import { EmptyState } from '../../src/components/catalog/empty-state';
 import { Fab } from '../../src/components/catalog/fab';
 import { ItemFormSheet } from '../../src/components/catalog/item-form-sheet';
 import { UndoToast } from '../../src/components/catalog/undo-toast';
+import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
+import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
 import { colors } from '../../src/theme/tokens';
 
 interface CatalogSection {
@@ -44,6 +47,7 @@ function groupByCategory(items: CatalogItem[]): CatalogSection[] {
 
 // Screen title: "My Catalog" — set via _layout.tsx Tabs.Screen headerTitle
 export default function CatalogScreen(): JSX.Element {
+  const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [sections, setSections] = useState<CatalogSection[]>([]);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -51,6 +55,7 @@ export default function CatalogScreen(): JSX.Element {
   const [pendingCount, setPendingCount] = useState(0);
   const [archivedItem, setArchivedItem] = useState<CatalogItem | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
+  const deadLetterItems = useDeadLetterItems();
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
@@ -225,6 +230,15 @@ export default function CatalogScreen(): JSX.Element {
         )}
         ListEmptyComponent={
           <EmptyState onAddItem={handleFabPress} />
+        }
+        ListHeaderComponent={
+          <DeadLetterBanner
+            count={deadLetterItems.length}
+            onPress={() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              router.push('/sync-issues' as any);
+            }}
+          />
         }
         stickySectionHeadersEnabled={true}
         contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}

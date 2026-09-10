@@ -80,7 +80,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [x] **SYNC-01**: All quotes, catalog items, and drafts live in local SQLite; the app is fully functional without network
 - [x] **SYNC-02**: A background sync queue pushes changes to the server when connectivity is available
 - [x] **SYNC-03**: Sync retry schedule: 5s → 15s → 60s → 5m → 15m → dead-letter after max retries
-- [ ] **SYNC-04**: Dead-letter items are surfaced to the contractor with a plain-language error and retry option
+- [x] **SYNC-04**: Dead-letter items are surfaced to the contractor with a plain-language error and retry option
 - [ ] **SYNC-05**: WatermelonDB uses server-as-truth conflict resolution; draft conflicts (pre-send) surface as a visible "Review before sending" prompt — not silent resolution
 - [ ] **SYNC-06**: Quote snapshots (post-send) are unaffected by sync state — approval page integrity is guaranteed
 
@@ -188,7 +188,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 | SYNC-01 | Phase 1 | Complete |
 | SYNC-02 | Phase 1 | Complete |
 | SYNC-03 | Phase 7 | Complete |
-| SYNC-04 | Phase 7 | Pending |
+| SYNC-04 | Phase 7 | Complete |
 | SYNC-05 | Phase 7 | Pending |
 | SYNC-06 | Phase 7 | Pending |
 | FAIL-01 | Phase 7 | Pending |
@@ -207,4 +207,4 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-07 — IDs preserved; HIST-01 statuses include ai_processing/ai_failed; SMS-10 gate is Phase 6; SYNC-03 complete after PR #8; status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-10 — IDs preserved; SYNC-04 dead-letter UI; status narrative lives in CONTEXT.md*
