@@ -9,7 +9,7 @@ import { seedCatalog } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
-import { processQueue, resetSyncQueueForTests } from './sync-queue';
+import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems } from './sync-queue';
 
 jest.mock('../db', () => ({
   database: {
@@ -218,6 +218,88 @@ describe('processQueue', () => {
     expect(item.status).toBe('dead_letter');
     expect(item.retryCount).toBe(6);
     expect(item.nextRetryAt).toBeNull();
+  });
+
+  it('re-queues a dead-letter item and processes it (SYNC-04 retry)', async () => {
+    const item = makeQueueItem({
+      status: 'dead_letter',
+      retryCount: 6,
+      lastError: 'still down',
+      nextRetryAt: null,
+    });
+    queueItems = [item];
+    mockedCreateCatalogItem.mockResolvedValue({ id: 'server-1' });
+
+    await retryDeadLetterItem(item as never);
+
+    expect(mockedCreateCatalogItem).toHaveBeenCalledTimes(1);
+    expect(item.status).toBe('destroyed');
+    expect(item.retryCount).toBe(0);
+  });
+
+  it('does not retry items that are not dead_letter', async () => {
+    const item = makeQueueItem({
+      status: 'pending',
+      retryCount: 2,
+      nextRetryAt: new Date(Date.now() + 60_000),
+    });
+    queueItems = [item];
+    mockedCreateCatalogItem.mockResolvedValue({ id: 'server-1' });
+
+    await retryDeadLetterItem(item as never);
+
+    expect(mockedCreateCatalogItem).not.toHaveBeenCalled();
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(2);
+  });
+
+  it('resets retry count so a failed retry starts SYNC-03 backoff again', async () => {
+    const item = makeQueueItem({
+      status: 'dead_letter',
+      retryCount: 6,
+      lastError: 'still down',
+      nextRetryAt: null,
+    });
+    queueItems = [item];
+    mockedCreateCatalogItem.mockRejectedValue(new Error('network down'));
+
+    await retryDeadLetterItem(item as never);
+
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(1);
+    expect(item.nextRetryAt).toBeInstanceOf(Date);
+    expect(item.lastError).toBe('network down');
+  });
+
+  it('re-queues a dead-letter item while offline without pushing', async () => {
+    mockedIsOnline.mockReturnValue(false);
+    const item = makeQueueItem({
+      status: 'dead_letter',
+      retryCount: 6,
+      lastError: 'still down',
+      nextRetryAt: null,
+    });
+    queueItems = [item];
+
+    await retryDeadLetterItem(item as never);
+
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(0);
+    expect(item.nextRetryAt).toBeNull();
+    expect(mockedCreateCatalogItem).not.toHaveBeenCalled();
+  });
+
+  it('lists dead-letter rows from getDeadLetterItems (SYNC-04)', async () => {
+    const dead = makeQueueItem({
+      status: 'dead_letter',
+      retryCount: 6,
+      lastError: 'still down',
+    });
+    queueItems = [dead];
+
+    const listed = await getDeadLetterItems();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toBe(dead);
   });
 
   it('does not run two overlapping passes (no duplicate server writes)', async () => {

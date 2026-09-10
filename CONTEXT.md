@@ -28,7 +28,7 @@ Verified against HEAD `7d841fd` (merges of GitHub PRs #8 and #9 on top of #7). R
 | 4 Quote review + history | Yes | Shipped (`REVIEW-*`, `HIST-*`). |
 | 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
 | 6 SMS + customer approval | No | Not started (`SMS-01`…`SMS-10`). |
-| 7 Sync hardening + 16 failure scenarios | Partial | **PR #8 landed `SYNC-03`:** retry/backoff `5s → 15s → 60s → 5m → 15m` then `dead_letter`, single-flight `processQueue`, audio-parent guard, NetInfo unsubscribe. Dead-letter **UI** (`SYNC-04`), conflict UX (`SYNC-05`), and `FAIL-*` coverage are **not** done. |
+| 7 Sync hardening + 16 failure scenarios | Partial | **PR #8 landed `SYNC-03`:** retry/backoff then `dead_letter`. **`SYNC-04` dead-letter UI** lists stuck items with Retry. Conflict UX (`SYNC-05`) and `FAIL-*` coverage are **not** done. |
 | Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` scripts exist for Railway. `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `eas.json` / `railway.toml` in the repo.** Do not claim a live demo deploy. |
 
 Recent **merged** work to reflect if you mention status:
@@ -37,8 +37,9 @@ Recent **merged** work to reflect if you mention status:
 - **PR #7** — login identifier lock-down (D1), UUID filter before catalog `ANY($2::uuid[])` (D2), R2 delete after successful GPT+DB commit (D3), `ai_failed` on upload/enqueue failure (D7), Whisper default English (D8), AI failures write `ai_failed` not `failed_send` (D9).
 - **PR #12** — `apiClient` no longer treats `/auth/*` 401s as session expiry (audit **A-01**).
 - **PR #13** — login/restore hydrate of catalog + quotes (audit **A-02**). Local-only `server_id` null rows are left alone unless a later server seed matches by name (A-03).
-- **PR #8** — mobile sync queue: failures stay `pending` with `nextRetryAt` backoff; `dead_letter` after the 15m attempt fails; `createSingleFlight` so overlapping `processQueue` calls do not double-write; `resolveAudioQuoteServerId` (no empty parent id on `/voice/upload`); NetInfo unsubscribe + root-layout teardown. Also picks up pre-existing `failed` rows. Dead-letter UI (`SYNC-04`) unchanged.
+- **PR #8** — mobile sync queue: failures stay `pending` with `nextRetryAt` backoff; `dead_letter` after the 15m attempt fails; `createSingleFlight` so overlapping `processQueue` calls do not double-write; `resolveAudioQuoteServerId` (no empty parent id on `/voice/upload`); NetInfo unsubscribe + root-layout teardown. Also picks up pre-existing `failed` rows.
 - **PR #9** — pg-boss cron `ai-processing-reaper` (`* * * * *` UTC) marks quotes still `ai_processing` older than `AI_PROCESSING_TIMEOUT_MS` (default 15 minutes) as `ai_failed`. `GET /voice/status/:jobId` returns `{ status: 'failed' }` when the owned quote is already `ai_failed`, even if the pg-boss job is still active or gone, so the mobile poller stops.
+- **SYNC-04** — Quotes/Catalog banner + header warning open a Sync issues screen of `dead_letter` queue items (plain-language entity/action + Retry). Live WatermelonDB observe; Retry resets to `pending` and kicks `processQueue`.
 
 **Still open (docs, not these fixes):**
 
@@ -147,7 +148,7 @@ Root `package.json` has no `test` script; CI invokes workspaces. On current `mas
 
 These are **on `master` after PRs #8, #9, #12, and #13**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, or login/restore hydrate.
 
-- **Dead-letter UX (`SYNC-04`) and draft conflict UX (`SYNC-05`)** are not built. Queue items can reach `dead_letter`; there is no contractor-facing retry screen.
+- **Draft conflict UX (`SYNC-05`)** is not built. Dead-letter UI (`SYNC-04`) lists stuck queue items with Retry.
 - **Local `ai_processing` without `voiceJobId` is still not polled** (`quotes.tsx` requires `voiceJobId`). Hydrate now copies `voice_job_id` when the server has it. The server reaper will mark the **server** row `ai_failed` after the timeout; a local row that never received a job id will not learn that unless a later poll/sync path exists. A 500 after enqueue can still insert a second server quote on client retry (PR #7 leftover).
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).

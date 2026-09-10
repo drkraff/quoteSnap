@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LogoutHeaderButton } from '../../src/components/app/logout-header-button';
+import { AppHeaderRight } from '../../src/components/app/app-header-right';
 import { tabBarHref } from '../../src/navigation/app-tabs';
+import { SYNC_ISSUES_TITLE } from '../../src/sync/dead-letter';
 
 /** Default tab is Quotes (A-12). Hidden index redirects to Quotes (A-19). */
 export const unstable_settings = {
@@ -13,7 +14,7 @@ export default function AppLayout(): JSX.Element {
     <Tabs
       screenOptions={{
         headerTitle: 'QuoteSnap',
-        headerRight: () => <LogoutHeaderButton />,
+        headerRight: () => <AppHeaderRight />,
         tabBarActiveTintColor: '#0066cc',
         tabBarInactiveTintColor: '#666666',
         tabBarStyle: {
@@ -72,6 +73,13 @@ export default function AppLayout(): JSX.Element {
           href: tabBarHref('voice-record'),
           headerTitle: 'Voice Quote',
           tabBarStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="sync-issues"
+        options={{
+          href: tabBarHref('sync-issues'),
+          headerTitle: SYNC_ISSUES_TITLE,
         }}
       />
     </Tabs>

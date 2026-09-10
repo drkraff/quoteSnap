@@ -45,5 +45,6 @@ describe('tabBarHref', () => {
     expect(tabBarHref('catalog')).toBeUndefined();
     expect(tabBarHref('index')).toBeNull();
     expect(tabBarHref('draft/[id]')).toBeNull();
+    expect(tabBarHref('sync-issues')).toBeNull();
   });
 });
