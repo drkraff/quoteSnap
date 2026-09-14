@@ -4,3 +4,8 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# EAS local signing files (use EAS-managed credentials; never commit these)
+credentials.json
+*.jks
+*.keystore

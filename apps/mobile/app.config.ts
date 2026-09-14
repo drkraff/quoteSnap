@@ -1,5 +1,20 @@
 import type { ExpoConfig } from 'expo/config';
 
+const apiUrlFromEnv = process.env['EXPO_PUBLIC_API_URL'] as string | undefined;
+const apiUrl = apiUrlFromEnv ?? 'http://10.0.2.2:3000';
+
+// EAS cloud builds re-evaluate this file on the builder. If the preview
+// environment is missing EXPO_PUBLIC_API_URL, extra.apiUrl would silently
+// become the emulator loopback and a physical APK could not reach the API.
+if (process.env['EAS_BUILD'] === 'true') {
+  const trimmed = apiUrlFromEnv?.trim();
+  if (!trimmed || !trimmed.startsWith('https://')) {
+    throw new Error(
+      'EAS builds require EXPO_PUBLIC_API_URL to be an https:// origin (Railway). See docs/EAS-ANDROID.md.'
+    );
+  }
+}
+
 const config: ExpoConfig = {
   name: 'QuoteSnap',
   slug: 'quotesnap',
@@ -48,12 +63,19 @@ const config: ExpoConfig = {
     typedRoutes: true,
   },
   extra: {
-    // Populated from EXPO_PUBLIC_API_URL in apps/mobile/.env at build time.
-    // Falls back to the Android-emulator loopback so existing emulator builds
-    // are unaffected when no .env is present.
-    apiUrl:
-      (process.env['EXPO_PUBLIC_API_URL'] as string | undefined) ??
-      'http://10.0.2.2:3000',
+    eas: {
+      // Replace after `cd apps/mobile && npx eas-cli init` (see docs/EAS-ANDROID.md).
+      // The real UUID is not a secret; commit it. Do not invent a live Expo project id.
+      projectId:
+        (process.env['EAS_PROJECT_ID'] as string | undefined) ??
+        '00000000-0000-4000-8000-000000000000',
+    },
+    // Populated from EXPO_PUBLIC_API_URL in apps/mobile/.env at Metro time, or
+    // from the EAS preview environment at cloud build time. Falls back to the
+    // Android-emulator loopback so existing emulator builds are unaffected
+    // when no .env is present. Physical APKs must use Railway HTTPS — never
+    // ship 10.0.2.2 (see docs/EAS-ANDROID.md).
+    apiUrl,
   },
 };
 

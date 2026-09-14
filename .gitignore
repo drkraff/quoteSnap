@@ -18,6 +18,11 @@ build/
 android/
 ios/
 
+# EAS local signing files (use EAS-managed credentials; never commit these)
+credentials.json
+*.jks
+*.keystore
+
 # OS
 .DS_Store
 Thumbs.db
