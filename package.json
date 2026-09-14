@@ -12,6 +12,7 @@
     "migrate": "npm run migrate --workspace=apps/backend",
     "mobile": "npm run start --workspace=apps/mobile",
     "backend": "npm run dev --workspace=apps/backend",
+    "eas:android:preview": "node scripts/eas-android-preview.js",
     "postinstall": "node scripts/post-prebuild-guard.js"
   },
   "overrides": {

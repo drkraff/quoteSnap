@@ -10,7 +10,7 @@ Canonical sources:
 
 - Tests: `.planning/phases/05-voice-to-quote-pipeline/05-HUMAN-UAT.md`
 - Why human: `.planning/phases/05-voice-to-quote-pipeline/05-VERIFICATION.md` (Human Verification Required)
-- Device setup: `.planning/PHYSICAL-DEVICE-TESTING.md` (`EXPO_PUBLIC_API_URL` / `app.config.ts`)
+- Device setup: `.planning/PHYSICAL-DEVICE-TESTING.md` (`EXPO_PUBLIC_API_URL` / `app.config.ts`). Shareable APK without USB/Metro: [EAS-ANDROID.md](EAS-ANDROID.md).
 - Status briefing: `CONTEXT.md`
 
 ---

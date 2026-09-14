@@ -18,7 +18,7 @@ Core loop on `master`: register/login → trade onboarding + catalog seed → ca
 
 ## Status on `master` (2026-09-14)
 
-Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#38** plus **SYNC-05** (draft conflict UX) in this tree.
+Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#39** plus **SYNC-05** (draft conflict UX) in this tree.
 
 | Phase | In code? | Honest status |
 |-------|----------|----------------|
@@ -29,7 +29,7 @@ Re-check GitHub before treating anything else as landed. This briefing includes 
 | 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
 | 6 SMS + customer approval | No | Not started (`SMS-01`…`SMS-10`). |
 | 7 Sync hardening + 16 failure scenarios | Partial | **`SYNC-03`** retry/backoff then `dead_letter`. **`SYNC-04`** dead-letter UI. **`SYNC-05`** server-as-truth + “Review before sending” on pre-send draft forks. **`SYNC-06`** and **`FAIL-*`** are **not** done. |
-| Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` exist. **`npm start` runs pending SQL migrations then the API** (see [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md)). `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `eas.json` / `railway.toml`.** Do not claim a live demo deploy. |
+| Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` exist. **`npm start` runs pending SQL migrations then the API** (see [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md)). Android internal/preview APK: [docs/EAS-ANDROID.md](docs/EAS-ANDROID.md) (`apps/mobile/eas.json`). `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `railway.toml`.** Do not claim a live demo deploy. |
 
 Recent **merged** work to reflect if you mention status:
 
@@ -44,15 +44,16 @@ Recent **merged** work to reflect if you mention status:
 - **PR #35** — Quotes list live-updates on status/queue changes (`observeWithColumns`).
 - **SYNC-05** — WatermelonDB pull is server-as-truth. A dirty pre-send draft whose line items disagree with the server is **not** last-write-wins: local is replaced from the server and Send is blocked behind a visible **Review before sending** prompt (`needs_review` queue marker, not dead-letter). Backend `PUT /quotes` 409 remains status-lock only (`Quote cannot be updated in its current status`). Content forks are detected client-side (hydrate + GET-before-PUT / GET-before-send vs last observed `updatedAt`).
 - **HIST-05** — Quotes list swipe → confirm → soft-archive. Local `is_archived`; server `PATCH /quotes/:id/archive` (`{ archived: true }` or `{ isArchived: false }` to undo). GET `/quotes` is the active list; `GET /quotes?archived=true` is archived. Hydrate pulls both so login can restore Archived. A queued Unarchive is not overwritten. The Quotes screen has a Quotes / Archived toggle; Unarchive swipe+confirm. **Hard-delete is only for never-synced empty `draft_local` rows with no `serverId`** (UAT junk Manual Quotes). Confirm, then WatermelonDB destroy of quote + draft + pending queue rows — no server API. Anything with a `serverId` stays on Archive (hydrate would resurrect it). `processQueue` will not POST `/quotes` if the local row is already gone.
-- **PR #37** — Railway `npm start` runs pending SQL migrations then the API (`docs/DEPLOY-RAILWAY.md`). Not a live demo; no `eas.json` / `railway.toml`.
+- **PR #37** — Railway `npm start` runs pending SQL migrations then the API (`docs/DEPLOY-RAILWAY.md`). Not a live demo; no `railway.toml`.
 - **PR #38** — Quotes / Archived toggle; Unarchive swipe. Hydrate pulls `GET /quotes?archived=true` as well as the active list.
+- **PR #39** — Hard-delete never-synced empty local drafts (`!serverId`): confirm, then destroy quote + draft + pending queue rows locally. No server delete API.
 
 **Still open (docs, not these fixes):**
 
 - **PR #6** — draft Phase 5 UAT runbook.
 - **PR #4** — older GSD ROADMAP/STATE/PROJECT rewrite; superseded by this `CONTEXT.md` approach.
 
-Do **not** implement Phase 6 SMS, EAS, or product features unless a task explicitly asks. Railway migrate-on-boot is in `npm start` (not a live demo).
+Do **not** implement Phase 6 SMS or product features unless a task explicitly asks. Railway migrate-on-boot is in `npm start`. Android EAS preview config is in-tree ([docs/EAS-ANDROID.md](docs/EAS-ANDROID.md)); do not claim a live Expo/Railway demo or run `eas login` / `eas submit` in CI.
 
 ---
 
@@ -69,7 +70,7 @@ apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-
 .github/workflows/ci.yml
 ```
 
-There is no root `README.md`. Native `android/` and `ios/` are gitignored (Expo prebuild locally / EAS later).
+There is no root `README.md`. Native `android/` and `ios/` are gitignored (Expo prebuild locally / EAS). `apps/mobile/eas.json` is the Android internal/preview APK profile ([docs/EAS-ANDROID.md](docs/EAS-ANDROID.md)).
 
 ### Backend routes (`apps/backend/src`)
 
@@ -132,7 +133,7 @@ Auth: 15-minute JWT access tokens; 30-day refresh tokens stored as SHA-256 hashe
 
 `apps/mobile/src/api/client.ts` and `voice.ts` read `Constants.expoConfig.extra.apiUrl`, which comes from `EXPO_PUBLIC_API_URL` in `apps/mobile/app.config.ts`.
 
-**Fallback is `http://10.0.2.2:3000` (Android emulator only).** A physical phone cannot reach `10.0.2.2`. Set `EXPO_PUBLIC_API_URL=http://<LAN-IP>:3000` in a local `apps/mobile/.env` (gitignored). Do not commit a home LAN IP.
+**Fallback is `http://10.0.2.2:3000` (Android emulator only).** A physical phone cannot reach `10.0.2.2`. For USB + Metro, set `EXPO_PUBLIC_API_URL=http://<LAN-IP>:3000` in a local `apps/mobile/.env` (gitignored). For a shareable APK (no USB, no Metro), set `EXPO_PUBLIC_API_URL=https://<your-railway-host>` on the EAS **preview** environment — [docs/EAS-ANDROID.md](docs/EAS-ANDROID.md). Do not commit a home LAN IP.
 
 Device UAT: [`.planning/PHYSICAL-DEVICE-TESTING.md`](.planning/PHYSICAL-DEVICE-TESTING.md).
 
@@ -153,7 +154,7 @@ Root `package.json` has no `test` script; CI invokes workspaces. On current `mas
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, and #38**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, or hard-delete of never-synced empty local drafts.
+These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, #38, and #39**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, or hard-delete of never-synced empty local drafts.
 
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).
@@ -169,6 +170,7 @@ When you mention defects, prefer what is in the tree on `master` over open-PR sp
 |------|--------|
 | `CONTEXT.md` (this file) | Current agent briefing |
 | `docs/DEPLOY-RAILWAY.md` | Railway Start Command: `npm start` runs SQL migrations then the API |
+| `docs/EAS-ANDROID.md` | Android internal/preview EAS APK (no USB/Metro); `EXPO_PUBLIC_API_URL` for Railway HTTPS |
 | `.planning/REQUIREMENTS.md` | Requirement IDs and checkbox intent |
 | `.planning/phases/**/SUMMARY.md` | Historical “what landed in that plan” |
 | `.planning/PHYSICAL-DEVICE-TESTING.md` | Device UAT procedure (fix LAN URL there if you change it) |

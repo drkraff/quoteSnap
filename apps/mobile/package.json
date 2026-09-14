@@ -8,7 +8,8 @@
     "ios": "expo run:ios",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eas:android:preview": "node ../../scripts/eas-android-preview.js"
   },
   "dependencies": {
     "@morrowdigital/watermelondb-expo-plugin": "^2.3.0",

@@ -6,6 +6,8 @@ Procedure for QuoteSnap on a real Android device. Product/status briefing: [CONT
 
 This guide assumes a Windows host (where this repo lives), an Android phone with developer mode on, and both connected to the same Wi-Fi network.
 
+**Shareable APK (no USB, no Metro):** to install a standalone preview build that talks to the Railway HTTPS API, see [docs/EAS-ANDROID.md](../docs/EAS-ANDROID.md). The USB + Metro steps below remain the path for local debugging.
+
 ---
 
 ## Why physical device, not emulator

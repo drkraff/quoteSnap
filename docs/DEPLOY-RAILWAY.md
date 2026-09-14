@@ -58,3 +58,5 @@ cd apps/backend && node dist/db/migrate.js
 ```
 
 `DATABASE_URL` must be set (Railway Postgres plugin). This is not a claim that a live demo is deployed.
+
+Android preview APKs that should hit this API use `EXPO_PUBLIC_API_URL=https://<your-railway-host>` at EAS build time — [EAS-ANDROID.md](EAS-ANDROID.md).
