@@ -27,11 +27,22 @@ export type QuoteLineItemRow = {
 export const QUOTE_COLUMNS =
   "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived";
 
-/** Active Quotes list (catalog GET analog). Hydrate treats omitted server ids as archived. */
-export const LIST_ACTIVE_QUOTES_SQL = `SELECT ${QUOTE_COLUMNS}
+/** Active Quotes list (catalog GET analog). Default GET /quotes. */
+export function listQuotesSql(archived: boolean): string {
+  return `SELECT ${QUOTE_COLUMNS}
        FROM quotes
-       WHERE contractor_id = $1 AND is_archived = FALSE
+       WHERE contractor_id = $1 AND is_archived = ${archived ? "TRUE" : "FALSE"}
        ORDER BY created_at DESC`;
+}
+
+export const LIST_ACTIVE_QUOTES_SQL = listQuotesSql(false);
+export const LIST_ARCHIVED_QUOTES_SQL = listQuotesSql(true);
+
+/** `GET /quotes?archived=true` lists soft-archived rows for hydrate + the Archived screen. */
+export function parseQuotesListArchivedQuery(archived: unknown): boolean {
+  const value = Array.isArray(archived) ? archived[0] : archived;
+  return value === true || value === "true" || value === "1";
+}
 
 export const LINE_ITEM_COLUMNS =
   "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id";

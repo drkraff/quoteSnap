@@ -18,14 +18,14 @@ Core loop on `master`: register/login → trade onboarding + catalog seed → ca
 
 ## Status on `master` (2026-09-14)
 
-Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#35** plus **SYNC-05** (draft conflict UX) in this tree.
+Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#37** plus **SYNC-05** (draft conflict UX) in this tree.
 
 | Phase | In code? | Honest status |
 |-------|----------|----------------|
 | 1 Foundation (auth + WatermelonDB) | Yes | Shipped. PRs #1 (rate-limit / pool) and #2 (refresh coalesce) merged. |
 | 2 Onboarding | Yes | Shipped. `ONBD-03` (90s on 1-bar LTE) and `ONBD-04` (offline seed) not human-validated. |
 | 3 Catalog management | Yes | Shipped (`CAT-01`…`CAT-06`). |
-| 4 Quote review + history | Yes | Shipped (`REVIEW-*`, `HIST-01`…`HIST-05`). `HIST-05` is quote soft-archive (catalog analog); “Show archived” is deferred. |
+| 4 Quote review + history | Yes | Shipped (`REVIEW-*`, `HIST-01`…`HIST-05`). `HIST-05` is quote soft-archive (catalog analog) plus an Archived list with Unarchive. |
 | 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
 | 6 SMS + customer approval | No | Not started (`SMS-01`…`SMS-10`). |
 | 7 Sync hardening + 16 failure scenarios | Partial | **`SYNC-03`** retry/backoff then `dead_letter`. **`SYNC-04`** dead-letter UI. **`SYNC-05`** server-as-truth + “Review before sending” on pre-send draft forks. **`SYNC-06`** and **`FAIL-*`** are **not** done. |
@@ -43,7 +43,8 @@ Recent **merged** work to reflect if you mention status:
 - **PR #33** — quotes-list poller recovers `ai_processing` rows that have a `serverId` but no `voiceJobId` (`GET /quotes/:id`).
 - **PR #35** — Quotes list live-updates on status/queue changes (`observeWithColumns`).
 - **SYNC-05** — WatermelonDB pull is server-as-truth. A dirty pre-send draft whose line items disagree with the server is **not** last-write-wins: local is replaced from the server and Send is blocked behind a visible **Review before sending** prompt (`needs_review` queue marker, not dead-letter). Backend `PUT /quotes` 409 remains status-lock only (`Quote cannot be updated in its current status`). Content forks are detected client-side (hydrate + GET-before-PUT / GET-before-send vs last observed `updatedAt`).
-- **HIST-05** — Quotes list swipe → confirm → soft-archive. Local `is_archived`; server `PATCH /quotes/:id/archive`. GET `/quotes` returns active rows only. Hydrate hides server-backed locals omitted from that list so test drafts do not resurrect. Not a hard delete; HIST-01 status is unchanged.
+- **HIST-05** — Quotes list swipe → confirm → soft-archive. Local `is_archived`; server `PATCH /quotes/:id/archive` (`{ archived: true }` or `{ isArchived: false }` to undo). GET `/quotes` is the active list; `GET /quotes?archived=true` is archived. Hydrate pulls both so login can restore Archived. A queued Unarchive is not overwritten. The Quotes screen has a Quotes / Archived toggle; Unarchive swipe+confirm. Not a hard delete; HIST-01 status is unchanged.
+- **PR #37** — Railway `npm start` runs pending SQL migrations then the API (`docs/DEPLOY-RAILWAY.md`). Not a live demo; no `eas.json` / `railway.toml`.
 
 **Still open (docs, not these fixes):**
 
@@ -145,13 +146,13 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive`, active-list SQL), and production start chaining SQL migrate before listen. Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive PATCH), auth 401 handling, login/restore catalog+quote hydrate (including hiding server-backed quotes omitted from the active list), offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), and quote archive copy / hydrate hide rules.
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive` both directions, active vs `?archived=true` list SQL), and production start chaining SQL migrate before listen. Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive/unarchive PATCH), auth 401 handling, login/restore catalog+quote hydrate (active + archived pulls; Unarchive is not overwritten), offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), and quote archive/unarchive copy.
 
 ---
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, and #35**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, or quotes-list live observe.
+These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, and #37**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, quotes-list live observe, quote soft-archive, or Railway migrate-on-boot.
 
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).

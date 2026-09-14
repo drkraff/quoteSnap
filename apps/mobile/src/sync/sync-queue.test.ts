@@ -750,6 +750,31 @@ describe('processQueue', () => {
     expect(item.status).toBe('destroyed');
   });
 
+  it('unarchives a quote via PATCH when the payload is isArchived false', async () => {
+    quotes = [
+      makeQuote({
+        id: 'local-quote-1',
+        serverId: 'srv-q1',
+        status: 'draft_local',
+      }),
+    ];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'update',
+      payloadJson: JSON.stringify({ isArchived: false }),
+    });
+    queueItems = [item];
+    mockedUnarchiveQuote.mockResolvedValue(undefined);
+
+    await processQueue();
+
+    expect(mockedUnarchiveQuote).toHaveBeenCalledWith('srv-q1');
+    expect(mockedArchiveQuote).not.toHaveBeenCalled();
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+  });
+
   it('PUTs a draft when the server revision is unchanged (unpushed local edits)', async () => {
     const quote = makeQuote({
       id: 'q1',

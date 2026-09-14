@@ -6,10 +6,11 @@ import { applyQuoteArchivePatch } from "../quotes/archive.js";
 import { filterUuidCatalogIds } from "../workers/voice-validation.js";
 import {
   LINE_ITEM_COLUMNS,
-  LIST_ACTIVE_QUOTES_SQL,
   QUOTE_COLUMNS,
   lineItemRowToResponse,
+  listQuotesSql,
   nestLineItems,
+  parseQuotesListArchivedQuery,
   quoteRowToResponse,
   type QuoteLineItemRow,
   type QuoteRow,
@@ -17,11 +18,13 @@ import {
 
 export const router = Router();
 
-// GET / — list quotes for contractor sorted by recency, with line items + voiceJobId
+// GET / — list quotes for contractor sorted by recency, with line items + voiceJobId.
+// Default is the active list; `?archived=true` is the Archived screen + hydrate pull.
 router.get("/", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
-    const result = await query(LIST_ACTIVE_QUOTES_SQL, [contractorId]);
+    const archived = parseQuotesListArchivedQuery(req.query.archived);
+    const result = await query(listQuotesSql(archived), [contractorId]);
     const quoteRows = result.rows as QuoteRow[];
     const quoteIds = filterUuidCatalogIds(quoteRows.map((row) => row.id));
 

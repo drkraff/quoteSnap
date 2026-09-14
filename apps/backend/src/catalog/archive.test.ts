@@ -23,6 +23,18 @@ describe("parseArchivePatchBody", () => {
     assert.deepEqual(parseArchivePatchBody({ archived: false }), { ok: true, archived: false });
   });
 
+  it("accepts isArchived as an alias so quote unarchive can PATCH { isArchived: false }", () => {
+    assert.deepEqual(parseArchivePatchBody({ isArchived: false }), { ok: true, archived: false });
+    assert.deepEqual(parseArchivePatchBody({ isArchived: true }), { ok: true, archived: true });
+  });
+
+  it("prefers archived when both flags are present", () => {
+    assert.deepEqual(parseArchivePatchBody({ archived: false, isArchived: true }), {
+      ok: true,
+      archived: false,
+    });
+  });
+
   it("rejects non-boolean archived values", () => {
     assert.deepEqual(parseArchivePatchBody({ archived: "false" }), {
       ok: false,

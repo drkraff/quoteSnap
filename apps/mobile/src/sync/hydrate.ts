@@ -20,7 +20,12 @@ import {
 import { toDraftLineItems } from './draft-line-items';
 import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
-import { shouldArchiveLocalQuoteOnHydrate } from '../quotes/archive-quote';
+import {
+  hydrateArchivedFlag,
+  isQuoteUnarchiveQueueItem,
+  mergeQuoteHydrateLists,
+  shouldArchiveLocalQuoteOnHydrate,
+} from '../quotes/archive-quote';
 
 export { toDraftLineItems } from './draft-line-items';
 
@@ -166,8 +171,23 @@ export async function upsertQuotes(
   const quoteCollection = database.get<Quote>('quotes');
   const draftCollection = database.get<Draft>('drafts');
   const catalogCollection = database.get<CatalogItem>('catalog_items');
-  const blockedQuoteIds = await blockingEntityIds('quote');
-  const blockedDraftIds = await blockingEntityIds('draft');
+  const queueItems = await database.get<SyncQueueItem>('sync_queue_items').query().fetch();
+  const blockedQuoteIds = new Set<string>();
+  const blockedDraftIds = new Set<string>();
+  const unarchiveHeldIds = new Set<string>();
+  for (const item of queueItems) {
+    if (isBlockingStatus(item.status)) {
+      if (item.entityType === 'quote') {
+        blockedQuoteIds.add(item.entityId);
+      }
+      if (item.entityType === 'draft') {
+        blockedDraftIds.add(item.entityId);
+      }
+    }
+    if (isQuoteUnarchiveQueueItem(item)) {
+      unarchiveHeldIds.add(item.entityId);
+    }
+  }
 
   await database.write(async () => {
     const existingQuotes = await quoteCollection
@@ -244,10 +264,22 @@ export async function upsertQuotes(
           record.status = quote.status;
           record.customerPhone = quote.customerPhone;
           record.totalCents = quote.totalCents;
-          record.updatedAt = parseMs(quote.updatedAt);
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
-          record.isArchived = quote.isArchived === true;
+          const serverArchived = quote.isArchived === true;
+          const nextArchived = unarchiveHeldIds.has(localQuote.id)
+            ? false
+            : hydrateArchivedFlag({
+                localIsArchived: record.isArchived === true,
+                serverIsArchived: serverArchived,
+                localUpdatedAt: record.updatedAt,
+                serverUpdatedAt: quote.updatedAt,
+              });
+          record.isArchived = nextArchived;
+          // Keep the newer local timestamp when we refuse a stale archive flag.
+          if (nextArchived === serverArchived) {
+            record.updatedAt = parseMs(quote.updatedAt);
+          }
         });
       }
       if (draft) {
@@ -272,7 +304,7 @@ export async function upsertQuotes(
         shouldArchiveLocalQuoteOnHydrate({
           serverId: local.serverId,
           isArchived: local.isArchived === true,
-          blocked: blockedQuoteIds.has(local.id),
+          blocked: blockedQuoteIds.has(local.id) || unarchiveHeldIds.has(local.id),
           pulledServerIds,
         })
       ) {
@@ -285,9 +317,13 @@ export async function upsertQuotes(
 }
 
 async function hydrateOnce(contractorId: string): Promise<void> {
-  const [catalogItems, quotes] = await Promise.all([fetchCatalogItems(), fetchQuotes()]);
+  const [catalogItems, activeQuotes, archivedQuotes] = await Promise.all([
+    fetchCatalogItems(),
+    fetchQuotes(),
+    fetchQuotes({ archived: true }),
+  ]);
   await upsertCatalogItems(contractorId, catalogItems);
-  await upsertQuotes(contractorId, quotes);
+  await upsertQuotes(contractorId, mergeQuoteHydrateLists(activeQuotes, archivedQuotes));
 }
 
 /**
@@ -297,9 +333,11 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * a name — then the local row is adopted (A-03 offline seed de-dupe).
  * Catalog and unblocked quotes are server-as-truth. A dirty pre-send draft whose
  * line items disagree with the server is applied from the server and parked as
- * `needs_review` (SYNC-05) instead of a silent queue overwrite. Server-backed
- * quotes missing from GET /quotes (active list) are soft-archived locally so
- * they do not reappear after login/restore. Failures propagate.
+ * `needs_review` (SYNC-05) instead of a silent queue overwrite. Hydrate pulls
+ * active GET /quotes and GET /quotes?archived=true so Archived can restore after
+ * login. Server-backed quotes missing from both lists are soft-archived locally.
+ * A queued Unarchive (including dead_letter) and a newer local archive flag are
+ * not overwritten. Failures propagate.
  */
 export async function hydrateFromServer(contractorId: string): Promise<void> {
   return hydrateFlight.run(() => hydrateOnce(contractorId));

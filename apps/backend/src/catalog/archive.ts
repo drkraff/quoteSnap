@@ -11,10 +11,21 @@ export type ArchiveQueryFn = (
   params?: unknown[],
 ) => Promise<{ rows: unknown[] }>;
 
+function archiveFlagFromBody(body: Record<string, unknown>): unknown {
+  if ("archived" in body && body.archived !== undefined) {
+    return body.archived;
+  }
+  // Queue payload / HIST-05 clients send `{ isArchived: false }` on the same PATCH.
+  if ("isArchived" in body && body.isArchived !== undefined) {
+    return body.isArchived;
+  }
+  return undefined;
+}
+
 /**
- * PATCH /catalog/:id/archive body.
+ * PATCH /catalog/:id/archive and PATCH /quotes/:id/archive body.
  * Omitted / empty body keeps the existing one-way archive client (no JSON).
- * `{ archived: false }` is undo-unarchive (A-05).
+ * `{ archived: false }` or `{ isArchived: false }` is undo-unarchive (A-05).
  */
 export function parseArchivePatchBody(body: unknown): ArchivePatchParseResult {
   if (body == null) {
@@ -23,13 +34,14 @@ export function parseArchivePatchBody(body: unknown): ArchivePatchParseResult {
   if (typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, error: "archived must be a boolean" };
   }
-  if (!("archived" in body) || body.archived === undefined) {
+  const flag = archiveFlagFromBody(body as Record<string, unknown>);
+  if (flag === undefined) {
     return { ok: true, archived: true };
   }
-  if (typeof body.archived !== "boolean") {
+  if (typeof flag !== "boolean") {
     return { ok: false, error: "archived must be a boolean" };
   }
-  return { ok: true, archived: body.archived };
+  return { ok: true, archived: flag };
 }
 
 export function catalogArchiveUpdateSql(archived: boolean): string {
