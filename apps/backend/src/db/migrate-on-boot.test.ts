@@ -10,7 +10,7 @@ const backendRoot = path.resolve(here, "../..");
 const repoRoot = path.resolve(backendRoot, "../..");
 
 describe("resolveMigrationsDir", () => {
-  it("finds numbered SQL files including 009_quote_archive.sql, 010_rate_card_entries.sql, 011_quote_line_item_unit.sql, and 012_contractor_hourly.sql", () => {
+  it("finds numbered SQL files including 009_quote_archive.sql through 013_ai_failure_stage.sql", () => {
     const dir = resolveMigrationsDir();
     const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
     assert.ok(files.includes("001_foundation.sql"));
@@ -18,10 +18,12 @@ describe("resolveMigrationsDir", () => {
     assert.ok(files.includes("010_rate_card_entries.sql"));
     assert.ok(files.includes("011_quote_line_item_unit.sql"));
     assert.ok(files.includes("012_contractor_hourly.sql"));
+    assert.ok(files.includes("013_ai_failure_stage.sql"));
     assert.ok(existsSync(path.join(dir, "009_quote_archive.sql")));
     assert.ok(existsSync(path.join(dir, "010_rate_card_entries.sql")));
     assert.ok(existsSync(path.join(dir, "011_quote_line_item_unit.sql")));
     assert.ok(existsSync(path.join(dir, "012_contractor_hourly.sql")));
+    assert.ok(existsSync(path.join(dir, "013_ai_failure_stage.sql")));
   });
 });
 

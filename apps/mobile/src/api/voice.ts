@@ -9,6 +9,7 @@ export interface VoiceStatusResponse {
   status: 'processing' | 'complete' | 'failed';
   draftId?: string;
   error?: string;
+  failureStage?: 'asr' | 'mapping' | 'timeout';
 }
 
 export async function uploadAudio(filePath: string, quoteServerId?: string): Promise<UploadAudioResponse> {

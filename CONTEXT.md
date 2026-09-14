@@ -18,7 +18,7 @@ Core loop on `master`: register/login → trade + hourly (markup optional; catal
 
 ## Status on `master` (2026-09-14)
 
-Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#46** plus **thin SYNC-06** (freeze post-send quote writes) in this tree.
+Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#47** (thin SYNC-06 freeze) plus **FAIL-04/05** voice retry in this branch.
 
 | Phase | In code? | Honest status |
 |-------|----------|----------------|
@@ -28,7 +28,7 @@ Re-check GitHub before treating anything else as landed. This briefing includes 
 | 4 Quote review + history | Yes | Shipped (`REVIEW-*`, `HIST-01`…`HIST-05`). `HIST-05` is quote soft-archive (catalog analog) plus an Archived list with Unarchive. Never-synced empty local drafts (`!serverId`) can be hard-deleted from the device. |
 | 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
 | 6 SMS + customer approval | No | Not started (`SMS-01`…`SMS-10`). |
-| 7 Sync hardening + 16 failure scenarios | Partial | **`SYNC-03`** retry/backoff then `dead_letter`. **`SYNC-04`** dead-letter UI. **`SYNC-05`** server-as-truth + “Review before sending” on pre-send draft forks. **Thin `SYNC-06`**: `sent` / `approved` / `declined` / `expired` / `failed_send` cannot have line items or totals rewritten by PUT/sync. **`FAIL-*`** are **not** done. |
+| 7 Sync hardening + 16 failure scenarios | Partial | **`SYNC-03`** retry/backoff then `dead_letter`. **`SYNC-04`** dead-letter UI. **`SYNC-05`** server-as-truth + “Review before sending” on pre-send draft forks. **Thin `SYNC-06`**: `sent` / `approved` / `declined` / `expired` / `failed_send` cannot have line items or totals rewritten by PUT/sync. **`FAIL-04`/`FAIL-05`** voice retry + mapping fallback. Remaining **`FAIL-*`** are **not** done. |
 | Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` exist. **`npm start` runs pending SQL migrations then the API** (see [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md)). Android internal/preview APK: [docs/EAS-ANDROID.md](docs/EAS-ANDROID.md) (`apps/mobile/eas.json`). `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `railway.toml`.** Do not claim a live demo deploy. |
 
 Recent **merged** work to reflect if you mention status:
@@ -68,7 +68,7 @@ npm workspaces, two apps:
 ```
 apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
-apps/backend/src/db/migrations/   001_foundation … 012_contractor_hourly
+apps/backend/src/db/migrations/   001_foundation … 013_ai_failure_stage
 apps/mobile/src/db/               schema v3, models, SQLiteAdapter
 apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate (server-as-truth; SYNC-05 draft forks → needs_review; thin SYNC-06 skips money PUTs on frozen quotes)
 .github/workflows/ci.yml
@@ -122,7 +122,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 - `.env.example` shows Postgres on **5432**.
 - Local convention documented in this repo: Docker container `quotesnap-db` is published on **5433** so it does not collide with a host Postgres on 5432. Match the port in the `.env` you actually use.
 - Start DB before the API: `docker start quotesnap-db`
-- Migrations: `cd apps/backend && npm run migrate` (files `001`…`012`). Safe to re-run: `_migrations` skips applied files.
+- Migrations: `cd apps/backend && npm run migrate` (files `001`…`013`). Safe to re-run: `_migrations` skips applied files.
 - **Railway / production boot:** repo-root `npm start` is `node dist/db/migrate.js && node dist/index.js` (after `npm run build`). Operators should leave **Start Command** empty or set `npm start`. Do not start with only `node dist/index.js` — `quotes.is_archived` (009) and later files will not land. Details: [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md).
 
 ### Backend
@@ -160,11 +160,11 @@ Root `package.json` has no `test` script; CI invokes workspaces. On current `mas
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, #38, #39, #44, #45, and #46**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, thin SYNC-06 post-send money freeze, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, hard-delete of never-synced empty local drafts, rate-card learn (P0-A), adhoc voice lines + exact price attach (P0-B), or skippable seed + hourly labor (P0-C).
+These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, #38, #39, #44, #45, #46, and #47**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, thin SYNC-06 post-send money freeze, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, hard-delete of never-synced empty local drafts, rate-card learn (P0-A), adhoc voice lines + exact price attach (P0-B), or skippable seed + hourly labor (P0-C).
 
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).
-- **Mic denied** shows an in-app Alert + Settings link (`voice-record.tsx`); other `FAIL-*` scenarios are incomplete. `WORKFLOW-failure-edge-cases.md` is referenced by `FAIL-01` and **is not in the repo**.
+- **Mic denied** shows an in-app Alert + Settings link (`voice-record.tsx`). **FAIL-04** retries the original `documentDirectory` recording on the same quote; **FAIL-05** keeps a flagged partial draft plus Add items. Remaining `FAIL-*` (SMS, crash resume, FCM) are incomplete. `WORKFLOW-failure-edge-cases.md` is referenced by `FAIL-01` and **is not in the repo**.
 
 When you mention defects, prefer what is in the tree on `master` over open-PR speculation.
 

@@ -1,32 +1,54 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
+import type { AiFailedRecoveryView } from '../../quotes/ai-failed-recovery';
 
 interface AiFailedBannerProps {
-  onRerecord: () => void;
+  view: AiFailedRecoveryView;
+  retryDisabled?: boolean;
+  onRetry: () => void;
+  onRecordAgain: () => void;
   onAddItems: () => void;
 }
 
 export function AiFailedBanner({
-  onRerecord,
+  view,
+  retryDisabled = false,
+  onRetry,
+  onRecordAgain,
   onAddItems,
 }: AiFailedBannerProps): JSX.Element {
+  const secondary = view.showRetry
+    ? {
+        label: view.retryLabel,
+        onPress: onRetry,
+        accessibilityLabel: 'Retry original recording',
+        disabled: retryDisabled,
+      }
+    : {
+        label: view.recordAgainLabel,
+        onPress: onRecordAgain,
+        accessibilityLabel: 'Record voice quote again',
+        disabled: false,
+      };
+
   return (
     <View style={styles.banner}>
-      <Text style={styles.title}>Couldn't process this recording</Text>
-      <Text style={styles.body}>
-        Add items from your catalog, or re-record the job.
-      </Text>
+      <Text style={styles.title}>{view.title}</Text>
+      <Text style={styles.body}>{view.body}</Text>
       <View style={styles.actions}>
         <Pressable
           style={({ pressed }) => [
             styles.secondaryButton,
             pressed && styles.pressed,
+            secondary.disabled && styles.disabled,
           ]}
-          onPress={onRerecord}
+          onPress={secondary.onPress}
+          disabled={secondary.disabled}
           accessibilityRole="button"
-          accessibilityLabel="Re-record voice quote"
+          accessibilityLabel={secondary.accessibilityLabel}
+          accessibilityState={{ disabled: secondary.disabled }}
         >
-          <Text style={styles.secondaryLabel}>Re-record</Text>
+          <Text style={styles.secondaryLabel}>{secondary.label}</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [
@@ -37,7 +59,7 @@ export function AiFailedBanner({
           accessibilityRole="button"
           accessibilityLabel="Add items from catalog"
         >
-          <Text style={styles.primaryLabel}>Add items</Text>
+          <Text style={styles.primaryLabel}>{view.manualLabel}</Text>
         </Pressable>
       </View>
     </View>
@@ -105,5 +127,8 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  disabled: {
+    opacity: 0.5,
   },
 });

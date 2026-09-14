@@ -85,7 +85,7 @@ describe("resolveVoiceUploadQuote", () => {
     assert.equal(calls.length, 2);
     assert.match(calls[0]!.sql, /SELECT id FROM quotes WHERE id = \$1 AND contractor_id = \$2/);
     assert.deepEqual(calls[0]!.params, [QUOTE_ID, CONTRACTOR_ID]);
-    assert.match(calls[1]!.sql, /UPDATE quotes SET status = 'ai_processing'/);
+    assert.match(calls[1]!.sql, /UPDATE quotes SET status = 'ai_processing', ai_failure_stage = NULL, voice_job_id = NULL/);
     assert.deepEqual(calls[1]!.params, [QUOTE_ID, CONTRACTOR_ID]);
     assert.equal(
       calls.some((call) => call.sql.includes("INSERT INTO quotes")),

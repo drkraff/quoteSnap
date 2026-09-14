@@ -90,8 +90,8 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [ ] **FAIL-01**: All 16 failure scenarios defined in WORKFLOW-failure-edge-cases.md have a defined detection method, UX state, and recovery path
 - [ ] **FAIL-02**: Mic permission denied: contractor sees an actionable in-app prompt (not a system crash)
 - [ ] **FAIL-03**: Audio upload fails offline: item enters the sync queue; contractor is not shown an error mid-flow
-- [ ] **FAIL-04**: Whisper transcription fails: contractor is shown a retry option with the original audio available
-- [ ] **FAIL-05**: GPT-4o mapping timeout or failure: contractor is shown a partial draft with flagged items and a manual fallback
+- [x] **FAIL-04**: Whisper transcription fails: contractor is shown a retry option with the original audio available
+- [x] **FAIL-05**: GPT-4o mapping timeout or failure: contractor is shown a partial draft with flagged items and a manual fallback
 - [ ] **FAIL-06**: Twilio SMS delivery failure: quote enters failed_send state; contractor can retry from the history screen
 - [ ] **FAIL-07**: App crash during voice recording or draft editing: state is recovered from local SQLite on next launch with a "Resume where you left off" prompt
 - [ ] **FAIL-08**: FCM token rotation: `contractors.fcm_token` is updated on each login to prevent stale tokens on Samsung/battery-optimized devices
@@ -196,8 +196,8 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 | FAIL-01 | Phase 7 | Pending |
 | FAIL-02 | Phase 7 | Pending |
 | FAIL-03 | Phase 7 | Pending |
-| FAIL-04 | Phase 7 | Pending |
-| FAIL-05 | Phase 7 | Pending |
+| FAIL-04 | Phase 7 | Complete |
+| FAIL-05 | Phase 7 | Complete |
 | FAIL-06 | Phase 7 | Pending |
 | FAIL-07 | Phase 7 | Pending |
 | FAIL-08 | Phase 7 | Pending |
@@ -209,4 +209,4 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-14 — HIST-05 quote archive + Archived list / Unarchive; status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-14 — thin SYNC-06 freeze-sent-quotes + FAIL-04/05 voice retry; status narrative lives in CONTEXT.md*

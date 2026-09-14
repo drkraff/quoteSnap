@@ -1,4 +1,5 @@
 import {
+  draftFailedLocalFields,
   draftReadyLocalFields,
   QUOTE_LIST_OBSERVE_COLUMNS,
   quoteListRenderKey,
@@ -41,6 +42,18 @@ describe('draftReadyLocalFields', () => {
   it('uses 0 when the draft payload is empty or invalid', () => {
     expect(draftReadyLocalFields('[]')).toEqual({ status: 'draft_local', totalCents: 0 });
     expect(draftReadyLocalFields('{')).toEqual({ status: 'draft_local', totalCents: 0 });
+  });
+});
+
+describe('draftFailedLocalFields', () => {
+  it('keeps ai_failed and sums any partial mapping lines', () => {
+    const lineItemsJson = JSON.stringify([
+      { name: 'Pipe', quantity: 2, unitPriceCents: 1500, confidence: 0.59 },
+    ]);
+    expect(draftFailedLocalFields(lineItemsJson)).toEqual({
+      status: 'ai_failed',
+      totalCents: 3000,
+    });
   });
 });
 

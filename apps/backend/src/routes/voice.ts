@@ -7,6 +7,10 @@ import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
 import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
+import {
+  failedVoiceStatusPayload,
+  isVoiceDraftReadable,
+} from '../voice/ai-failure.js';
 
 export const router = Router();
 
@@ -19,6 +23,7 @@ type QuoteRow = {
   id: string;
   contractor_id: string;
   status: string;
+  ai_failure_stage?: string | null;
 };
 
 // POST /upload — upload audio, reuse or create ai_processing quote, send pg-boss job
@@ -118,7 +123,7 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
 
     // Verify the quote belongs to the requesting contractor
     const ownershipResult = await query(
-      `SELECT id, status FROM quotes WHERE voice_job_id = $1 AND contractor_id = $2`,
+      `SELECT id, status, ai_failure_stage FROM quotes WHERE voice_job_id = $1 AND contractor_id = $2`,
       [jobId, contractorId]
     );
 
@@ -133,7 +138,7 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
     // Reaper (and worker catch) write ai_failed on the quote even when the
     // pg-boss job is still active or already gone — stop the mobile poller.
     if (quoteRow.status === 'ai_failed') {
-      res.json({ status: 'failed', error: 'Processing failed' });
+      res.json(failedVoiceStatusPayload(quoteId, quoteRow.ai_failure_stage));
       return;
     }
 
@@ -150,7 +155,7 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
     if (job.state === 'completed') {
       response = { status: 'complete', draftId: quoteId };
     } else if (job.state === 'failed') {
-      response = { status: 'failed', error: 'Processing failed' };
+      response = failedVoiceStatusPayload(quoteId, quoteRow.ai_failure_stage);
     } else {
       response = { status: 'processing' };
     }
@@ -181,7 +186,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
 
     const quoteRow = quoteResult.rows[0] as { id: string; status: string; total_cents: number };
 
-    if (quoteRow.status === 'ai_processing' || quoteRow.status === 'ai_failed') {
+    if (!isVoiceDraftReadable(quoteRow.status)) {
       res.status(404).json({ error: 'Draft not ready' });
       return;
     }

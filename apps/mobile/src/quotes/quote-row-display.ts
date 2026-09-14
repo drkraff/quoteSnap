@@ -33,7 +33,9 @@ export function quoteRowDisplay(input: {
     ? input.online
       ? 'Quote processing'
       : 'Quote queued, will upload when online'
-    : `Quote status ${statusLabel}, total ${totalDisplay}. Double tap to open.`;
+    : input.status === 'ai_failed'
+      ? `Quote status ${statusLabel}, total ${totalDisplay}. Double tap to retry the recording or continue as a draft.`
+      : `Quote status ${statusLabel}, total ${totalDisplay}. Double tap to open.`;
 
   return {
     isAiProcessing,

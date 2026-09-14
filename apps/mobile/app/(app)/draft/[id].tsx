@@ -9,10 +9,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { confidenceTier } from '../../../src/utils/confidence';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
+import * as FileSystem from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { database } from '../../../src/db';
@@ -56,6 +58,9 @@ import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
 import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review-before-sending-banner';
+import { aiFailedRecoveryView } from '../../../src/quotes/ai-failed-recovery';
+import { retryVoiceQuotePlan } from '../../../src/quotes/retry-voice-quote';
+import { localVoiceAudioPath } from '../../../src/quotes/voice-audio';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function DraftScreen(): JSX.Element {
@@ -77,6 +82,8 @@ export default function DraftScreen(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [needsReview, setNeedsReview] = useState(false);
+  const [audioExists, setAudioExists] = useState(false);
+  const [retryingVoice, setRetryingVoice] = useState(false);
 
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -152,6 +159,21 @@ export default function DraftScreen(): JSX.Element {
       cancelled = true;
     };
   }, [id, phoneSync]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const path = localVoiceAudioPath(id, FileSystem.documentDirectory);
+    void FileSystem.getInfoAsync(path)
+      .then((info) => {
+        if (!cancelled) setAudioExists(info.exists === true);
+      })
+      .catch(() => {
+        if (!cancelled) setAudioExists(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   // Subscribe to quote status (ai_failed → draft_local recovery)
   useEffect(() => {
@@ -252,6 +274,35 @@ export default function DraftScreen(): JSX.Element {
       action: 'update',
       payload: { status: 'draft_local' },
     });
+  }
+
+  async function handleRetryVoice(): Promise<void> {
+    if (!quote || retryingVoice) return;
+    const filePath = localVoiceAudioPath(quote.id, FileSystem.documentDirectory);
+    const plan = retryVoiceQuotePlan({
+      quoteId: quote.id,
+      status: quote.status,
+      filePath,
+      audioExists,
+    });
+    if (!plan.ok) {
+      Alert.alert('Retry unavailable', 'The original recording is no longer on this device.');
+      return;
+    }
+    setRetryingVoice(true);
+    try {
+      await database.write(async () => {
+        await quote.update((r) => {
+          r.status = plan.nextStatus;
+          r.voiceJobId = null;
+        });
+      });
+      await enqueue(plan.enqueue);
+      router.back();
+    } catch {
+      setRetryingVoice(false);
+      Alert.alert('Retry failed', 'Could not re-queue this recording. Try again or add items from your catalog.');
+    }
   }
 
   async function handleQuantityChange(index: number, delta: number): Promise<void> {
@@ -548,9 +599,17 @@ export default function DraftScreen(): JSX.Element {
             ) : null}
             {quoteStatus === 'ai_failed' ? (
               <AiFailedBanner
-                onRerecord={() => {
+                view={aiFailedRecoveryView({
+                  audioExists,
+                  lineCount: lineItems.length,
+                })}
+                retryDisabled={retryingVoice}
+                onRetry={() => {
+                  void handleRetryVoice();
+                }}
+                onRecordAgain={() => {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  router.push('/voice-record' as any);
+                  router.push(`/voice-record?quoteId=${id}` as any);
                 }}
                 onAddItems={() => setShowCatalogPicker(true)}
               />

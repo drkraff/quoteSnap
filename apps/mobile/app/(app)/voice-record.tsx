@@ -8,7 +8,7 @@ import {
   Linking,
   SafeAreaView,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,9 @@ import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { RecordingWaveform } from '../../src/components/voice/recording-waveform';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../src/theme/tokens';
+import { localVoiceAudioPath } from '../../src/quotes/voice-audio';
+import { findQuoteRecord } from '../../src/quotes/find-quote';
+import { parseReuseQuoteId } from '../../src/quotes/retry-voice-quote';
 
 type RecordingState = 'idle' | 'recording' | 'stopped';
 
@@ -32,6 +35,7 @@ function formatDuration(seconds: number): string {
 export default function VoiceRecordScreen(): JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { quoteId: reuseQuoteId } = useLocalSearchParams<{ quoteId?: string }>();
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [durationSeconds, setDurationSeconds] = useState(0);
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -104,31 +108,51 @@ export default function VoiceRecordScreen(): JSX.Element {
         throw new Error('No recording URI available');
       }
 
-      // VOICE-02: Move from cacheDirectory to documentDirectory immediately
-      const dest = `${FileSystem.documentDirectory ?? ''}audio-${Date.now()}.m4a`;
+      // VOICE-02: Move from cacheDirectory to documentDirectory immediately.
+      // FAIL-04: name the file after the quote id so Retry can find it later.
+      const contractorId = useAuthStore.getState().contractor?.id ?? '';
+      let newQuoteId = '';
+      const reuseId = parseReuseQuoteId(reuseQuoteId);
+      if (reuseId) {
+        const found = await findQuoteRecord(() =>
+          database.get<Quote>('quotes').find(reuseId),
+        );
+        if (found.ok) {
+          newQuoteId = found.record.id;
+          await database.write(async () => {
+            await found.record.update((r) => {
+              r.status = 'ai_processing';
+              r.voiceJobId = null;
+            });
+          });
+        }
+      }
+      if (!newQuoteId) {
+        await database.write(async () => {
+          const newQuote = await database.get<Quote>('quotes').create((r) => {
+            r.contractorId = contractorId;
+            r.status = 'ai_processing';
+            r.totalCents = 0;
+            r.isArchived = false;
+          });
+          newQuoteId = newQuote.id;
+          await database.get<Draft>('drafts').create((r) => {
+            r.quoteId = newQuote.id;
+            r.lineItemsJson = '[]';
+          });
+        });
+      }
+
+      const dest = localVoiceAudioPath(newQuoteId, FileSystem.documentDirectory);
+      const existing = await FileSystem.getInfoAsync(dest);
+      if (existing.exists) {
+        await FileSystem.deleteAsync(dest, { idempotent: true });
+      }
       await FileSystem.moveAsync({ from: uri, to: dest });
 
       // Reset audio mode
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
 
-      // Create local quote + draft in WatermelonDB
-      const contractorId = useAuthStore.getState().contractor?.id ?? '';
-      let newQuoteId = '';
-      await database.write(async () => {
-        const newQuote = await database.get<Quote>('quotes').create((r) => {
-          r.contractorId = contractorId;
-          r.status = 'ai_processing';
-          r.totalCents = 0;
-          r.isArchived = false;
-        });
-        newQuoteId = newQuote.id;
-        await database.get<Draft>('drafts').create((r) => {
-          r.quoteId = newQuote.id;
-          r.lineItemsJson = '[]';
-        });
-      });
-
-      // Enqueue audio for sync
       await enqueue({
         entityType: 'audio',
         entityId: newQuoteId,
@@ -142,7 +166,7 @@ export default function VoiceRecordScreen(): JSX.Element {
       Alert.alert('Recording Error', 'Failed to save recording. Please try again.');
       setRecordingState('idle');
     }
-  }, [router]);
+  }, [router, reuseQuoteId]);
 
   const handleMicPress = useCallback(() => {
     if (recordingState === 'idle') {
