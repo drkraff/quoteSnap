@@ -48,12 +48,12 @@ export function isPendingAudioRetryStatus(status: string): boolean {
   return status === 'pending' || status === 'in_progress' || status === 'failed';
 }
 
-export function audioRetryInFlight(items: Array<{
+export function audioRetryInFlight(items: {
   entityType: string;
   entityId: string;
   action: string;
   status: string;
-}>, quoteId: string): boolean {
+}[], quoteId: string): boolean {
   return items.some(
     (item) =>
       item.entityType === 'audio' &&
