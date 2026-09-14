@@ -5,11 +5,17 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/cha
 import pool, { query } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
 import type { VoiceJobData, AILineItem, VoiceExtractResult } from '../types/voice.js';
-import { lookupExactRateCardCents, parseSpokenHours, snapshotUnitPriceCents } from './voice-price-attach.js';
+import { lookupExactRateCardCents, parseSpokenHours } from './voice-price-attach.js';
 import { filterUuidCatalogIds, validateAndBuildLineItemsAsync } from './voice-validation.js';
-import type { CatalogItemRow } from './voice-validation.js';
+import type { CatalogItemRow, ValidatedLineItem } from './voice-validation.js';
 import { resolveWhisperLanguage } from './whisper-language.js';
 import { startAiProcessingReaper } from './ai-processing-reaper.js';
+import {
+  flagPartialMappingLines,
+  markQuoteAiFailed,
+  type AiFailureStage,
+} from '../voice/ai-failure.js';
+import { replaceVoiceQuoteLines } from '../voice/commit-voice-result.js';
 
 export const boss = new PgBoss(process.env['DATABASE_URL']!);
 
@@ -31,8 +37,31 @@ async function processVoiceJobs(jobs: Job<VoiceJobData>[]): Promise<void> {
   await Promise.all(jobs.map(processVoiceJob));
 }
 
+async function commitVoiceQuote(args: {
+  quoteId: string;
+  lineItems: ValidatedLineItem[];
+  status: 'draft_local' | 'ai_failed';
+  totalCents: number;
+  failureStage: AiFailureStage | null;
+}): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await replaceVoiceQuoteLines(client, args);
+    await client.query('COMMIT');
+  } catch (txErr) {
+    await client.query('ROLLBACK');
+    throw txErr;
+  } finally {
+    client.release();
+  }
+}
+
 async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
   const { quoteId, contractorId, r2Key } = job.data;
+  let stage: AiFailureStage = 'asr';
+  let builtLineItems: ValidatedLineItem[] | null = null;
+  let builtTotalCents = 0;
 
   try {
     // a) Fetch audio from R2
@@ -57,6 +86,8 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     console.log(
       `[voice] job ${job.id} quote ${quoteId} transcript chars=${transcript.length}`
     );
+
+    stage = 'mapping';
 
     // Audio stays in R2 until GPT + DB write succeed so pg-boss retries can
     // re-fetch it. Deleted after commit (see below).
@@ -212,38 +243,16 @@ Rules:
       },
     );
 
-    // j) Write draft line items and update quote status in transaction
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    builtLineItems = lineItems;
+    builtTotalCents = totalCents;
 
-      for (const item of lineItems) {
-        await client.query(
-          `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence, unit) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [
-            quoteId,
-            item.catalogItemId,
-            item.name,
-            item.quantity,
-            snapshotUnitPriceCents(item.unitPriceCents),
-            item.confidence,
-            item.unit,
-          ]
-        );
-      }
-
-      await client.query(
-        `UPDATE quotes SET status = 'draft_local', total_cents = $1 WHERE id = $2`,
-        [totalCents, quoteId]
-      );
-
-      await client.query('COMMIT');
-    } catch (txErr) {
-      await client.query('ROLLBACK');
-      throw txErr;
-    } finally {
-      client.release();
-    }
+    await commitVoiceQuote({
+      quoteId,
+      lineItems,
+      status: 'draft_local',
+      totalCents,
+      failureStage: null,
+    });
 
     // PII: delete audio only after a durable success so retries still have the object.
     try {
@@ -256,10 +265,23 @@ Rules:
 
     // AI failure is not an SMS send failure (failed_send).
     try {
-      await query(
-        `UPDATE quotes SET status = 'ai_failed' WHERE id = $1 AND status = 'ai_processing'`,
-        [quoteId]
-      );
+      if (stage === 'mapping' && builtLineItems && builtLineItems.length > 0) {
+        const flagged = flagPartialMappingLines(builtLineItems);
+        try {
+          await commitVoiceQuote({
+            quoteId,
+            lineItems: flagged,
+            status: 'ai_failed',
+            totalCents: builtTotalCents,
+            failureStage: 'mapping',
+          });
+        } catch (partialErr) {
+          console.error('Failed to persist partial mapping draft:', partialErr);
+          await markQuoteAiFailed(query, quoteId, 'mapping');
+        }
+      } else {
+        await markQuoteAiFailed(query, quoteId, stage);
+      }
     } catch (updateErr) {
       console.error('Failed to update quote status to ai_failed:', updateErr);
     }

@@ -41,7 +41,7 @@ export async function reapStaleAiProcessingQuotes(
   const cutoff = new Date(now.getTime() - timeoutMs);
   const result = await runQuery(
     `UPDATE quotes
-     SET status = 'ai_failed'
+     SET status = 'ai_failed', ai_failure_stage = 'timeout'
      WHERE status = 'ai_processing'
        AND created_at < $1
      RETURNING id`,

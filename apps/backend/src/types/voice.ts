@@ -24,4 +24,6 @@ export interface VoiceStatusResponse {
   status: 'processing' | 'complete' | 'failed';
   draftId?: string;
   error?: string;
+  /** FAIL-04/05: asr | mapping | timeout when status is failed. */
+  failureStage?: 'asr' | 'mapping' | 'timeout';
 }

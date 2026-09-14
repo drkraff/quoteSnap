@@ -45,6 +45,18 @@ describe('quoteRowDisplay', () => {
     );
   });
 
+  it('offers recovery on ai_failed, distinct from send failed', () => {
+    const view = quoteRowDisplay({
+      status: 'ai_failed',
+      totalCents: 0,
+      customerPhone: null,
+      online: true,
+    });
+    expect(view.statusLabel).toBe("Couldn't process audio");
+    expect(view.accessibilityLabel).toContain('retry the recording or continue as a draft');
+    expect(view.accessibilityLabel.toLowerCase()).not.toContain('send failed');
+  });
+
   it('does not keep Processing copy after status leaves ai_processing', () => {
     const wasProcessing = quoteRowDisplay({
       status: 'ai_processing',

@@ -31,6 +31,12 @@ describe('resolveAudioQuoteServerId', () => {
     ).toBeUndefined();
   });
 
+  it('allows FAIL-04 retry from ai_failed with no server id yet', () => {
+    expect(
+      resolveAudioQuoteServerId({ serverId: null, status: 'ai_failed' }),
+    ).toBeUndefined();
+  });
+
   it('prefers a known server id on voice-first retry so upload can reuse the row', () => {
     expect(
       resolveAudioQuoteServerId({

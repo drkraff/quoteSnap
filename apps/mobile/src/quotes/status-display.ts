@@ -32,7 +32,8 @@ export function getQuoteStatusDisplay(status: string): QuoteStatusDisplay {
 
 /**
  * List-row tap: processing is inert; drafts and failed voice quotes open
- * the editor; everything else (including unused failed_send) is read-only.
+ * the editor (FAIL-04 retry + FAIL-05 manual fallback). failed_send stays
+ * read-only until Phase 6.
  */
 export function quotePressTarget(status: string): QuotePressTarget {
   if (status === 'ai_processing') {

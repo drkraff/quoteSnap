@@ -14,11 +14,21 @@ export type PollAiProcessingOutcome =
   | 'draft_ready'
   | 'ai_failed';
 
+export type RemoteQuoteLineItem = {
+  catalogItemId?: string | null;
+  name: string;
+  quantity: number;
+  unitPriceCents: number | null;
+  unit?: string | null;
+  confidence?: number | null;
+};
+
 export type RemoteQuoteForPoll = {
   quote: {
     status: string;
     voiceJobId: string | null;
   };
+  lineItems?: RemoteQuoteLineItem[];
 };
 
 export type PollAiProcessingDeps = {
@@ -26,12 +36,21 @@ export type PollAiProcessingDeps = {
   fetchQuote: (serverId: string) => Promise<RemoteQuoteForPoll>;
   getDraftLineItems: (quoteId: string) => Promise<DraftLineItemsResponse>;
   markDraftReady: (quote: PollableAiQuote, lineItemsJson: string) => Promise<void>;
-  markFailed: (quote: PollableAiQuote) => Promise<void>;
+  markFailed: (quote: PollableAiQuote, lineItemsJson: string) => Promise<void>;
   stampVoiceJobId: (quote: PollableAiQuote, jobId: string) => Promise<void>;
+};
+
+export type PollAiProcessingOptions = {
+  /** FAIL-04: a re-upload of the same quote is still queued. */
+  audioRetryInFlight?: boolean;
 };
 
 function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function lineItemsJsonFromUnknown(items: unknown): string {
+  return JSON.stringify(Array.isArray(items) ? items : []);
 }
 
 /** Quotes list poller: need a job id (status poll) or a server id (quote lookup). */
@@ -65,7 +84,7 @@ async function applyComplete(
 ): Promise<PollAiProcessingOutcome> {
   try {
     const draftData = await deps.getDraftLineItems(draftId);
-    await deps.markDraftReady(quote, JSON.stringify(draftData.lineItems));
+    await deps.markDraftReady(quote, lineItemsJsonFromUnknown(draftData.lineItems));
   } catch {
     // Same as the existing quotes-list poller: do not stay in ai_processing
     // if the draft fetch fails after the server already finished.
@@ -74,10 +93,45 @@ async function applyComplete(
   return 'draft_ready';
 }
 
+async function applyFailed(
+  quote: PollableAiQuote,
+  deps: PollAiProcessingDeps,
+  options: PollAiProcessingOptions,
+  seed: { draftId?: string | null; lineItems?: RemoteQuoteLineItem[] },
+): Promise<PollAiProcessingOutcome> {
+  if (options.audioRetryInFlight) {
+    return 'still_processing';
+  }
+
+  if (seed.lineItems && seed.lineItems.length > 0) {
+    await deps.markFailed(quote, lineItemsJsonFromUnknown(seed.lineItems));
+    return 'ai_failed';
+  }
+
+  const draftId = hasText(seed.draftId)
+    ? seed.draftId
+    : hasText(quote.serverId)
+      ? quote.serverId
+      : null;
+  if (hasText(draftId)) {
+    try {
+      const draftData = await deps.getDraftLineItems(draftId);
+      await deps.markFailed(quote, lineItemsJsonFromUnknown(draftData.lineItems));
+      return 'ai_failed';
+    } catch {
+      // FAIL-04 ASR: no draft yet. Still mark failed so Retry can surface.
+    }
+  }
+
+  await deps.markFailed(quote, '[]');
+  return 'ai_failed';
+}
+
 async function pollByVoiceJobId(
   quote: PollableAiQuote,
   jobId: string,
   deps: PollAiProcessingDeps,
+  options: PollAiProcessingOptions,
 ): Promise<PollAiProcessingOutcome> {
   try {
     const result = await deps.getVoiceStatus(jobId);
@@ -85,8 +139,7 @@ async function pollByVoiceJobId(
       return applyComplete(quote, result.draftId, deps);
     }
     if (result.status === 'failed') {
-      await deps.markFailed(quote);
-      return 'ai_failed';
+      return applyFailed(quote, deps, options, { draftId: result.draftId });
     }
     return 'still_processing';
   } catch {
@@ -104,13 +157,14 @@ async function pollByVoiceJobId(
 export async function pollOneAiProcessingQuote(
   quote: PollableAiQuote,
   deps: PollAiProcessingDeps,
+  options: PollAiProcessingOptions = {},
 ): Promise<PollAiProcessingOutcome> {
   if (quote.status !== 'ai_processing') {
     return 'skipped';
   }
 
   if (hasText(quote.voiceJobId)) {
-    return pollByVoiceJobId(quote, quote.voiceJobId, deps);
+    return pollByVoiceJobId(quote, quote.voiceJobId, deps, options);
   }
 
   if (!hasText(quote.serverId)) {
@@ -125,8 +179,10 @@ export async function pollOneAiProcessingQuote(
   }
 
   if (remote.quote.status === 'ai_failed') {
-    await deps.markFailed(quote);
-    return 'ai_failed';
+    return applyFailed(quote, deps, options, {
+      draftId: quote.serverId,
+      lineItems: remote.lineItems,
+    });
   }
 
   if (remote.quote.status !== 'ai_processing') {
@@ -139,7 +195,12 @@ export async function pollOneAiProcessingQuote(
       ...quote,
       voiceJobId: remote.quote.voiceJobId,
     };
-    const statusOutcome = await pollByVoiceJobId(withJob, remote.quote.voiceJobId, deps);
+    const statusOutcome = await pollByVoiceJobId(
+      withJob,
+      remote.quote.voiceJobId,
+      deps,
+      options,
+    );
     return statusOutcome === 'still_processing' ? 'recovered_job' : statusOutcome;
   }
 

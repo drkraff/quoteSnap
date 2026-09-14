@@ -5,6 +5,10 @@
  * previous 202, or stamped from a 500 after enqueue). When that id is a
  * tenant-owned UUID, reuse the row instead of INSERT. Absent/blank still
  * creates — first upload of a voice-first local quote.
+ *
+ * FAIL-04 retry reuses the same row: reset to ai_processing, clear the old
+ * voice_job_id so the poller does not latch onto a failed job, and clear
+ * ai_failure_stage until the new worker run finishes.
  */
 
 const UUID_RE =
@@ -80,7 +84,7 @@ export async function resolveVoiceUploadQuote(
   }
 
   await runQuery(
-    `UPDATE quotes SET status = 'ai_processing' WHERE id = $1 AND contractor_id = $2`,
+    `UPDATE quotes SET status = 'ai_processing', ai_failure_stage = NULL, voice_job_id = NULL WHERE id = $1 AND contractor_id = $2`,
     [quoteServerId, contractorId],
   );
 

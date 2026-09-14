@@ -33,6 +33,17 @@ export function draftReadyLocalFields(lineItemsJson: string): {
   };
 }
 
+/** FAIL-05: keep partial lines on the quote while status is ai_failed. */
+export function draftFailedLocalFields(lineItemsJson: string): {
+  status: 'ai_failed';
+  totalCents: number;
+} {
+  return {
+    status: 'ai_failed',
+    totalCents: recalculateTotal(parseLineItems(lineItemsJson)),
+  };
+}
+
 /**
  * FlatList treats identical Model references as unchanged cells. Include
  * the fields the row displays so a status/total write re-renders in place.

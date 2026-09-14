@@ -8,7 +8,7 @@
  * Once a server id is known (202 body, or 500 after the quote row exists),
  * retries must pass it so the backend reuses that row.
  */
-const VOICE_FIRST_STATUS = 'ai_processing';
+const VOICE_FIRST_STATUSES = new Set(['ai_processing', 'ai_failed']);
 
 export function resolveAudioQuoteServerId(quote: {
   serverId?: string | null;
@@ -16,7 +16,7 @@ export function resolveAudioQuoteServerId(quote: {
 }): string | undefined {
   const serverId = quote.serverId?.trim() ? quote.serverId.trim() : undefined;
   if (serverId) return serverId;
-  if (quote.status === VOICE_FIRST_STATUS) return undefined;
+  if (VOICE_FIRST_STATUSES.has(quote.status)) return undefined;
   throw new Error('Cannot sync audio: parent quote has no server ID yet');
 }
 

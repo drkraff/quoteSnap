@@ -46,7 +46,7 @@ describe('reapStaleAiProcessingQuotes', () => {
 
     assert.deepEqual(ids, ['q1', 'q2']);
     assert.equal(calls.length, 1);
-    assert.match(calls[0]!.text, /SET status = 'ai_failed'/);
+    assert.match(calls[0]!.text, /SET status = 'ai_failed', ai_failure_stage = 'timeout'/);
     assert.match(calls[0]!.text, /WHERE status = 'ai_processing'/);
     assert.match(calls[0]!.text, /created_at < \$1/);
     assert.equal(calls[0]!.text.includes('${'), false);

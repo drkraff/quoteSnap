@@ -50,6 +50,7 @@ import {
   type QuotesListMode,
 } from '../../src/quotes/list-mode';
 import {
+  draftFailedLocalFields,
   draftReadyLocalFields,
   QUOTE_LIST_OBSERVE_COLUMNS,
   quoteListRenderKey,
@@ -59,6 +60,7 @@ import {
   shouldPollAiProcessing,
   shouldRunQuotesAiPoller,
 } from '../../src/quotes/poll-ai-processing';
+import { audioRetryInFlight } from '../../src/quotes/retry-voice-quote';
 
 // Tab bar height constant (safe default for both iOS/Android)
 const TAB_BAR_HEIGHT = 56;
@@ -109,6 +111,12 @@ export default function QuotesScreen(): JSX.Element {
     }
 
     async function pollProcessing(): Promise<void> {
+      let queueItems: SyncQueueItem[] = [];
+      try {
+        queueItems = await database.get<SyncQueueItem>('sync_queue_items').query().fetch();
+      } catch {
+        queueItems = [];
+      }
       for (const q of processingQuotes) {
         try {
           const outcome = await pollOneAiProcessingQuote(
@@ -140,10 +148,19 @@ export default function QuotesScreen(): JSX.Element {
                   });
                 });
               },
-              async markFailed() {
+              async markFailed(_quote, lineItemsJson) {
+                const failed = draftFailedLocalFields(lineItemsJson);
                 await database.write(async () => {
+                  const draftCollection = database.get<Draft>('drafts');
+                  const drafts = await draftCollection.query(Q.where('quote_id', q.id)).fetch();
+                  if (drafts.length > 0) {
+                    await drafts[0]!.update((d) => {
+                      d.lineItemsJson = lineItemsJson;
+                    });
+                  }
                   await q.update((r) => {
-                    r.status = 'ai_failed';
+                    r.status = failed.status;
+                    r.totalCents = failed.totalCents;
                   });
                 });
               },
@@ -154,6 +171,9 @@ export default function QuotesScreen(): JSX.Element {
                   });
                 });
               },
+            },
+            {
+              audioRetryInFlight: audioRetryInFlight(queueItems, q.id),
             },
           );
           if (outcome === 'draft_ready') {

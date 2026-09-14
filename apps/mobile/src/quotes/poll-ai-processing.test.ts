@@ -113,7 +113,7 @@ describe('pollOneAiProcessingQuote', () => {
     const row = quote({ voiceJobId: 'job-1' });
 
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
-    expect(api.markFailed).toHaveBeenCalledWith(row);
+    expect(api.markFailed).toHaveBeenCalledWith(row, '[]');
     expect(api.fetchQuote).not.toHaveBeenCalled();
   });
 
@@ -182,7 +182,7 @@ describe('pollOneAiProcessingQuote', () => {
     const row = quote({ serverId: 'srv-1' });
 
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
-    expect(api.markFailed).toHaveBeenCalledWith(row);
+    expect(api.markFailed).toHaveBeenCalledWith(row, '[]');
     expect(api.getVoiceStatus).not.toHaveBeenCalled();
     expect(api.stampVoiceJobId).not.toHaveBeenCalled();
   });
@@ -282,9 +282,79 @@ describe('pollOneAiProcessingQuote', () => {
 
     expect(outcomes).toEqual(['ai_failed', 'still_processing']);
     expect(api.markFailed).toHaveBeenCalledTimes(1);
-    expect(api.markFailed).toHaveBeenCalledWith(stampedNoJob);
+    expect(api.markFailed).toHaveBeenCalledWith(stampedNoJob, '[]');
     expect(api.fetchQuote).toHaveBeenCalledTimes(1);
     expect(api.getVoiceStatus).toHaveBeenCalledTimes(1);
     expect(api.getVoiceStatus).toHaveBeenCalledWith('job-1');
+  });
+
+  it('FAIL-05: failed voice status with draftId pulls partial line items', async () => {
+    const partial = [
+      {
+        catalogItemId: null,
+        name: 'Mystery work',
+        quantity: 1,
+        unitPriceCents: null,
+        unit: 'job',
+        confidence: 0.59,
+      },
+    ];
+    const api = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'failed' as const,
+        draftId: 'srv-1',
+        failureStage: 'mapping' as const,
+      })),
+      getDraftLineItems: jest.fn(async () => ({
+        quoteId: 'srv-1',
+        totalCents: 0,
+        lineItems: partial,
+      })),
+    });
+    const row = quote({ voiceJobId: 'job-1', serverId: 'srv-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
+    expect(api.getDraftLineItems).toHaveBeenCalledWith('srv-1');
+    expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial));
+    expect(api.markDraftReady).not.toHaveBeenCalled();
+  });
+
+  it('FAIL-05: server ai_failed with nested lines does not wait on GET /voice/draft', async () => {
+    const partial = [
+      {
+        catalogItemId: null,
+        name: 'Elbow',
+        quantity: 1,
+        unitPriceCents: null,
+        confidence: 0.5,
+      },
+    ];
+    const api = deps({
+      fetchQuote: jest.fn(async () => ({
+        quote: { status: 'ai_failed', voiceJobId: null },
+        lineItems: partial,
+      })),
+    });
+    const row = quote({ serverId: 'srv-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
+    expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial));
+    expect(api.getDraftLineItems).not.toHaveBeenCalled();
+  });
+
+  it('FAIL-04: does not mark failed while the same quote has a pending audio retry', async () => {
+    const api = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'failed' as const,
+        draftId: 'srv-1',
+      })),
+    });
+    const row = quote({ voiceJobId: 'job-1', serverId: 'srv-1' });
+
+    await expect(
+      pollOneAiProcessingQuote(row, api, { audioRetryInFlight: true }),
+    ).resolves.toBe('still_processing');
+    expect(api.markFailed).not.toHaveBeenCalled();
+    expect(api.getDraftLineItems).not.toHaveBeenCalled();
   });
 });
