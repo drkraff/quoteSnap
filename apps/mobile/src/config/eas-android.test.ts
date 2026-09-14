@@ -36,6 +36,7 @@ describe('EAS Android preview config', () => {
 
   it('keeps the RN old architecture and WatermelonDB JSI off', () => {
     expect(appConfig).toMatch(/newArchEnabled:\s*false/);
+    expect(appConfig).toMatch(/disableJsi:\s*true/);
     expect(dbIndex).toMatch(/jsi:\s*false/);
   });
 

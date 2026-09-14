@@ -125,7 +125,7 @@ Wipe local data the same as a fresh install: Android Settings → Apps → Quote
 | `newArchEnabled` | `apps/mobile/app.config.ts` | `false` |
 | WatermelonDB `jsi` | `apps/mobile/src/db/index.ts` | `false` |
 
-EAS prebuild uses that app config (including `@morrowdigital/watermelondb-expo-plugin` and Kotlin `1.9.24`). Do not add `newArchEnabled` to `eas.json`.
+EAS prebuild uses that app config (including `@morrowdigital/watermelondb-expo-plugin` with `{ disableJsi: true }` and Kotlin `1.9.24`). Do not add `newArchEnabled` to `eas.json`.
 
 ---
 
@@ -139,3 +139,4 @@ EAS prebuild uses that app config (including `@morrowdigital/watermelondb-expo-p
 | Health URL works in the phone browser, app does not | Stale APK | Install the new preview build; JS is not live-reloaded |
 | First build asks for an Android keystore | Expected | Let EAS generate and store it; do not commit keystore files |
 | `env:set` fails | No Expo project yet, or old CLI | `eas init`, then `npx eas-cli --version` (need 14+). Or pass `--skip-env-sync` after setting the var in the Expo dashboard |
+| Gradle `:watermelondb-jsi:compileReleaseJavaWithJavac` cannot find `JSIModulePackage` / `JSIModuleSpec` | `@morrowdigital/watermelondb-expo-plugin` still wires Android JSI unless disabled | Plugin entry must be `['@morrowdigital/watermelondb-expo-plugin', { disableJsi: true }]` (camelCase `disableJsi`, not `disableJSI`). Keep `newArchEnabled: false` and JS `jsi: false`. Do not enable JSI. |
