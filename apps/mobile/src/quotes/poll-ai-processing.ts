@@ -48,11 +48,11 @@ export function shouldPollAiProcessing(quote: {
 
 /** Start the 1.5s poll loop only when online — reconnect must re-enter this. */
 export function shouldRunQuotesAiPoller(
-  quotes: Array<{
+  quotes: {
     status: string;
     serverId: string | null;
     voiceJobId: string | null;
-  }>,
+  }[],
   online: boolean,
 ): boolean {
   return online && quotes.some(shouldPollAiProcessing);

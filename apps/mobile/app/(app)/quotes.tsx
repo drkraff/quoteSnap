@@ -28,7 +28,7 @@ import { rememberServerRevision } from '../../src/sync/server-revision';
 import { quotePressTarget } from '../../src/quotes/status-display';
 import {
   draftReadyLocalFields,
-  observeQuotesForContractor,
+  QUOTE_LIST_OBSERVE_COLUMNS,
   quoteListRenderKey,
 } from '../../src/quotes/quote-list-observe';
 import {
@@ -52,7 +52,14 @@ export default function QuotesScreen(): JSX.Element {
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
-    const subscription = observeQuotesForContractor(contractorId).subscribe(setQuotes);
+    const subscription = database
+      .get<Quote>('quotes')
+      .query(
+        Q.where('contractor_id', contractorId),
+        Q.sortBy('created_at', 'desc'),
+      )
+      .observeWithColumns(QUOTE_LIST_OBSERVE_COLUMNS)
+      .subscribe(setQuotes);
     return () => subscription.unsubscribe();
   }, []);
 
