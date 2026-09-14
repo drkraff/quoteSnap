@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { query, withTransaction } from "../db/connection.js";
 import { authLimiter } from "../auth/auth-limiter.js";
+import { contractorPublicFromRow, type ContractorRow } from "../auth/contractor-public.js";
 import {
   ContractorPayload,
   RegisterBody,
@@ -81,28 +82,16 @@ router.post("/register", authLimiter, async (req: Request, res: Response): Promi
     const result = await query(
       `INSERT INTO contractors (email, phone, password_hash, display_name)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, phone, display_name, trade`,
+       RETURNING id, email, phone, display_name, trade, hourly_rate_cents, markup_percent`,
       [email || null, phone, passwordHash, displayName ?? null]
     );
 
-    const contractor = result.rows[0] as {
-      id: string;
-      email: string | null;
-      phone: string | null;
-      display_name: string | null;
-      trade: string | null;
-    };
+    const contractor = contractorPublicFromRow(result.rows[0] as ContractorRow);
 
     const tokens = await issueTokenPair(contractor.id, contractor.email, contractor.phone);
 
     res.status(201).json({
-      contractor: {
-        id: contractor.id,
-        email: contractor.email,
-        phone: contractor.phone,
-        displayName: contractor.display_name,
-        trade: contractor.trade,
-      },
+      contractor,
       ...tokens,
     });
   } catch (err: unknown) {
@@ -149,14 +138,14 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
     const result =
       identifier.field === "email"
         ? await query(
-            `SELECT id, email, phone, display_name, trade, password_hash
+            `SELECT id, email, phone, display_name, trade, hourly_rate_cents, markup_percent, password_hash
              FROM contractors
              WHERE email = $1
              LIMIT 1`,
             [identifier.value]
           )
         : await query(
-            `SELECT id, email, phone, display_name, trade, password_hash
+            `SELECT id, email, phone, display_name, trade, hourly_rate_cents, markup_percent, password_hash
              FROM contractors
              WHERE phone = $1
              LIMIT 1`,
@@ -168,31 +157,19 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
       return;
     }
 
-    const contractor = result.rows[0] as {
-      id: string;
-      email: string | null;
-      phone: string | null;
-      display_name: string | null;
-      trade: string | null;
-      password_hash: string;
-    };
+    const contractorRow = result.rows[0] as ContractorRow & { password_hash: string };
 
-    const passwordMatch = await bcrypt.compare(password, contractor.password_hash);
+    const passwordMatch = await bcrypt.compare(password, contractorRow.password_hash);
     if (!passwordMatch) {
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
 
+    const contractor = contractorPublicFromRow(contractorRow);
     const tokens = await issueTokenPair(contractor.id, contractor.email, contractor.phone);
 
     res.status(200).json({
-      contractor: {
-        id: contractor.id,
-        email: contractor.email,
-        phone: contractor.phone,
-        displayName: contractor.display_name,
-        trade: contractor.trade,
-      },
+      contractor,
       ...tokens,
     });
   } catch (err) {

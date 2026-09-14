@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import {
   attachOneVoicePrice,
   attachVoiceLinePrices,
+  ensureLaborLineFromSpokenHours,
+  isLaborVoiceLine,
   lookupExactRateCardCents,
+  parseSpokenHours,
   snapshotUnitPriceCents,
   voiceLineNeedsRateCard,
 } from "./voice-price-attach.js";
@@ -71,6 +74,39 @@ describe("attachOneVoicePrice", () => {
       unitPriceCents: null,
       priceSource: "unknown",
     });
+  });
+
+  it("computes labor unit price from signup hourly when the line is hours", () => {
+    assert.deepEqual(
+      attachOneVoicePrice(
+        line({ name: "Labor", quantity: 2, unit: "hour" }),
+        null,
+        7500,
+      ),
+      { unitPriceCents: 7500, priceSource: "computed" },
+    );
+  });
+
+  it("does not invent a material/SKU price from hourly", () => {
+    assert.deepEqual(attachOneVoicePrice(line({ unit: "foot" }), null, 7500), {
+      unitPriceCents: null,
+      priceSource: "unknown",
+    });
+  });
+
+  it("lets spoken and learned beat computed labor", () => {
+    assert.equal(
+      attachOneVoicePrice(
+        line({ unit: "hour", spokenUnitPriceCents: 9000 }),
+        5000,
+        7500,
+      ).priceSource,
+      "spoken",
+    );
+    assert.equal(
+      attachOneVoicePrice(line({ unit: "hour" }), 6000, 7500).priceSource,
+      "learned",
+    );
   });
 
   it("does not treat a zero or negative lookup as a price", () => {
@@ -232,5 +268,31 @@ describe("snapshotUnitPriceCents", () => {
   it("persists unknown as 0 so NOT NULL snapshots stay valid", () => {
     assert.equal(snapshotUnitPriceCents(null), 0);
     assert.equal(snapshotUnitPriceCents(850), 850);
+  });
+});
+
+describe("ensureLaborLineFromSpokenHours / parseSpokenHours", () => {
+  it("accepts integer hours >= 1", () => {
+    assert.equal(parseSpokenHours(2), 2);
+    assert.equal(parseSpokenHours(1), 1);
+    assert.equal(parseSpokenHours(0), null);
+    assert.equal(parseSpokenHours(1.5), null);
+    assert.equal(parseSpokenHours(null), null);
+  });
+
+  it("adds a Labor hour line when spoken hours exist and no hour line is present", () => {
+    const added = ensureLaborLineFromSpokenHours([line()], 2);
+    assert.equal(added.length, 2);
+    assert.equal(added[1]?.name, "Labor");
+    assert.equal(added[1]?.quantity, 2);
+    assert.equal(added[1]?.unit, "hour");
+    assert.equal(added[1]?.catalogItemId, null);
+    assert.equal(added[1]?.spokenUnitPriceCents, null);
+    assert.equal(isLaborVoiceLine(added[1]!), true);
+  });
+
+  it("does not duplicate when an hour-unit line already exists", () => {
+    const existing = [line({ name: "Labor", quantity: 2, unit: "hour" })];
+    assert.equal(ensureLaborLineFromSpokenHours(existing, 2).length, 1);
   });
 });

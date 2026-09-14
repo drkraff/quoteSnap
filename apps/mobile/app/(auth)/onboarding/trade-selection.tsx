@@ -3,13 +3,24 @@ import {
   FlatList,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { saveOnboardingProfile } from '../../../src/api/onboarding';
 import type { Trade } from '../../../src/api/onboarding';
+import {
+  canFinishOnboarding,
+  dollarsToCents,
+  onboardingAfterProfile,
+  parseMarkupPercentInput,
+} from '../../../src/onboarding/profile';
+import { useAuthStore } from '../../../src/store/auth-store';
+import { enqueue } from '../../../src/sync/sync-queue';
+import { onboardingProfileEnqueueParams } from '../../../src/sync/offline-onboarding-seed';
 
 interface TradeOption {
   id: Trade;
@@ -47,48 +58,152 @@ function TradeCard({ trade, isSelected, onPress }: TradeCardProps): JSX.Element 
 
 export default function TradeSelectionScreen(): JSX.Element {
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  const [hourlyText, setHourlyText] = useState('');
+  const [markupText, setMarkupText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const router = useRouter();
 
-  function handleTradeSelect(trade: Trade): void {
-    setSelectedTrade(trade);
+  const hourlyRateCents = dollarsToCents(hourlyText);
+  const markupParsed = parseMarkupPercentInput(markupText);
+  const canContinue = canFinishOnboarding({
+    trade: selectedTrade,
+    hourlyRateCents,
+    markupOk: markupParsed.ok,
+  });
+
+  async function persistProfile(trade: Trade, cents: number, markupPercent: number | null): Promise<void> {
+    const contractorId = useAuthStore.getState().contractor?.id;
+    try {
+      const response = await saveOnboardingProfile({
+        trade,
+        hourlyRateCents: cents,
+        markupPercent,
+      });
+      await useAuthStore.getState().updateContractorProfile({
+        trade: response.contractor.trade,
+        hourlyRateCents: response.contractor.hourlyRateCents,
+        markupPercent: response.contractor.markupPercent,
+      });
+    } catch {
+      if (contractorId) {
+        await enqueue(
+          onboardingProfileEnqueueParams(contractorId, {
+            trade,
+            hourlyRateCents: cents,
+            markupPercent,
+          }),
+        );
+      }
+      await useAuthStore.getState().updateContractorProfile({
+        trade,
+        hourlyRateCents: cents,
+        markupPercent,
+      });
+    }
   }
 
-  function handleCTAPress(): void {
-    if (selectedTrade === null) return;
-    router.push({
-      pathname: '/(auth)/onboarding/seeding',
-      params: { trade: selectedTrade },
-    });
+  async function handleContinue(action: 'skip_catalog' | 'load_catalog'): Promise<void> {
+    if (selectedTrade === null || hourlyRateCents === null || !markupParsed.ok) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const next = onboardingAfterProfile(action, selectedTrade);
+      await persistProfile(selectedTrade, hourlyRateCents, markupParsed.value);
+      if (next.kind === 'ready') {
+        router.replace({
+          pathname: '/(auth)/onboarding/ready',
+          params: { trade: next.trade, itemCount: String(next.itemCount) },
+        });
+        return;
+      }
+      router.push({
+        pathname: '/(auth)/onboarding/seeding',
+        params: { trade: next.trade },
+      });
+    } catch {
+      setError('Could not save your rate. Try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.heading}>Choose your trade</Text>
-      <Text style={styles.subheading}>We'll set up your starter catalog.</Text>
-      <FlatList
-        data={TRADES}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
-        renderItem={({ item }) => (
-          <TradeCard
-            trade={item}
-            isSelected={selectedTrade === item.id}
-            onPress={handleTradeSelect}
-          />
-        )}
-        style={styles.list}
-      />
-      <TouchableOpacity
-        style={[styles.cta, selectedTrade === null && styles.ctaDisabled]}
-        onPress={handleCTAPress}
-        disabled={selectedTrade === null}
-        accessibilityRole="button"
-        accessibilityLabel="Set Up My Catalog"
-        accessibilityState={{ disabled: selectedTrade === null }}
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.ctaText}>Set Up My Catalog</Text>
-      </TouchableOpacity>
+        <Text style={styles.heading}>Choose your trade</Text>
+        <Text style={styles.subheading}>
+          Hourly rate is required. Starter catalog is optional — you can quote with none.
+        </Text>
+        <FlatList
+          data={TRADES}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          renderItem={({ item }) => (
+            <TradeCard
+              trade={item}
+              isSelected={selectedTrade === item.id}
+              onPress={setSelectedTrade}
+            />
+          )}
+          scrollEnabled={false}
+          style={styles.list}
+        />
+
+        <Text style={styles.fieldLabel}>Hourly labor rate</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="75"
+          value={hourlyText}
+          onChangeText={setHourlyText}
+          keyboardType="decimal-pad"
+          accessibilityLabel="Hourly labor rate in dollars"
+        />
+
+        <Text style={styles.fieldLabel}>Material markup % (optional)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="20"
+          value={markupText}
+          onChangeText={setMarkupText}
+          keyboardType="number-pad"
+          accessibilityLabel="Material markup percent"
+        />
+
+        {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.cta, (!canContinue || saving) && styles.ctaDisabled]}
+          onPress={() => {
+            void handleContinue('skip_catalog');
+          }}
+          disabled={!canContinue || saving}
+          accessibilityRole="button"
+          accessibilityLabel="Start quoting"
+          accessibilityState={{ disabled: !canContinue || saving }}
+        >
+          <Text style={styles.ctaText}>
+            {saving ? 'Saving...' : 'Start quoting'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondary}
+          onPress={() => {
+            void handleContinue('load_catalog');
+          }}
+          disabled={!canContinue || saving}
+          accessibilityRole="button"
+          accessibilityLabel="Load starter catalog"
+          accessibilityState={{ disabled: !canContinue || saving }}
+        >
+          <Text style={styles.secondaryText}>Load starter catalog</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -97,7 +212,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
+  },
+  scroll: {
     padding: 24,
+    paddingBottom: 40,
   },
   heading: {
     fontSize: 22,
@@ -110,10 +228,10 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 24,
     color: '#666',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   list: {
-    flex: 1,
+    marginBottom: 16,
   },
   row: {
     gap: 8,
@@ -147,6 +265,25 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 24,
   },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    fontSize: 16,
+  },
+  error: {
+    color: '#cc0000',
+    marginBottom: 12,
+    fontSize: 14,
+  },
   cta: {
     backgroundColor: '#0066cc',
     borderRadius: 8,
@@ -160,6 +297,17 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondary: {
+    padding: 16,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryText: {
+    color: '#0066cc',
     fontSize: 16,
     fontWeight: '600',
   },

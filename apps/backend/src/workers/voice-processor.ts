@@ -4,8 +4,8 @@ import OpenAI, { toFile } from 'openai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions/completions.js';
 import pool, { query } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
-import type { VoiceJobData, AILineItem } from '../types/voice.js';
-import { lookupExactRateCardCents, snapshotUnitPriceCents } from './voice-price-attach.js';
+import type { VoiceJobData, AILineItem, VoiceExtractResult } from '../types/voice.js';
+import { lookupExactRateCardCents, parseSpokenHours, snapshotUnitPriceCents } from './voice-price-attach.js';
 import { filterUuidCatalogIds, validateAndBuildLineItemsAsync } from './voice-validation.js';
 import type { CatalogItemRow } from './voice-validation.js';
 import { resolveWhisperLanguage } from './whisper-language.js';
@@ -69,12 +69,19 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const catalogItems = catalogResult.rows as Array<{ id: string; name: string; unit: string }>;
 
     const tradeResult = await query(
-      `SELECT trade FROM contractors WHERE id = $1`,
+      `SELECT trade, hourly_rate_cents FROM contractors WHERE id = $1`,
       [contractorId]
     );
+    const contractorRow = tradeResult.rows[0] as
+      | { trade?: string | null; hourly_rate_cents?: number | null }
+      | undefined;
     const contractorTrade =
-      typeof (tradeResult.rows[0] as { trade?: string | null } | undefined)?.trade === 'string'
-        ? (tradeResult.rows[0] as { trade: string }).trade
+      typeof contractorRow?.trade === 'string' ? contractorRow.trade : null;
+    const hourlyRateCents =
+      typeof contractorRow?.hourly_rate_cents === 'number' &&
+      Number.isInteger(contractorRow.hourly_rate_cents) &&
+      contractorRow.hourly_rate_cents > 0
+        ? contractorRow.hourly_rate_cents
         : null;
 
     // e) GPT-4o function calling — extract lines; never ask the model for a guessed price
@@ -91,6 +98,7 @@ Rules:
 - quantity is an integer >= 1. "14 linear feet" → quantity 14, unit foot.
 - unit must be one of: each, hour, foot, sqft, job.
 - spokenUnitPriceCents is integer cents ONLY if the contractor stated a dollar amount (example: "eight fifty a foot" → 850). If they did not say a price, omit it or null.
+- spokenHours is integer hours for the job ONLY if they stated labor time (example: "call it two hours" → 2). Omit or null if they did not say hours. Do not guess duration.
 - NEVER invent a price, SKU, catalog ID, or typical trade rate. Never copy a price from the catalog; prices are attached later.
 - Do not add catalog items they did not mention.`,
         },
@@ -143,6 +151,12 @@ Rules:
                     required: ['name', 'quantity', 'unit', 'confidence'],
                   },
                 },
+                spokenHours: {
+                  type: ['integer', 'null'],
+                  minimum: 1,
+                  description:
+                    'Integer hours the contractor said for the job. Null/omit if they did not say hours. NEVER guess.',
+                },
               },
               required: ['items'],
             },
@@ -160,8 +174,9 @@ Rules:
     // ChatCompletionMessageToolCall is ChatCompletionMessageFunctionToolCall | ChatCompletionMessageCustomToolCall
     // We always use function tool_choice so this will be a function tool call
     const toolCall = rawToolCall as ChatCompletionMessageFunctionToolCall;
-    const parsed = JSON.parse(toolCall.function.arguments) as { items: AILineItem[] };
-    const aiItems = parsed.items;
+    const parsed = JSON.parse(toolCall.function.arguments) as VoiceExtractResult;
+    const aiItems: AILineItem[] = Array.isArray(parsed.items) ? parsed.items : [];
+    const spokenHours = parseSpokenHours(parsed.spokenHours);
 
     // g) Validate catalog IDs — only UUID-shaped values may hit the uuid column.
     const aiItemIds = filterUuidCatalogIds(
@@ -178,12 +193,15 @@ Rules:
       validCatalogItems = validationResult.rows as CatalogItemRow[];
     }
 
-    // h-i) Build catalog + adhoc lines, then attach prices (spoken → catalog SKU → exact rate-card → blank)
+    // h-i) Build catalog + adhoc lines, then attach prices
+    // (spoken → catalog SKU → exact rate-card → computed labor → blank)
     const { lineItems, totalCents } = await validateAndBuildLineItemsAsync(
       aiItems,
       validCatalogItems,
       {
         trade: contractorTrade,
+        hourlyRateCents,
+        spokenHours,
         lookupRateCard: ({ name, unit, trade }) =>
           lookupExactRateCardCents(query, {
             contractorId,

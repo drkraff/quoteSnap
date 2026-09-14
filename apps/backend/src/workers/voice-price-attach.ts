@@ -8,17 +8,62 @@ export type RateCardCentsLookup = (args: {
   trade: string | null;
 }) => number | null | Promise<number | null>;
 
+export const SYNTHESIZED_LABOR_NAME = "Labor";
+
 function isPositiveCents(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+export function parseSpokenHours(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    return null;
+  }
+  return value;
+}
+
+/** Labor is an hour-unit line. Materials/SKUs with other units are never computed. */
+export function isLaborVoiceLine(line: { unit: string | null }): boolean {
+  return parseCatalogUnit(line.unit) === "hour";
+}
+
+/**
+ * If the contractor spoke job hours and no hour-unit line exists, add a Labor
+ * line so attach can fill hours × hourly. Does not invent a price.
+ */
+export function ensureLaborLineFromSpokenHours(
+  lines: BuiltVoiceLine[],
+  spokenHours: number | null,
+): BuiltVoiceLine[] {
+  const hours = parseSpokenHours(spokenHours);
+  if (hours == null) {
+    return lines;
+  }
+  if (lines.some(isLaborVoiceLine)) {
+    return lines;
+  }
+  return [
+    ...lines,
+    {
+      catalogItemId: null,
+      name: SYNTHESIZED_LABOR_NAME,
+      quantity: hours,
+      unit: "hour",
+      spokenUnitPriceCents: null,
+      catalogUnitPriceCents: null,
+      confidence: 0.8,
+    },
+  ];
+}
+
 /**
  * Spoken wins; mapped SKU uses catalog cents; otherwise exact rate-card;
+ * otherwise labor = hours × signup hourly (unit price = hourly cents);
  * otherwise blank. Never uses trade defaults or an LLM price field.
  */
 export function attachOneVoicePrice(
   line: BuiltVoiceLine,
   rateCardCents: number | null,
+  hourlyRateCents: number | null = null,
 ): { unitPriceCents: number | null; priceSource: PriceSource } {
   if (isPositiveCents(line.spokenUnitPriceCents)) {
     return { unitPriceCents: line.spokenUnitPriceCents, priceSource: "spoken" };
@@ -28,6 +73,9 @@ export function attachOneVoicePrice(
   }
   if (isPositiveCents(rateCardCents)) {
     return { unitPriceCents: rateCardCents, priceSource: "learned" };
+  }
+  if (isLaborVoiceLine(line) && isPositiveCents(hourlyRateCents)) {
+    return { unitPriceCents: hourlyRateCents, priceSource: "computed" };
   }
   return { unitPriceCents: null, priceSource: "unknown" };
 }
@@ -77,6 +125,7 @@ export async function attachVoiceLinePrices(
   lines: BuiltVoiceLine[],
   lookupRateCard: RateCardCentsLookup,
   trade: string | null = null,
+  hourlyRateCents: number | null = null,
 ): Promise<ValidatedLineItem[]> {
   const priced: ValidatedLineItem[] = [];
   for (const line of lines) {
@@ -88,7 +137,7 @@ export async function attachVoiceLinePrices(
         trade,
       })) ?? null;
     }
-    const attached = attachOneVoicePrice(line, rateCardCents);
+    const attached = attachOneVoicePrice(line, rateCardCents, hourlyRateCents);
     priced.push({
       catalogItemId: line.catalogItemId,
       name: line.name,

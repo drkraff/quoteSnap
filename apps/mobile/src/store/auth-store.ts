@@ -33,7 +33,16 @@ interface AuthActions {
   logout(): Promise<void>;
   refreshSession(): Promise<boolean>;
   restoreSession(): Promise<void>;
-  setOnboardingComplete(trade: string): Promise<void>;
+  updateContractorProfile(profile: {
+    trade?: string | null;
+    hourlyRateCents?: number | null;
+    markupPercent?: number | null;
+  }): Promise<void>;
+  setOnboardingComplete(profile: {
+    trade: string;
+    hourlyRateCents?: number | null;
+    markupPercent?: number | null;
+  }): Promise<void>;
 }
 
 async function storeTokens(
@@ -216,11 +225,49 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     }
   },
 
-  async setOnboardingComplete(trade: string): Promise<void> {
+  async updateContractorProfile(profile: {
+    trade?: string | null;
+    hourlyRateCents?: number | null;
+    markupPercent?: number | null;
+  }): Promise<void> {
+    const contractor = get().contractor;
+    if (!contractor) return;
+    const updated: Contractor = {
+      ...contractor,
+      trade: profile.trade !== undefined ? profile.trade : contractor.trade,
+      hourlyRateCents:
+        profile.hourlyRateCents !== undefined
+          ? profile.hourlyRateCents
+          : (contractor.hourlyRateCents ?? null),
+      markupPercent:
+        profile.markupPercent !== undefined
+          ? profile.markupPercent
+          : (contractor.markupPercent ?? null),
+    };
+    await SecureStore.setItemAsync(KEYS.CONTRACTOR, JSON.stringify(updated));
+    set({ contractor: updated });
+  },
+
+  async setOnboardingComplete(profile: {
+    trade: string;
+    hourlyRateCents?: number | null;
+    markupPercent?: number | null;
+  }): Promise<void> {
     await SecureStore.setItemAsync(KEYS.ONBOARDING_COMPLETE, 'true');
     const contractor = get().contractor;
     if (contractor) {
-      const updated = { ...contractor, trade };
+      const updated: Contractor = {
+        ...contractor,
+        trade: profile.trade,
+        hourlyRateCents:
+          profile.hourlyRateCents !== undefined
+            ? profile.hourlyRateCents
+            : (contractor.hourlyRateCents ?? null),
+        markupPercent:
+          profile.markupPercent !== undefined
+            ? profile.markupPercent
+            : (contractor.markupPercent ?? null),
+      };
       await SecureStore.setItemAsync(KEYS.CONTRACTOR, JSON.stringify(updated));
       set({ onboardingComplete: true, contractor: updated });
     } else {

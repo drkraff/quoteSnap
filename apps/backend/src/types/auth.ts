@@ -4,6 +4,17 @@ export interface ContractorPayload {
   phone: string | null;
 }
 
+/** Public contractor fields returned by auth and onboarding profile. */
+export interface ContractorPublic {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  displayName: string | null;
+  trade: string | null;
+  hourlyRateCents: number | null;
+  markupPercent: number | null;
+}
+
 export interface RegisterBody {
   email?: string;
   phone?: string;

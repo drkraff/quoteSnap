@@ -1,7 +1,12 @@
 import { Q } from '@nozbe/watermelondb';
 import { fetchCatalogItems } from '../api/catalog';
 import { isConflictError } from '../api/client';
-import { seedCatalog, type SeedResponse, type Trade } from '../api/onboarding';
+import {
+  saveOnboardingProfile,
+  seedCatalog,
+  type SeedResponse,
+  type Trade,
+} from '../api/onboarding';
 import { parseCatalogUnit } from '../catalog/units';
 import { OFFLINE_TRADE_TEMPLATES } from '../data/trade-templates';
 import { database } from '../db';
@@ -111,6 +116,23 @@ export function onboardingSeedEnqueueParams(
   };
 }
 
+export function onboardingProfileEnqueueParams(
+  contractorId: string,
+  payload: { trade: Trade; hourlyRateCents: number; markupPercent: number | null },
+): {
+  entityType: 'onboarding';
+  entityId: string;
+  action: 'profile';
+  payload: { trade: Trade; hourlyRateCents: number; markupPercent: number | null };
+} {
+  return {
+    entityType: 'onboarding',
+    entityId: contractorId,
+    action: 'profile',
+    payload,
+  };
+}
+
 /**
  * Queue processor for offline onboarding. Prefer POST /onboarding/seed over
  * per-item POST /catalog: seed sets contractors.trade and inserts the
@@ -126,4 +148,12 @@ export async function syncQueuedOnboardingSeed(contractorId: string, trade: Trad
     const items = await fetchCatalogItems();
     await adoptServerIdsByName(contractorId, items);
   }
+}
+
+export async function syncQueuedOnboardingProfile(payload: {
+  trade: Trade;
+  hourlyRateCents: number;
+  markupPercent: number | null;
+}): Promise<void> {
+  await saveOnboardingProfile(payload);
 }

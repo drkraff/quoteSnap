@@ -44,6 +44,7 @@ const TITLE_BY_ENTITY_ACTION: Record<string, string> = {
   'audio:create': 'Voice recording',
   'audio:update': 'Voice recording',
   'onboarding:seed': 'Catalog setup',
+  'onboarding:profile': 'Hourly rate',
   'rate_card:update': 'Saved price',
   'rate_card:create': 'Saved price',
 };
@@ -59,6 +60,7 @@ const SUMMARY_BY_ENTITY_ACTION: Record<string, string> = {
   'audio:create': "Couldn't upload this recording",
   'audio:update': "Couldn't upload this recording",
   'onboarding:seed': "Couldn't finish catalog setup",
+  'onboarding:profile': "Couldn't save your hourly rate",
   'rate_card:update': "Couldn't save this learned price",
   'rate_card:create': "Couldn't save this learned price",
 };

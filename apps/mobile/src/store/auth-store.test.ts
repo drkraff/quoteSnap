@@ -26,6 +26,8 @@ const contractor = {
   phone: null,
   displayName: 'Ada',
   trade: 'plumbing',
+  hourlyRateCents: 7500,
+  markupPercent: 20,
 };
 
 const KEYS = {
@@ -210,7 +212,7 @@ describe('auth-store login/restore hydrate', () => {
     jest.mocked(authApi.register).mockResolvedValue({
       accessToken: 'access',
       refreshToken: 'refresh',
-      contractor: { ...contractor, trade: null },
+      contractor: { ...contractor, trade: null, hourlyRateCents: null, markupPercent: null },
     });
 
     await useAuthStore.getState().register({
@@ -220,6 +222,30 @@ describe('auth-store login/restore hydrate', () => {
 
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
     expect(hydrateFromServer).not.toHaveBeenCalled();
+  });
+
+  it('persists hourly rate on the contractor without requiring a catalog', async () => {
+    useAuthStore.setState({
+      contractor: { ...contractor, trade: null, hourlyRateCents: null, markupPercent: null },
+    });
+
+    await useAuthStore.getState().updateContractorProfile({
+      trade: 'electrical',
+      hourlyRateCents: 12500,
+      markupPercent: 15,
+    });
+    await useAuthStore.getState().setOnboardingComplete({
+      trade: 'electrical',
+      hourlyRateCents: 12500,
+      markupPercent: 15,
+    });
+
+    expect(useAuthStore.getState().onboardingComplete).toBe(true);
+    expect(useAuthStore.getState().contractor).toMatchObject({
+      trade: 'electrical',
+      hourlyRateCents: 12500,
+      markupPercent: 15,
+    });
   });
 
   it('pulls catalog and quotes after a successful session restore', async () => {

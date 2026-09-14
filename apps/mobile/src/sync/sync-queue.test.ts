@@ -5,7 +5,7 @@ import {
   unarchiveCatalogItem,
   updateCatalogItem,
 } from '../api/catalog';
-import { seedCatalog } from '../api/onboarding';
+import { seedCatalog, saveOnboardingProfile } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
@@ -37,6 +37,7 @@ jest.mock('../api/catalog', () => ({
 
 jest.mock('../api/onboarding', () => ({
   seedCatalog: jest.fn(),
+  saveOnboardingProfile: jest.fn(),
 }));
 
 jest.mock('../api/voice', () => ({
@@ -109,6 +110,7 @@ const mockedArchiveCatalogItem = archiveCatalogItem as unknown as jest.Mock;
 const mockedUnarchiveCatalogItem = unarchiveCatalogItem as unknown as jest.Mock;
 const mockedUploadAudio = uploadAudio as unknown as jest.Mock;
 const mockedSeedCatalog = seedCatalog as unknown as jest.Mock;
+const mockedSaveOnboardingProfile = saveOnboardingProfile as unknown as jest.Mock;
 const mockedFetchCatalogItems = fetchCatalogItems as unknown as jest.Mock;
 const mockedFetchQuote = fetchQuote as unknown as jest.Mock;
 const mockedUpdateQuoteOnServer = updateQuoteOnServer as unknown as jest.Mock;
@@ -191,6 +193,7 @@ describe('processQueue', () => {
     mockedUnarchiveCatalogItem.mockReset();
     mockedUploadAudio.mockReset();
     mockedSeedCatalog.mockReset();
+    mockedSaveOnboardingProfile.mockReset();
     mockedFetchCatalogItems.mockReset();
     mockedFetchQuote.mockReset();
     mockedUpdateQuoteOnServer.mockReset();
@@ -583,6 +586,41 @@ describe('processQueue', () => {
     expect(item.status).toBe('pending');
     expect(item.retryCount).toBe(1);
     expect(item.nextRetryAt).toBeInstanceOf(Date);
+  });
+
+  it('processes an onboarding profile job without seeding catalog', async () => {
+    const item = makeQueueItem({
+      entityType: 'onboarding',
+      entityId: 'contractor-1',
+      action: 'profile',
+      payloadJson: JSON.stringify({
+        trade: 'plumbing',
+        hourlyRateCents: 7500,
+        markupPercent: 20,
+      }),
+    });
+    queueItems = [item];
+    mockedSaveOnboardingProfile.mockResolvedValue({
+      contractor: {
+        id: 'contractor-1',
+        email: null,
+        phone: null,
+        displayName: null,
+        trade: 'plumbing',
+        hourlyRateCents: 7500,
+        markupPercent: 20,
+      },
+    });
+
+    await processQueue();
+
+    expect(mockedSaveOnboardingProfile).toHaveBeenCalledWith({
+      trade: 'plumbing',
+      hourlyRateCents: 7500,
+      markupPercent: 20,
+    });
+    expect(mockedSeedCatalog).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
   });
 
   it('skips POST /catalog when a queued create already has a server id (seed de-dupe)', async () => {

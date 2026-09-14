@@ -218,6 +218,55 @@ describe('validateAndBuildLineItems', () => {
     assert.equal(lineItems[0]!.priceSource, 'unknown');
   });
 
+  it('computes labor from signup hourly on an hour line and leaves unknown materials blank', () => {
+    const { lineItems, totalCents } = validateAndBuildLineItems(
+      [
+        { name: 'Labor', quantity: 2, unit: 'hour', confidence: 0.8 },
+        { name: 'Quartz countertop', quantity: 12, unit: 'foot', confidence: 0.7 },
+      ],
+      [],
+      { hourlyRateCents: 7500 },
+    );
+
+    assert.equal(lineItems.length, 2);
+    assert.equal(lineItems[0]!.unit, 'hour');
+    assert.equal(lineItems[0]!.unitPriceCents, 7500);
+    assert.equal(lineItems[0]!.priceSource, 'computed');
+    assert.equal(lineItems[1]!.unitPriceCents, null);
+    assert.equal(lineItems[1]!.priceSource, 'unknown');
+    assert.equal(totalCents, 15000);
+  });
+
+  it('adds a Labor line from spokenHours when none exists, then computes hourly', () => {
+    const { lineItems } = validateAndBuildLineItems(
+      [{ name: 'Supplier run', quantity: 1, unit: 'job', confidence: 0.6 }],
+      [],
+      { hourlyRateCents: 12500, spokenHours: 2 },
+    );
+
+    const labor = lineItems.find((item) => item.unit === 'hour');
+    assert.ok(labor);
+    assert.equal(labor!.name, 'Labor');
+    assert.equal(labor!.quantity, 2);
+    assert.equal(labor!.catalogItemId, null);
+    assert.equal(labor!.unitPriceCents, 12500);
+    assert.equal(labor!.priceSource, 'computed');
+    const material = lineItems.find((item) => item.name === 'Supplier run');
+    assert.equal(material!.unitPriceCents, null);
+    assert.equal(material!.priceSource, 'unknown');
+  });
+
+  it('does not invent labor when hourly is missing', () => {
+    const { lineItems, totalCents } = validateAndBuildLineItems(
+      [{ name: 'Labor', quantity: 2, unit: 'hour', confidence: 0.8 }],
+      [],
+      { hourlyRateCents: null },
+    );
+    assert.equal(lineItems[0]!.unitPriceCents, null);
+    assert.equal(lineItems[0]!.priceSource, 'unknown');
+    assert.equal(totalCents, 0);
+  });
+
   it('still maps catalog SKUs when mixed with adhoc lines', () => {
     const { lineItems } = validateAndBuildLineItems(
       [
