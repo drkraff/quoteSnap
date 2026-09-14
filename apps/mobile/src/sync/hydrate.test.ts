@@ -765,6 +765,94 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(keep.isArchived).toBe(false);
     expect(localOnly.isArchived).toBe(false);
   });
+
+  it('hydrates archived quotes from the archived pull onto a fresh device', async () => {
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-archived',
+        status: 'draft_local',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        isArchived: true,
+        lineItems: [],
+      },
+    ]);
+
+    expect(quotes[0]).toMatchObject({
+      serverId: 'srv-archived',
+      isArchived: true,
+      customerPhone: '+15550001111',
+    });
+  });
+
+  it('does not re-archive a newer local unarchive when the archived GET is stale', async () => {
+    const local = attachUpdate<FakeQuote>({
+      id: 'local-restored',
+      serverId: 'srv-restored',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date('2026-09-14T12:00:00.000Z'),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+    });
+    quotes = [local];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-restored',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-14T11:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        isArchived: true,
+        lineItems: [],
+      },
+    ]);
+
+    expect(local.isArchived).toBe(false);
+    expect(local.updatedAt).toEqual(new Date('2026-09-14T12:00:00.000Z'));
+  });
+
+  it('does not hide a quote with a dead-letter unarchive still in the queue', async () => {
+    const leftover = attachUpdate<FakeQuote>({
+      id: 'local-unarchive',
+      serverId: 'srv-unarchive',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date('2026-09-14T12:00:00.000Z'),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+    });
+    quotes = [leftover];
+    queueItems = [
+      {
+        entityType: 'quote',
+        entityId: 'local-unarchive',
+        action: 'update',
+        status: 'dead_letter',
+        payloadJson: JSON.stringify({ isArchived: false }),
+      },
+    ];
+
+    await upsertQuotes(contractorId, []);
+
+    expect(leftover.isArchived).toBe(false);
+  });
 });
 
 describe('hydrateFromServer', () => {
@@ -800,7 +888,9 @@ describe('hydrateFromServer', () => {
     await hydrateFromServer(contractorId);
 
     expect(mockedFetchCatalog).toHaveBeenCalledTimes(1);
-    expect(mockedFetchQuotes).toHaveBeenCalledTimes(1);
+    expect(mockedFetchQuotes).toHaveBeenCalledTimes(2);
+    expect(mockedFetchQuotes).toHaveBeenNthCalledWith(1);
+    expect(mockedFetchQuotes).toHaveBeenNthCalledWith(2, { archived: true });
   });
 
   it('does not run overlapping hydrates concurrently', async () => {

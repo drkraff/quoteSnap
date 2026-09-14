@@ -2,8 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   LIST_ACTIVE_QUOTES_SQL,
+  LIST_ARCHIVED_QUOTES_SQL,
   lineItemRowToResponse,
   nestLineItems,
+  parseQuotesListArchivedQuery,
   quoteRowToResponse,
   type QuoteLineItemRow,
   type QuoteRow,
@@ -140,5 +142,28 @@ describe("LIST_ACTIVE_QUOTES_SQL", () => {
   it("excludes archived quotes the same way catalog GET excludes archived SKUs", () => {
     assert.match(LIST_ACTIVE_QUOTES_SQL, /is_archived = FALSE/);
     assert.match(LIST_ACTIVE_QUOTES_SQL, /contractor_id = \$1/);
+  });
+});
+
+describe("LIST_ARCHIVED_QUOTES_SQL", () => {
+  it("returns only archived rows for GET /quotes?archived=true", () => {
+    assert.match(LIST_ARCHIVED_QUOTES_SQL, /is_archived = TRUE/);
+    assert.match(LIST_ARCHIVED_QUOTES_SQL, /contractor_id = \$1/);
+    assert.doesNotMatch(LIST_ARCHIVED_QUOTES_SQL, /is_archived = FALSE/);
+  });
+});
+
+describe("parseQuotesListArchivedQuery", () => {
+  it("defaults to the active list", () => {
+    assert.equal(parseQuotesListArchivedQuery(undefined), false);
+    assert.equal(parseQuotesListArchivedQuery("false"), false);
+    assert.equal(parseQuotesListArchivedQuery("0"), false);
+  });
+
+  it("treats true / 1 as the archived list", () => {
+    assert.equal(parseQuotesListArchivedQuery("true"), true);
+    assert.equal(parseQuotesListArchivedQuery("1"), true);
+    assert.equal(parseQuotesListArchivedQuery(true), true);
+    assert.equal(parseQuotesListArchivedQuery(["true"]), true);
   });
 });

@@ -7,14 +7,23 @@ import { formatRelativeDate } from '../../utils/format-relative-date';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import { quoteRowDisplay } from '../../quotes/quote-row-display';
 
+export type QuoteRowSwipeAction = 'archive' | 'unarchive';
+
 interface QuoteRowProps {
   quote: Quote;
   online: boolean;
   onPress: (quote: Quote) => void;
-  onArchive: (quote: Quote) => void;
+  swipeAction: QuoteRowSwipeAction;
+  onSwipeAction: (quote: Quote) => void;
 }
 
-export function QuoteRow({ quote, online, onPress, onArchive }: QuoteRowProps): JSX.Element {
+export function QuoteRow({
+  quote,
+  online,
+  onPress,
+  swipeAction,
+  onSwipeAction,
+}: QuoteRowProps): JSX.Element {
   const {
     isAiProcessing,
     phone,
@@ -30,17 +39,24 @@ export function QuoteRow({ quote, online, onPress, onArchive }: QuoteRowProps): 
   const relativeDate = formatRelativeDate(quote.createdAt);
 
   function renderRightActions(): JSX.Element {
+    const isUnarchive = swipeAction === 'unarchive';
     return (
       <Pressable
         style={({ pressed }) => [
-          styles.archiveAction,
-          pressed && styles.archiveActionPressed,
+          isUnarchive ? styles.unarchiveAction : styles.archiveAction,
+          pressed && (isUnarchive ? styles.unarchiveActionPressed : styles.archiveActionPressed),
         ]}
-        onPress={() => onArchive(quote)}
+        onPress={() => onSwipeAction(quote)}
         accessibilityRole="button"
-        accessibilityLabel={`Archive quote ${phone}`}
+        accessibilityLabel={
+          isUnarchive ? `Unarchive quote ${phone}` : `Archive quote ${phone}`
+        }
       >
-        <Ionicons name="archive-outline" size={24} color="#ffffff" />
+        <Ionicons
+          name={isUnarchive ? 'arrow-undo-outline' : 'archive-outline'}
+          size={24}
+          color="#ffffff"
+        />
       </Pressable>
     );
   }
@@ -163,5 +179,15 @@ const styles = StyleSheet.create({
   },
   archiveActionPressed: {
     backgroundColor: colors.destructivePressed,
+  },
+  unarchiveAction: {
+    backgroundColor: colors.accent,
+    width: 80,
+    minHeight: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unarchiveActionPressed: {
+    opacity: 0.85,
   },
 });

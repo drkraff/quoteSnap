@@ -38,8 +38,11 @@ interface QuoteSingleResponse {
   quote: QuoteResponse;
 }
 
-export async function fetchQuotes(): Promise<QuoteListItem[]> {
-  const data = await apiClient.get<QuoteListResponse>('/quotes');
+export async function fetchQuotes(options?: {
+  archived?: boolean;
+}): Promise<QuoteListItem[]> {
+  const path = options?.archived === true ? '/quotes?archived=true' : '/quotes';
+  const data = await apiClient.get<QuoteListResponse>(path);
   return data.quotes;
 }
 
@@ -83,5 +86,6 @@ export async function archiveQuote(serverId: string): Promise<void> {
 export async function unarchiveQuote(serverId: string): Promise<void> {
   await apiClient.patch<{ archived: boolean }>(`/quotes/${serverId}/archive`, {
     archived: false,
+    isArchived: false,
   });
 }

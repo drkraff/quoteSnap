@@ -112,4 +112,26 @@ describe("applyQuoteArchivePatch", () => {
     );
     assert.deepEqual(outcome, { status: 200, json: { archived: true } });
   });
+
+  it("unarchives with archived false", async () => {
+    const outcome = await applyQuoteArchivePatch(
+      async (sql) => {
+        assert.match(sql, /SET is_archived = FALSE/);
+        return { rows: [{ id: QUOTE_ID }] };
+      },
+      { quoteId: QUOTE_ID, contractorId: CONTRACTOR_ID, body: { archived: false } },
+    );
+    assert.deepEqual(outcome, { status: 200, json: { archived: false } });
+  });
+
+  it("unarchives with isArchived false (queue-shaped body)", async () => {
+    const outcome = await applyQuoteArchivePatch(
+      async (sql) => {
+        assert.match(sql, /SET is_archived = FALSE/);
+        return { rows: [{ id: QUOTE_ID }] };
+      },
+      { quoteId: QUOTE_ID, contractorId: CONTRACTOR_ID, body: { isArchived: false } },
+    );
+    assert.deepEqual(outcome, { status: 200, json: { archived: false } });
+  });
 });

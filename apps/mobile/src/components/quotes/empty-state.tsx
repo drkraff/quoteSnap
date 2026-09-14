@@ -1,13 +1,23 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { QUOTES_EMPTY_BODY, QUOTES_EMPTY_HEADING } from '../../quotes/empty-copy';
+import {
+  ARCHIVED_QUOTES_EMPTY_BODY,
+  ARCHIVED_QUOTES_EMPTY_HEADING,
+} from '../../quotes/list-mode';
 import { colors, spacing, typography } from '../../theme/tokens';
 
+interface QuotesEmptyStateProps {
+  archived?: boolean;
+}
+
 /** Quote history empty list. Voice/manual FABs on the screen are the CTAs. */
-export function QuotesEmptyState(): JSX.Element {
+export function QuotesEmptyState({ archived = false }: QuotesEmptyStateProps): JSX.Element {
+  const heading = archived ? ARCHIVED_QUOTES_EMPTY_HEADING : QUOTES_EMPTY_HEADING;
+  const body = archived ? ARCHIVED_QUOTES_EMPTY_BODY : QUOTES_EMPTY_BODY;
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>{QUOTES_EMPTY_HEADING}</Text>
-      <Text style={styles.body}>{QUOTES_EMPTY_BODY}</Text>
+      <Text style={styles.heading}>{heading}</Text>
+      <Text style={styles.body}>{body}</Text>
     </View>
   );
 }

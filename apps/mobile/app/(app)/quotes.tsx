@@ -7,7 +7,7 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,7 @@ import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
 import { QuotesEmptyState } from '../../src/components/quotes/empty-state';
+import { QuotesListModeToggle } from '../../src/components/quotes/list-mode-toggle';
 import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
 import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
 import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
@@ -30,8 +31,16 @@ import { quotePressTarget } from '../../src/quotes/status-display';
 import {
   ARCHIVE_QUOTE_CONFIRM_MESSAGE,
   ARCHIVE_QUOTE_CONFIRM_TITLE,
+  UNARCHIVE_QUOTE_CONFIRM_MESSAGE,
+  UNARCHIVE_QUOTE_CONFIRM_TITLE,
   archiveQuoteSyncPayload,
+  unarchiveQuoteSyncPayload,
 } from '../../src/quotes/archive-quote';
+import {
+  ACTIVE_QUOTES_HEADER_TITLE,
+  ARCHIVED_QUOTES_HEADER_TITLE,
+  type QuotesListMode,
+} from '../../src/quotes/list-mode';
 import {
   draftReadyLocalFields,
   QUOTE_LIST_OBSERVE_COLUMNS,
@@ -48,28 +57,39 @@ const TAB_BAR_HEIGHT = 56;
 
 export default function QuotesScreen(): JSX.Element {
   const router = useRouter();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const [listMode, setListMode] = useState<QuotesListMode>('active');
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadLetterItems = useDeadLetterItems();
   const online = useIsOnline();
+  const showArchived = listMode === 'archived';
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerTitle: showArchived ? ARCHIVED_QUOTES_HEADER_TITLE : ACTIVE_QUOTES_HEADER_TITLE,
+    });
+  }, [navigation, showArchived]);
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
+    const archiveClause = showArchived
+      ? Q.where('is_archived', true)
+      : Q.or(Q.where('is_archived', false), Q.where('is_archived', null));
     const subscription = database
       .get<Quote>('quotes')
       .query(
         Q.where('contractor_id', contractorId),
-        // v2→v3 leaves existing rows null; null means still on the list.
-        Q.or(Q.where('is_archived', false), Q.where('is_archived', null)),
+        archiveClause,
         Q.sortBy('created_at', 'desc'),
       )
       .observeWithColumns(QUOTE_LIST_OBSERVE_COLUMNS)
       .subscribe(setQuotes);
     return () => subscription.unsubscribe();
-  }, []);
+  }, [showArchived]);
 
   // Polling for ai_processing quotes (job id, or serverId so we can recover one)
   useEffect(() => {
@@ -176,24 +196,37 @@ export default function QuotesScreen(): JSX.Element {
         text: 'Archive',
         style: 'destructive',
         onPress: () => {
-          void handleArchiveQuote(quote);
+          void persistArchiveFlag(quote, true);
         },
       },
     ]);
   }
 
-  async function handleArchiveQuote(quote: Quote): Promise<void> {
+  function confirmUnarchiveQuote(quote: Quote): void {
+    Alert.alert(UNARCHIVE_QUOTE_CONFIRM_TITLE, UNARCHIVE_QUOTE_CONFIRM_MESSAGE, [
+      { text: 'Keep archived', style: 'cancel' },
+      {
+        text: 'Unarchive',
+        onPress: () => {
+          void persistArchiveFlag(quote, false);
+        },
+      },
+    ]);
+  }
+
+  async function persistArchiveFlag(quote: Quote, isArchived: boolean): Promise<void> {
     try {
       await database.write(async () => {
         await quote.update((record) => {
-          record.isArchived = true;
+          record.isArchived = isArchived;
+          record.updatedAt = new Date();
         });
       });
       await enqueue({
         entityType: 'quote',
         entityId: quote.id,
         action: 'update',
-        payload: archiveQuoteSyncPayload(),
+        payload: isArchived ? archiveQuoteSyncPayload() : unarchiveQuoteSyncPayload(),
       });
     } catch {
       // Stay on the list; swipe again to retry
@@ -245,25 +278,30 @@ export default function QuotesScreen(): JSX.Element {
             quote={item}
             online={online}
             onPress={handleQuotePress}
-            onArchive={confirmArchiveQuote}
+            swipeAction={showArchived ? 'unarchive' : 'archive'}
+            onSwipeAction={showArchived ? confirmUnarchiveQuote : confirmArchiveQuote}
           />
         )}
         ListHeaderComponent={
-          <DeadLetterBanner
-            count={deadLetterItems.length}
-            onPress={() => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              router.push('/sync-issues' as any);
-            }}
-          />
+          <>
+            <DeadLetterBanner
+              count={deadLetterItems.length}
+              onPress={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                router.push('/sync-issues' as any);
+              }}
+            />
+            <QuotesListModeToggle mode={listMode} onChange={setListMode} />
+          </>
         }
-        ListEmptyComponent={<QuotesEmptyState />}
+        ListEmptyComponent={<QuotesEmptyState archived={showArchived} />}
         contentContainerStyle={
           quotes.length === 0
             ? styles.emptyContent
             : {
-                paddingBottom:
-                  insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm + 56 + 16,
+                paddingBottom: showArchived
+                  ? insets.bottom + TAB_BAR_HEIGHT + 16
+                  : insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm + 56 + 16,
               }
         }
       />
@@ -274,36 +312,40 @@ export default function QuotesScreen(): JSX.Element {
         onDismiss={() => setReadyDraftId(null)}
       />
 
-      {/* Manual Quote FAB — above voice FAB */}
-      <Pressable
-        style={[
-          styles.manualFab,
-          { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm },
-          isCreating && styles.fabDisabled,
-        ]}
-        onPress={() => { void handleManualQuotePress(); }}
-        accessibilityLabel="Create manual quote"
-        accessibilityRole="button"
-        disabled={isCreating}
-      >
-        <Ionicons name="create-outline" size={24} color={colors.mutedText} />
-        <Text style={styles.manualFabLabel}>Manual Quote</Text>
-      </Pressable>
+      {!showArchived && (
+        <>
+          {/* Manual Quote FAB — above voice FAB */}
+          <Pressable
+            style={[
+              styles.manualFab,
+              { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm },
+              isCreating && styles.fabDisabled,
+            ]}
+            onPress={() => { void handleManualQuotePress(); }}
+            accessibilityLabel="Create manual quote"
+            accessibilityRole="button"
+            disabled={isCreating}
+          >
+            <Ionicons name="create-outline" size={24} color={colors.mutedText} />
+            <Text style={styles.manualFabLabel}>Manual Quote</Text>
+          </Pressable>
 
-      {/* Voice Quote FAB — bottom, primary */}
-      <Pressable
-        style={[
-          styles.voiceFab,
-          { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 },
-        ]}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        onPress={() => { router.push('/voice-record' as any); }}
-        accessibilityLabel="Start voice quote"
-        accessibilityRole="button"
-      >
-        <Ionicons name="mic-outline" size={24} color="#ffffff" />
-        <Text style={styles.voiceFabLabel}>Voice Quote</Text>
-      </Pressable>
+          {/* Voice Quote FAB — bottom, primary */}
+          <Pressable
+            style={[
+              styles.voiceFab,
+              { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 },
+            ]}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            onPress={() => { router.push('/voice-record' as any); }}
+            accessibilityLabel="Start voice quote"
+            accessibilityRole="button"
+          >
+            <Ionicons name="mic-outline" size={24} color="#ffffff" />
+            <Text style={styles.voiceFabLabel}>Voice Quote</Text>
+          </Pressable>
+        </>
+      )}
     </SafeAreaView>
   );
 }
