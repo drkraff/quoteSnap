@@ -83,7 +83,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [x] **SYNC-03**: Sync retry schedule: 5s → 15s → 60s → 5m → 15m → dead-letter after max retries
 - [x] **SYNC-04**: Dead-letter items are surfaced to the contractor with a plain-language error and retry option
 - [x] **SYNC-05**: WatermelonDB uses server-as-truth conflict resolution; draft conflicts (pre-send) surface as a visible "Review before sending" prompt — not silent resolution
-- [ ] **SYNC-06**: Quote snapshots (post-send) are unaffected by sync state — approval page integrity is guaranteed
+- [x] **SYNC-06**: Post-send quotes (`sent`, `approved`, `declined`, `expired`, `failed_send`) cannot have line items or totals rewritten by sync/PUT (thin: status guards on existing snapshot rows; no `quote_snapshots` table; SMS-02/04 approval page still Phase 6)
 
 ### Failure and Edge Cases
 
@@ -192,7 +192,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 | SYNC-03 | Phase 7 | Complete |
 | SYNC-04 | Phase 7 | Complete |
 | SYNC-05 | Phase 7 | Complete |
-| SYNC-06 | Phase 7 | Pending |
+| SYNC-06 | Phase 7 | Complete (thin: status guards, no snapshot table) |
 | FAIL-01 | Phase 7 | Pending |
 | FAIL-02 | Phase 7 | Pending |
 | FAIL-03 | Phase 7 | Pending |

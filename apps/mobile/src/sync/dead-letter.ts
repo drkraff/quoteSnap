@@ -117,6 +117,13 @@ export function deadLetterErrorMessage(lastError: string | null): string {
   ) {
     return "You're signed out. Log in and try again.";
   }
+  if (
+    lower.includes('already sent')
+    || lower.includes('cannot be changed after send')
+    || lower.includes('line items and totals cannot')
+  ) {
+    return 'This quote was already sent. Line items and prices cannot be changed.';
+  }
   if (lower.includes('409') || lower.includes('already seeded') || lower.includes('already exists')) {
     return 'This change may already be on the server. Retry to confirm.';
   }

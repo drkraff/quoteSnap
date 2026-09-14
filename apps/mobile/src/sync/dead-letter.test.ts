@@ -93,6 +93,12 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
     expect(deadLetterErrorMessage('Catalog already seeded')).toBe(
       'This change may already be on the server. Retry to confirm.',
     );
+    expect(
+      deadLetterErrorMessage('Quote line items and totals cannot be changed after send'),
+    ).toBe('This quote was already sent. Line items and prices cannot be changed.');
+    expect(
+      deadLetterErrorMessage('This quote was already sent. Line items and prices cannot be changed.'),
+    ).toBe('This quote was already sent. Line items and prices cannot be changed.');
     expect(deadLetterErrorMessage('ENOENT: /data/user/0/stack')).toBe(
       "Couldn't sync this change. Try again.",
     );

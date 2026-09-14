@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 import { TRADE_TEMPLATES } from "../data/trade-templates.js";
 import {
   CLIENT_QUOTE_STATUSES,
+  FROZEN_QUOTE_STATUSES,
   QUOTE_STATUSES,
   isClientQuoteStatus,
+  isFrozenQuoteStatus,
   isQuoteStatus,
 } from "./statuses.js";
 
@@ -54,6 +56,24 @@ describe("QUOTE_STATUSES / isQuoteStatus", () => {
       if (status === "draft_local" || status === "draft_queued") continue;
       assert.equal(isClientQuoteStatus(status), false, status);
     }
+  });
+
+  it("freezes post-send customer-facing statuses for money writes (SYNC-06)", () => {
+    assert.deepEqual([...FROZEN_QUOTE_STATUSES], [
+      "sent",
+      "approved",
+      "declined",
+      "expired",
+      "failed_send",
+    ]);
+    for (const status of FROZEN_QUOTE_STATUSES) {
+      assert.equal(isFrozenQuoteStatus(status), true, status);
+      assert.equal(isClientQuoteStatus(status), false, status);
+    }
+    assert.equal(isFrozenQuoteStatus("draft_local"), false);
+    assert.equal(isFrozenQuoteStatus("draft_queued"), false);
+    assert.equal(isFrozenQuoteStatus("ai_failed"), false);
+    assert.equal(isFrozenQuoteStatus("ai_processing"), false);
   });
 });
 
