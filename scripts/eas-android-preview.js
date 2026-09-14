@@ -83,9 +83,9 @@ console.log('This does not log you in. Run `npx eas-cli login` first if needed.'
 
 if (!skipEnvSync) {
   console.log('Syncing EXPO_PUBLIC_API_URL to the EAS preview environment (plaintext, not a git secret)...');
+  // eas-cli requires the subcommand first. env:set creates or updates (re-runs are safe).
   runEas(
     [
-      '--non-interactive',
       'env:set',
       '--name',
       'EXPO_PUBLIC_API_URL',
@@ -95,6 +95,7 @@ if (!skipEnvSync) {
       'preview',
       '--visibility',
       'plaintext',
+      '--non-interactive',
     ],
     mobileDir
   );

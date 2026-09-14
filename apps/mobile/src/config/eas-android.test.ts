@@ -50,4 +50,18 @@ describe('EAS Android preview config', () => {
     expect(appConfig).toMatch(/https:\/\//);
     expect(appConfig).toMatch(/docs\/EAS-ANDROID\.md/);
   });
+
+  it('passes eas env:set before --non-interactive so eas-cli finds the subcommand', () => {
+    const script = fs.readFileSync(
+      path.join(__dirname, '../../../../scripts/eas-android-preview.js'),
+      'utf8'
+    );
+    const envCall = script.match(/runEas\(\s*\[([\s\S]*?)\],\s*mobileDir\s*\)/);
+    expect(envCall).toBeTruthy();
+    const args = envCall![1];
+    const commandIdx = args.indexOf("'env:set'");
+    const flagIdx = args.indexOf("'--non-interactive'");
+    expect(commandIdx).toBeGreaterThan(-1);
+    expect(flagIdx).toBeGreaterThan(commandIdx);
+  });
 });
