@@ -5,12 +5,13 @@ import {
 } from './quote-list-observe';
 
 describe('QUOTE_LIST_OBSERVE_COLUMNS', () => {
-  it('watches the fields the Quotes row actually displays', () => {
+  it('watches displayed fields plus server_id so Delete swipe yields to Archive after sync', () => {
     expect(QUOTE_LIST_OBSERVE_COLUMNS).toEqual([
       'status',
       'total_cents',
       'customer_phone',
       'voice_job_id',
+      'server_id',
     ]);
   });
 
@@ -46,12 +47,15 @@ describe('draftReadyLocalFields', () => {
 describe('quoteListRenderKey', () => {
   const row = { id: 'q1', status: 'ai_processing', totalCents: 0 };
 
-  it('changes when status, total, or connectivity changes (FlatList extraData)', () => {
+  it('changes when status, total, connectivity, or serverId changes (FlatList extraData)', () => {
     const processingOffline = quoteListRenderKey([row], false);
     expect(processingOffline).not.toBe(
       quoteListRenderKey([{ ...row, status: 'draft_local', totalCents: 69500 }], false),
     );
     expect(processingOffline).not.toBe(quoteListRenderKey([row], true));
+    expect(quoteListRenderKey([row], true)).not.toBe(
+      quoteListRenderKey([{ ...row, serverId: 'srv-q1' }], true),
+    );
   });
 
   it('stays stable when nothing visible changed', () => {
