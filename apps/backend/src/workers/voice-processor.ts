@@ -5,7 +5,8 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/cha
 import pool, { query } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
 import type { VoiceJobData, AILineItem } from '../types/voice.js';
-import { filterUuidCatalogIds, validateAndBuildLineItems } from './voice-validation.js';
+import { lookupExactRateCardCents, snapshotUnitPriceCents } from './voice-price-attach.js';
+import { filterUuidCatalogIds, validateAndBuildLineItemsAsync } from './voice-validation.js';
 import type { CatalogItemRow } from './voice-validation.js';
 import { resolveWhisperLanguage } from './whisper-language.js';
 import { startAiProcessingReaper } from './ai-processing-reaper.js';
@@ -60,20 +61,38 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     // Audio stays in R2 until GPT + DB write succeed so pg-boss retries can
     // re-fetch it. Deleted after commit (see below).
 
-    // c) Fetch contractor's active catalog
+    // c) Fetch contractor's active catalog (IDs + names + units only — no prices)
     const catalogResult = await query(
       `SELECT id, name, unit FROM catalog_items WHERE contractor_id = $1 AND is_archived = false`,
       [contractorId]
     );
     const catalogItems = catalogResult.rows as Array<{ id: string; name: string; unit: string }>;
 
-    // e) GPT-4o function calling
+    const tradeResult = await query(
+      `SELECT trade FROM contractors WHERE id = $1`,
+      [contractorId]
+    );
+    const contractorTrade =
+      typeof (tradeResult.rows[0] as { trade?: string | null } | undefined)?.trade === 'string'
+        ? (tradeResult.rows[0] as { trade: string }).trade
+        : null;
+
+    // e) GPT-4o function calling — extract lines; never ask the model for a guessed price
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
           role: 'system',
-          content: `You are a trade quoting assistant. Map the job description to items from this catalog only. Catalog: ${JSON.stringify(catalogItems.map(c => ({ id: c.id, name: c.name, unit: c.unit })))}. Return ONLY items that exist in this catalog. Use the exact catalog IDs. Assign a confidence score (0 to 1) indicating how well the transcript matches each item.`,
+          content: `You extract quote line items from a trade contractor's spoken job description. Catalog (map to these IDs only when the spoken work clearly matches): ${JSON.stringify(catalogItems.map(c => ({ id: c.id, name: c.name, unit: c.unit })))}.
+Rules:
+- Return every distinct work item mentioned, even if it is not in the catalog.
+- When it matches a catalog item, set catalogItemId to that exact UUID.
+- When it does not match, omit catalogItemId. Still return name, quantity, and unit from speech.
+- quantity is an integer >= 1. "14 linear feet" → quantity 14, unit foot.
+- unit must be one of: each, hour, foot, sqft, job.
+- spokenUnitPriceCents is integer cents ONLY if the contractor stated a dollar amount (example: "eight fifty a foot" → 850). If they did not say a price, omit it or null.
+- NEVER invent a price, SKU, catalog ID, or typical trade rate. Never copy a price from the catalog; prices are attached later.
+- Do not add catalog items they did not mention.`,
         },
         {
           role: 'user',
@@ -85,7 +104,7 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
           type: 'function',
           function: {
             name: 'create_quote_items',
-            description: 'Return the line items for this quote',
+            description: 'Return extracted quote line items (catalog match optional). Do not invent prices.',
             parameters: {
               type: 'object',
               properties: {
@@ -94,11 +113,34 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
                   items: {
                     type: 'object',
                     properties: {
-                      catalogItemId: { type: 'string', description: 'ID from the provided catalog' },
+                      catalogItemId: {
+                        type: 'string',
+                        description: 'Exact catalog UUID when mapped. Omit or empty if the line is adhoc.',
+                      },
+                      name: {
+                        type: 'string',
+                        description: 'Spoken line name. Required when catalogItemId is omitted.',
+                      },
                       quantity: { type: 'integer', minimum: 1 },
-                      confidence: { type: 'number', minimum: 0, maximum: 1, description: 'How confident this item belongs in the quote' },
+                      unit: {
+                        type: 'string',
+                        enum: ['each', 'hour', 'foot', 'sqft', 'job'],
+                        description: 'Spoken unit. Linear feet → foot. Square feet → sqft.',
+                      },
+                      spokenUnitPriceCents: {
+                        type: ['integer', 'null'],
+                        minimum: 1,
+                        description:
+                          'Integer cents the contractor said. Null/omit if they did not say a dollar amount. NEVER guess.',
+                      },
+                      confidence: {
+                        type: 'number',
+                        minimum: 0,
+                        maximum: 1,
+                        description: 'How well the transcript supports this line',
+                      },
                     },
-                    required: ['catalogItemId', 'quantity', 'confidence'],
+                    required: ['name', 'quantity', 'unit', 'confidence'],
                   },
                 },
               },
@@ -122,18 +164,35 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const aiItems = parsed.items;
 
     // g) Validate catalog IDs — only UUID-shaped values may hit the uuid column.
-    const aiItemIds = filterUuidCatalogIds(aiItems.map(i => i.catalogItemId));
+    const aiItemIds = filterUuidCatalogIds(
+      aiItems
+        .map((i) => i.catalogItemId)
+        .filter((id): id is string => typeof id === 'string'),
+    );
     let validCatalogItems: CatalogItemRow[] = [];
     if (aiItemIds.length > 0) {
       const validationResult = await query(
-        `SELECT id, name, unit_price_cents FROM catalog_items WHERE contractor_id = $1 AND id = ANY($2::uuid[]) AND is_archived = false`,
+        `SELECT id, name, unit, unit_price_cents FROM catalog_items WHERE contractor_id = $1 AND id = ANY($2::uuid[]) AND is_archived = false`,
         [contractorId, aiItemIds]
       );
       validCatalogItems = validationResult.rows as CatalogItemRow[];
     }
 
-    // h-i) Validate catalog IDs, build line items, calculate total
-    const { lineItems, totalCents } = validateAndBuildLineItems(aiItems, validCatalogItems);
+    // h-i) Build catalog + adhoc lines, then attach prices (spoken → catalog SKU → exact rate-card → blank)
+    const { lineItems, totalCents } = await validateAndBuildLineItemsAsync(
+      aiItems,
+      validCatalogItems,
+      {
+        trade: contractorTrade,
+        lookupRateCard: ({ name, unit, trade }) =>
+          lookupExactRateCardCents(query, {
+            contractorId,
+            name,
+            unit,
+            trade,
+          }),
+      },
+    );
 
     // j) Write draft line items and update quote status in transaction
     const client = await pool.connect();
@@ -142,8 +201,16 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
 
       for (const item of lineItems) {
         await client.query(
-          `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [quoteId, item.catalogItemId, item.name, item.quantity, item.unitPriceCents, item.confidence]
+          `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence, unit) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            quoteId,
+            item.catalogItemId,
+            item.name,
+            item.quantity,
+            snapshotUnitPriceCents(item.unitPriceCents),
+            item.confidence,
+            item.unit,
+          ]
         );
       }
 

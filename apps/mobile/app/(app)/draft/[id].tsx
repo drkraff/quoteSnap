@@ -28,6 +28,7 @@ import {
   updatePrice,
   recalculateTotal,
   serializeLineItems,
+  isUnknownUnitPrice,
 } from '../../../src/utils/line-items';
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
@@ -197,7 +198,9 @@ export default function DraftScreen(): JSX.Element {
   useEffect(() => {
     if (lineItems.length === 0) return;
     const firstRedIndex = lineItems.findIndex(
-      (item) => confidenceTier(item.confidence) === 'needs_input',
+      (item) =>
+        isUnknownUnitPrice(item.unitPriceCents) ||
+        confidenceTier(item.confidence) === 'needs_input',
     );
     if (firstRedIndex > 0) {
       const timer = setTimeout(() => {
@@ -285,7 +288,13 @@ export default function DraftScreen(): JSX.Element {
       payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
     });
     const learned = buildRateCardLearnPayload(
-      { ...pricedLine, unitPriceCents: newPriceCents },
+      {
+        name: pricedLine.name,
+        unitPriceCents: newPriceCents,
+        catalogItemId: pricedLine.catalogItemId,
+        unit: pricedLine.unit ?? undefined,
+        trade: useAuthStore.getState().contractor?.trade,
+      },
       catalogItems,
     );
     if (learned) {
@@ -360,7 +369,12 @@ export default function DraftScreen(): JSX.Element {
   ): Promise<void> {
     if (!draft || !quote) return;
     await recoverFromAiFailed();
-    const newItems = addItem(lineItems, { id: catalogItem.id, name: catalogItem.name, unitPriceCents: catalogItem.unitPriceCents });
+    const newItems = addItem(lineItems, {
+      id: catalogItem.id,
+      name: catalogItem.name,
+      unitPriceCents: catalogItem.unitPriceCents,
+      unit: catalogItems.find((c) => c.id === catalogItem.id)?.unit,
+    });
     const newTotal = recalculateTotal(newItems);
     await database.write(async () => {
       await draft.update((r) => {
@@ -444,7 +458,8 @@ export default function DraftScreen(): JSX.Element {
         lineItems: lineItems.map((i) => ({
           name: i.name,
           quantity: i.quantity,
-          unitPriceCents: i.unitPriceCents,
+          unitPriceCents: i.unitPriceCents ?? 0,
+          unit: i.unit ?? null,
         })),
       },
     });
@@ -480,12 +495,14 @@ export default function DraftScreen(): JSX.Element {
         data={lineItems}
         keyExtractor={(_, index) => String(index)}
         renderItem={({ item, index }) => {
-          const tier = confidenceTier(item.confidence);
+          const priceUnknown = isUnknownUnitPrice(item.unitPriceCents);
+          const tier = priceUnknown ? 'needs_input' : confidenceTier(item.confidence);
           const displayTier = tier === 'clean' ? undefined : tier;
           return (
             <LineItemRow
               name={item.name}
               quantity={item.quantity}
+              unit={item.unit}
               unitPriceCents={item.unitPriceCents}
               confidence={displayTier}
               onQuantityChange={(delta) => { void handleQuantityChange(index, delta); }}
@@ -581,7 +598,9 @@ export default function DraftScreen(): JSX.Element {
 
       <PriceEditSheet
         visible={priceEditIndex !== null}
-        currentPriceCents={priceEditIndex !== null ? lineItems[priceEditIndex].unitPriceCents : 0}
+        currentPriceCents={
+          priceEditIndex !== null ? lineItems[priceEditIndex].unitPriceCents : null
+        }
         onSave={(newPrice) => { void handlePriceSave(newPrice); }}
         onDismiss={() => setPriceEditIndex(null)}
       />

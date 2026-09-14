@@ -16,7 +16,8 @@ export interface QuoteLineItemResponse {
   id: string;
   name: string;
   quantity: number;
-  unitPriceCents: number;
+  unitPriceCents: number | null;
+  unit?: string | null;
   confidence?: number | null;
   catalogItemId?: string | null;
 }
@@ -67,7 +68,12 @@ export async function updateQuoteOnServer(
     status?: string;
     customerPhone?: string;
     totalCents?: number;
-    lineItems?: Array<{ name: string; quantity: number; unitPriceCents: number }>;
+    lineItems?: Array<{
+      name: string;
+      quantity: number;
+      unitPriceCents: number | null;
+      unit?: string | null;
+    }>;
   },
 ): Promise<QuoteResponse> {
   const data = await apiClient.put<QuoteSingleResponse>(

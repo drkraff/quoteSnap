@@ -33,10 +33,11 @@ export interface DraftLineItemsResponse {
   quoteId: string;
   totalCents: number;
   lineItems: Array<{
-    catalogItemId: string;
+    catalogItemId: string | null;
     name: string;
     quantity: number;
-    unitPriceCents: number;
+    unitPriceCents: number | null;
+    unit?: string | null;
     confidence: number | undefined;
   }>;
 }

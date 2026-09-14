@@ -40,12 +40,13 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
 }
 
 function existingLine(
-  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id">> = {},
-): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id"> {
+  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit">> = {},
+): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit"> {
   return {
     name: "Copper pipe",
     confidence: 0.91,
     catalog_item_id: CATALOG_ID,
+    unit: "foot",
     ...overrides,
   };
 }
@@ -216,6 +217,20 @@ describe("parseLineItemInput", () => {
     assert.equal(parsed.item.catalogItemId, undefined);
   });
 
+  it("accepts null unitPriceCents as unknown (persists 0) and a spoken unit", () => {
+    const parsed = parseLineItemInput({
+      name: "Laminate cabinets",
+      quantity: 14,
+      unitPriceCents: null,
+      unit: "foot",
+    });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.item.unitPriceCents, 0);
+    assert.equal(parsed.item.unit, "foot");
+    assert.equal(parsed.item.catalogItemId, undefined);
+  });
+
   it("rejects float unitPriceCents", () => {
     const parsed = parseLineItemInput({
       name: "Elbow",
@@ -271,6 +286,7 @@ describe("resolveReplacementLineItems", () => {
         unitPriceCents: 1600,
         confidence: 0.91,
         catalogItemId: CATALOG_ID,
+        unit: "foot",
       },
     ]);
   });
@@ -373,6 +389,7 @@ describe("resolveReplacementLineItems", () => {
       unitPriceCents: 500,
       confidence: null,
       catalogItemId: null,
+      unit: null,
     });
   });
 
@@ -537,6 +554,7 @@ describe("applyQuotePut", () => {
         created_at: new Date("2026-09-01T12:01:00.000Z"),
         confidence: 0.91,
         catalog_item_id: CATALOG_ID,
+        unit: "foot",
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -567,7 +585,7 @@ describe("applyQuotePut", () => {
     assert.equal(update!.params?.[0], 4500);
 
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot"]);
   });
 
   it("issues DELETE before INSERT on the same queryFn so a mid-loop failure can roll back", async () => {
@@ -603,6 +621,7 @@ describe("applyQuotePut", () => {
         created_at: new Date("2026-09-01T12:01:00.000Z"),
         confidence: 0.91,
         catalog_item_id: CATALOG_ID,
+        unit: "foot",
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -622,6 +641,6 @@ describe("applyQuotePut", () => {
       },
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot"]);
   });
 });

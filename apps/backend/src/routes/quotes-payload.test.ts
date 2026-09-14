@@ -38,6 +38,7 @@ function lineItemRow(overrides: Partial<QuoteLineItemRow> = {}): QuoteLineItemRo
     created_at: new Date("2026-09-01T12:01:00.000Z"),
     confidence: 0.91,
     catalog_item_id: "33333333-3333-4333-8333-333333333333",
+    unit: "foot",
     ...overrides,
   };
 }
@@ -78,6 +79,7 @@ describe("lineItemRowToResponse", () => {
       name: "Copper pipe",
       quantity: 2,
       unitPriceCents: 1500,
+      unit: "foot",
       confidence: 0.91,
       catalogItemId: "33333333-3333-4333-8333-333333333333",
     });

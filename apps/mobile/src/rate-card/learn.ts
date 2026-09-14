@@ -5,7 +5,7 @@ export type RateCardLearnLine = {
   name: string;
   unitPriceCents: number;
   catalogItemId?: string;
-  unit?: string;
+  unit?: string | null;
   trade?: string | null;
 };
 

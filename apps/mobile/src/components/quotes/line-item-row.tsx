@@ -2,11 +2,13 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
+import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
 
 interface LineItemRowProps {
   name: string;
   quantity: number;
-  unitPriceCents: number;
+  unit?: string | null;
+  unitPriceCents: number | null;
   onQuantityChange: (delta: number) => void;
   onPricePress: () => void;
   onDelete: () => void;
@@ -16,13 +18,16 @@ interface LineItemRowProps {
 export function LineItemRow({
   name,
   quantity,
+  unit,
   unitPriceCents,
   onQuantityChange,
   onPricePress,
   onDelete,
   confidence,
 }: LineItemRowProps): JSX.Element {
-  const priceDisplay = `$${(unitPriceCents / 100).toFixed(2)}`;
+  const priceUnknown = isUnknownUnitPrice(unitPriceCents);
+  const priceDisplay = formatUnitPriceLabel(unitPriceCents);
+  const quantityDisplay = formatQuantityLabel(quantity, unit);
 
   function renderRightActions(): JSX.Element {
     return (
@@ -83,7 +88,7 @@ export function LineItemRow({
             />
           </Pressable>
 
-          <Text style={styles.quantityText}>{quantity}</Text>
+          <Text style={styles.quantityText}>{quantityDisplay}</Text>
 
           <Pressable
             style={styles.stepperButton}
@@ -100,9 +105,11 @@ export function LineItemRow({
           style={styles.priceButton}
           onPress={onPricePress}
           accessibilityRole="button"
-          accessibilityLabel="Edit price"
+          accessibilityLabel={priceUnknown ? 'Add price' : 'Edit price'}
         >
-          <Text style={styles.priceText}>{priceDisplay}</Text>
+          <Text style={[styles.priceText, priceUnknown && styles.priceUnknown]}>
+            {priceDisplay}
+          </Text>
         </Pressable>
       </View>
     </Swipeable>
@@ -161,7 +168,7 @@ const styles = StyleSheet.create({
     // opacity applied inline on Ionicons to preserve tap region
   },
   quantityText: {
-    minWidth: 20,
+    minWidth: 48,
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
@@ -179,6 +186,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 26,
     color: '#000000',
+  },
+  priceUnknown: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    lineHeight: 18,
+    color: colors.destructive,
   },
   deleteAction: {
     backgroundColor: colors.destructive,

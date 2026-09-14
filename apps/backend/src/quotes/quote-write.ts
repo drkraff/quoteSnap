@@ -1,3 +1,4 @@
+import { parseCatalogUnit } from "../catalog/units.js";
 import type { QuoteResponse } from "../types/quotes.js";
 import {
   LINE_ITEM_COLUMNS,
@@ -32,7 +33,9 @@ export type ParsedLineItemInput = {
   /** undefined = omitted (preserve); null = explicit clear */
   confidence: number | null | undefined;
   /** undefined = omitted (preserve); null = explicit clear */
-  catalogItemId: string | null | undefined;
+  catalogItemId?: string | null;
+  /** undefined = omitted (preserve); null = explicit clear */
+  unit?: string | null;
 };
 
 export type ResolvedLineItem = {
@@ -41,6 +44,7 @@ export type ResolvedLineItem = {
   unitPriceCents: number;
   confidence: number | null;
   catalogItemId: string | null;
+  unit: string | null;
 };
 
 export type ParsedQuotePutBody =
@@ -175,7 +179,10 @@ export function parseLineItemInput(
     return quantity;
   }
 
-  const unitPrice = parseNonNegativeCents(raw.unitPriceCents, "unitPriceCents");
+  const unitPrice =
+    raw.unitPriceCents === null
+      ? ({ ok: true as const, cents: 0 })
+      : parseNonNegativeCents(raw.unitPriceCents, "unitPriceCents");
   if (!unitPrice.ok) {
     return unitPrice;
   }
@@ -198,6 +205,15 @@ export function parseLineItemInput(
     catalogItemId = parsed.catalogItemId;
   }
 
+  let unit: string | null | undefined;
+  if (hasOwn(raw, "unit")) {
+    if (raw.unit === null || raw.unit === "") {
+      unit = null;
+    } else {
+      unit = parseCatalogUnit(raw.unit);
+    }
+  }
+
   return {
     ok: true,
     item: {
@@ -206,6 +222,7 @@ export function parseLineItemInput(
       unitPriceCents: unitPrice.cents,
       confidence,
       catalogItemId,
+      unit,
     },
   };
 }
@@ -223,7 +240,7 @@ export function totalCentsFromLineItems(items: Array<{ quantity: number; unitPri
  */
 export function resolveReplacementLineItems(
   incoming: ParsedLineItemInput[],
-  existing: Array<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id">>,
+  existing: Array<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit">>,
 ): ResolvedLineItem[] {
   const unused = existing.map((row) => ({ ...row }));
 
@@ -249,12 +266,22 @@ export function resolveReplacementLineItems(
       catalogItemId = match?.catalog_item_id ?? null;
     }
 
+    let unit: string | null;
+    if (item.unit === null) {
+      unit = null;
+    } else if (item.unit !== undefined) {
+      unit = item.unit;
+    } else {
+      unit = match?.unit ?? null;
+    }
+
     return {
       name: item.name,
       quantity: item.quantity,
       unitPriceCents: item.unitPriceCents,
       confidence,
       catalogItemId,
+      unit,
     };
   });
 }
@@ -356,8 +383,8 @@ export const SELECT_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
 
 export const DELETE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id)
-         VALUES ($1, $2, $3, $4, $5, $6)`;
+export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`;
 
 /**
  * Quote metadata + line-item replace on one query function so the caller can
@@ -447,6 +474,7 @@ export async function applyQuotePut(
         item.unitPriceCents,
         item.confidence,
         item.catalogItemId,
+        item.unit,
       ]);
     }
   }
