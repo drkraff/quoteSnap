@@ -50,7 +50,7 @@ export const schema = appSchema({
       name: 'sync_queue_items',
       columns: [
         { name: 'entity_type', type: 'string' },
-        // entity_type: quote | catalog_item | draft | audio | onboarding
+        // entity_type: quote | catalog_item | draft | audio | onboarding | rate_card
         { name: 'entity_id', type: 'string' },
         { name: 'action', type: 'string' },
         // action: create | update | delete | seed

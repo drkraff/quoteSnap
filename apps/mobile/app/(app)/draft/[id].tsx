@@ -31,6 +31,7 @@ import {
 } from '../../../src/utils/line-items';
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
+import { buildRateCardLearnPayload, rateCardQueueEntityId } from '../../../src/rate-card/learn';
 import { isOnline } from '../../../src/sync/network-monitor';
 import {
   REVIEW_BEFORE_SENDING,
@@ -265,6 +266,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handlePriceSave(newPriceCents: number): Promise<void> {
     if (!draft || !quote || priceEditIndex === null) return;
+    const pricedLine = lineItems[priceEditIndex];
     await recoverFromAiFailed();
     const newItems = updatePrice(lineItems, priceEditIndex, newPriceCents);
     const newTotal = recalculateTotal(newItems);
@@ -282,6 +284,18 @@ export default function DraftScreen(): JSX.Element {
       action: 'update',
       payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
     });
+    const learned = buildRateCardLearnPayload(
+      { ...pricedLine, unitPriceCents: newPriceCents },
+      catalogItems,
+    );
+    if (learned) {
+      await enqueue({
+        entityType: 'rate_card',
+        entityId: rateCardQueueEntityId(learned),
+        action: 'update',
+        payload: learned,
+      });
+    }
     setPriceEditIndex(null);
   }
 

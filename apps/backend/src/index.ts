@@ -4,6 +4,7 @@ import { router as authRouter } from "./routes/auth.js";
 import { router as onboardingRouter } from "./routes/onboarding.js";
 import { router as catalogRouter } from "./routes/catalog.js";
 import { router as quotesRouter } from "./routes/quotes.js";
+import { router as rateCardRouter } from "./routes/rate-card.js";
 import { router as voiceRouter } from "./routes/voice.js";
 import { initBoss } from "./workers/voice-processor.js";
 
@@ -23,6 +24,9 @@ app.use("/catalog", catalogRouter);
 
 // Quotes routes
 app.use("/quotes", quotesRouter);
+
+// Rate card (learned unit prices; exact name+unit+optional trade)
+app.use("/rate-card", rateCardRouter);
 
 // Voice routes
 app.use("/voice", voiceRouter);

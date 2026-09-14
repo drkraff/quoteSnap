@@ -11,6 +11,7 @@ import { database } from '../db';
 import { isOnline } from './network-monitor';
 import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems } from './sync-queue';
 import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer } from '../api/quotes';
+import { upsertRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
 import { rememberServerRevision, resetServerRevisionsForTests } from './server-revision';
 
@@ -48,6 +49,11 @@ jest.mock('../api/quotes', () => ({
   fetchQuote: jest.fn(),
   archiveQuote: jest.fn(),
   unarchiveQuote: jest.fn(),
+}));
+
+jest.mock('../api/rate-card', () => ({
+  upsertRateCardEntry: jest.fn(),
+  lookupRateCardEntry: jest.fn(),
 }));
 
 type FakeQueueItem = {
@@ -109,6 +115,7 @@ const mockedUpdateQuoteOnServer = updateQuoteOnServer as unknown as jest.Mock;
 const mockedArchiveQuote = archiveQuote as unknown as jest.Mock;
 const mockedUnarchiveQuote = unarchiveQuote as unknown as jest.Mock;
 const mockedCreateQuoteOnServer = createQuoteOnServer as unknown as jest.Mock;
+const mockedUpsertRateCardEntry = upsertRateCardEntry as unknown as jest.Mock;
 
 function makeQueueItem(overrides: Partial<FakeQueueItem> = {}): FakeQueueItem {
   const item: FakeQueueItem = {
@@ -190,6 +197,7 @@ describe('processQueue', () => {
     mockedArchiveQuote.mockReset();
     mockedUnarchiveQuote.mockReset();
     mockedCreateQuoteOnServer.mockReset();
+    mockedUpsertRateCardEntry.mockReset();
     resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
@@ -946,5 +954,55 @@ describe('processQueue', () => {
     ]);
     expect(quote.customerPhone).toBe('+15550001111');
     expect(queueItems.some((row) => row.status === NEEDS_REVIEW_STATUS)).toBe(true);
+  });
+
+  it('posts a typed rate-card upsert and maps alias units', async () => {
+    const item = makeQueueItem({
+      entityType: 'rate_card',
+      entityId: 'rate-card:copper pipe|foot|plumbing',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        name: 'Copper Pipe',
+        unit: 'per foot',
+        unitPriceCents: 5200,
+        trade: 'plumbing',
+        source: 'typed',
+      }),
+    });
+    queueItems = [item];
+    mockedUpsertRateCardEntry.mockResolvedValue({ id: 'rc-1', useCount: 1 });
+
+    await processQueue();
+
+    expect(mockedUpsertRateCardEntry).toHaveBeenCalledWith({
+      name: 'Copper Pipe',
+      unit: 'foot',
+      unitPriceCents: 5200,
+      trade: 'plumbing',
+      source: 'typed',
+    });
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('retries a failed rate-card upsert with the same backoff as other queue items', async () => {
+    const item = makeQueueItem({
+      entityType: 'rate_card',
+      entityId: 'rate-card:copper pipe|foot|',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        name: 'Copper Pipe',
+        unit: 'foot',
+        unitPriceCents: 4500,
+        source: 'typed',
+      }),
+    });
+    queueItems = [item];
+    mockedUpsertRateCardEntry.mockRejectedValue(new Error('network down'));
+
+    await processQueue();
+
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(1);
+    expect(item.nextRetryAt).toBeInstanceOf(Date);
   });
 });
