@@ -61,6 +61,9 @@ export function lineItemsFromDraftJson(json: string): QuoteLineItemResponse[] {
     if (item.catalogItemId) {
       row.catalogItemId = item.catalogItemId;
     }
+    if (item.unit) {
+      row.unit = item.unit;
+    }
     return row;
   });
 }
@@ -78,6 +81,9 @@ export function remoteLineItemsToDraftJson(
     };
     if (item.confidence != null) {
       line.confidence = item.confidence;
+    }
+    if (item.unit) {
+      line.unit = item.unit;
     }
     return line;
   });

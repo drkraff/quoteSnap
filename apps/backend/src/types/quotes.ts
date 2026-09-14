@@ -14,7 +14,9 @@ export interface QuoteLineItemResponse {
   id: string;
   name: string;
   quantity: number;
-  unitPriceCents: number;
+  /** Snapshot cents. 0 means unknown/blank on adhoc voice lines. */
+  unitPriceCents: number | null;
+  unit?: string | null;
   confidence: number | null;
   catalogItemId: string | null;
 }
@@ -32,7 +34,8 @@ export interface CreateQuoteBody {
 export interface UpdateQuoteLineItemBody {
   name: string;
   quantity: number;
-  unitPriceCents: number;
+  unitPriceCents: number | null;
+  unit?: string | null;
   /** Omit to preserve existing AI confidence; null clears. */
   confidence?: number | null;
   /** Omit to preserve existing catalog_item_id; null clears. */

@@ -1,13 +1,15 @@
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
+import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
 import { colors, spacing, typography } from '../../theme/tokens';
 
 interface LineItemDisplay {
   id: string;
   name: string;
   quantity: number;
-  unitPriceCents: number;
+  unitPriceCents: number | null;
+  unit?: string | null;
 }
 
 interface QuoteDetailProps {
@@ -27,13 +29,16 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
   const phone = quote.customerPhone || 'No phone';
 
   function renderLineItem({ item }: { item: LineItemDisplay }): JSX.Element {
-    const itemTotal = `$${((item.quantity * item.unitPriceCents) / 100).toFixed(2)}`;
+    const priceUnknown = isUnknownUnitPrice(item.unitPriceCents);
+    const itemTotal = priceUnknown
+      ? formatUnitPriceLabel(item.unitPriceCents)
+      : `$${(((item.unitPriceCents ?? 0) * item.quantity) / 100).toFixed(2)}`;
     return (
       <View style={styles.lineItemRow}>
         <Text style={styles.lineItemName} numberOfLines={2}>
           {item.name}
         </Text>
-        <Text style={styles.lineItemQty}>{`x${item.quantity}`}</Text>
+        <Text style={styles.lineItemQty}>{`x${formatQuantityLabel(item.quantity, item.unit)}`}</Text>
         <Text style={styles.lineItemPrice}>{itemTotal}</Text>
       </View>
     );

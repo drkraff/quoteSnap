@@ -41,12 +41,12 @@ export function isServerRevisionFork(
 }
 
 export function comparableLineItems(
-  items: { name: string; quantity: number; unitPriceCents: number }[],
+  items: { name: string; quantity: number; unitPriceCents: number | null }[],
 ): ComparableLine[] {
   return items.map((item) => ({
     name: item.name,
     quantity: item.quantity,
-    unitPriceCents: item.unitPriceCents,
+    unitPriceCents: item.unitPriceCents ?? 0,
   }));
 }
 

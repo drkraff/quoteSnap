@@ -14,7 +14,7 @@ import { colors, spacing, typography } from '../../theme/tokens';
 
 interface PriceEditSheetProps {
   visible: boolean;
-  currentPriceCents: number;
+  currentPriceCents: number | null;
   onSave: (newPriceCents: number) => void;
   onDismiss: () => void;
 }
@@ -32,7 +32,11 @@ export function PriceEditSheet({
   // Pre-fill when sheet opens
   useEffect(() => {
     if (visible) {
-      setInputValue((currentPriceCents / 100).toFixed(2));
+      setInputValue(
+        currentPriceCents == null || currentPriceCents === 0
+          ? ''
+          : (currentPriceCents / 100).toFixed(2),
+      );
       setError(null);
     }
   }, [visible, currentPriceCents]);

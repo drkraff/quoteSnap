@@ -192,6 +192,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
               qli.name,
               qli.quantity,
               qli.unit_price_cents AS "unitPriceCents",
+              qli.unit,
               qli.confidence
        FROM quote_line_items qli
        WHERE qli.quote_id = $1
@@ -204,14 +205,16 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       name: string;
       quantity: number;
       unitPriceCents: number;
+      unit: string | null;
       confidence: number | null;
     };
 
     const lineItems = (lineItemsResult.rows as LineItemRow[]).map((row) => ({
-      catalogItemId: row.catalogItemId ?? '',
+      catalogItemId: row.catalogItemId,
       name: row.name,
       quantity: row.quantity,
-      unitPriceCents: row.unitPriceCents,
+      unitPriceCents: row.unitPriceCents > 0 ? row.unitPriceCents : null,
+      unit: row.unit,
       confidence: row.confidence ?? undefined,
     }));
 

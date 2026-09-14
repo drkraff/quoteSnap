@@ -5,6 +5,9 @@ import {
   updateQuantity,
   updatePrice,
   recalculateTotal,
+  formatQuantityLabel,
+  formatUnitPriceLabel,
+  isUnknownUnitPrice,
   type LineItem,
 } from './line-items';
 
@@ -134,5 +137,42 @@ describe('recalculateTotal', () => {
       { catalogItemId: 'a', name: 'A', quantity: 3, unitPriceCents: 400 },
     ];
     expect(recalculateTotal(items)).toBe(1200);
+  });
+
+  it('treats null/unknown prices as 0 in the total', () => {
+    const items: LineItem[] = [
+      { catalogItemId: '', name: 'Cabinets', quantity: 14, unitPriceCents: null, unit: 'foot' },
+    ];
+    expect(recalculateTotal(items)).toBe(0);
+  });
+});
+
+describe('adhoc / unknown prices', () => {
+  it('parses a null catalogItemId and null price without crashing', () => {
+    const result = parseLineItems(
+      JSON.stringify([
+        {
+          catalogItemId: null,
+          name: 'Laminate cabinets',
+          quantity: 14,
+          unit: 'foot',
+          unitPriceCents: null,
+          confidence: 0.8,
+        },
+      ]),
+    );
+    expect(result).toEqual([
+      {
+        catalogItemId: '',
+        name: 'Laminate cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        unit: 'foot',
+        confidence: 0.8,
+      },
+    ]);
+    expect(isUnknownUnitPrice(result[0]!.unitPriceCents)).toBe(true);
+    expect(formatUnitPriceLabel(result[0]!.unitPriceCents)).toBe('Price needed');
+    expect(formatQuantityLabel(14, 'foot')).toBe('14 ft');
   });
 });

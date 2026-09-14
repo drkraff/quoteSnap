@@ -5,9 +5,13 @@ export interface VoiceJobData {
 }
 
 export interface AILineItem {
-  catalogItemId: string;
-  quantity: number;
-  confidence: number;
+  catalogItemId?: string | null;
+  name?: string;
+  quantity?: number;
+  unit?: string;
+  /** Integer cents the contractor said. Omit/null if they did not say a price. */
+  spokenUnitPriceCents?: number | null;
+  confidence?: number;
 }
 
 export interface VoiceStatusResponse {

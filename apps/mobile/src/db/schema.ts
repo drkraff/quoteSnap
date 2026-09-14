@@ -41,7 +41,7 @@ export const schema = appSchema({
       columns: [
         { name: 'quote_id', type: 'string' },
         { name: 'line_items_json', type: 'string' },
-        // JSON string: Array<{ catalogItemId: string, name: string, quantity: number, unitPriceCents: number }>
+        // JSON string: Array<{ catalogItemId?: string, name: string, quantity: number, unitPriceCents: number | null, unit?: string }>
         { name: 'notes', type: 'string', isOptional: true },
         { name: 'updated_at', type: 'number' },
       ],

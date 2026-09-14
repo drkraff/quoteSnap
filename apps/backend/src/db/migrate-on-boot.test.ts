@@ -10,14 +10,16 @@ const backendRoot = path.resolve(here, "../..");
 const repoRoot = path.resolve(backendRoot, "../..");
 
 describe("resolveMigrationsDir", () => {
-  it("finds numbered SQL files including 009_quote_archive.sql and 010_rate_card_entries.sql", () => {
+  it("finds numbered SQL files including 009_quote_archive.sql, 010_rate_card_entries.sql, and 011_quote_line_item_unit.sql", () => {
     const dir = resolveMigrationsDir();
     const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
     assert.ok(files.includes("001_foundation.sql"));
     assert.ok(files.includes("009_quote_archive.sql"));
     assert.ok(files.includes("010_rate_card_entries.sql"));
+    assert.ok(files.includes("011_quote_line_item_unit.sql"));
     assert.ok(existsSync(path.join(dir, "009_quote_archive.sql")));
     assert.ok(existsSync(path.join(dir, "010_rate_card_entries.sql")));
+    assert.ok(existsSync(path.join(dir, "011_quote_line_item_unit.sql")));
   });
 });
 

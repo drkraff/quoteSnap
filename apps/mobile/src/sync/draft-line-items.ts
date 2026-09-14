@@ -16,6 +16,9 @@ export function toDraftLineItems(
       quantity: item.quantity,
       unitPriceCents: item.unitPriceCents,
     };
+    if (item.unit) {
+      line.unit = item.unit;
+    }
     if (item.confidence != null) {
       line.confidence = item.confidence;
     }

@@ -40,8 +40,8 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [x] **VOICE-02**: Audio buffer is moved from cacheDirectory → documentDirectory immediately after recording stops (prevents Android cache eviction)
 - [x] **VOICE-03**: Recorded audio is uploaded to the backend via a local offline queue (works without signal)
 - [x] **VOICE-04**: Backend transcribes audio via Whisper and maps transcript to catalog items via GPT-4o function calling
-- [x] **VOICE-05**: GPT-4o is constrained to return only catalog item IDs and quantities — never free-text prices
-- [x] **VOICE-06**: Backend validates every returned item ID against the contractor's catalog; non-catalog items are rejected and flagged for manual entry, not silently passed through
+- [x] **VOICE-05**: GPT-4o maps catalog IDs when the spoken work matches; otherwise it returns adhoc name/qty/unit. It never invents prices (spoken integer cents only if the contractor said a dollar amount)
+- [x] **VOICE-06**: Backend validates catalog IDs against the contractor's active catalog. Unknown IDs become adhoc lines (name/qty/unit kept, `catalog_item_id` null) with blank price unless spoken or an exact rate-card hit — never a guessed SKU/price
 - [x] **VOICE-07**: AI draft is returned to client via polling at 1.5s intervals
 - [x] **VOICE-08**: Confidence tiers are applied to each line item: ≥0.85 = clean (no badge), 0.60–0.84 = "Review" (amber), <0.60 = "Needs Input" (red, auto-scrolls to item)
 - [x] **VOICE-09**: No raw confidence percentages are shown to contractors — plain language labels only

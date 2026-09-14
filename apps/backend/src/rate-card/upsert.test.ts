@@ -379,10 +379,8 @@ describe("lookupRateCardEntry", () => {
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 describe("rate card isolation", () => {
-  it("is not imported by voice mapping, catalog, or quote write (never invent prices)", () => {
+  it("is not imported by catalog or quote write (learn/attach stay out of SKU CRUD and PUT)", () => {
     const files = [
-      "../workers/voice-processor.ts",
-      "../workers/voice-validation.ts",
       "../quotes/quote-write.ts",
       "../catalog/create.ts",
       "../catalog/update.ts",
@@ -393,5 +391,14 @@ describe("rate card isolation", () => {
       const src = readFileSync(path.join(here, rel), "utf8");
       assert.doesNotMatch(src, /rate.?card/i, rel);
     }
+  });
+
+  it("does not put a guessed unitPriceCents field on the GPT extract schema", () => {
+    const src = readFileSync(path.join(here, "../workers/voice-processor.ts"), "utf8");
+    assert.match(src, /spokenUnitPriceCents/);
+    assert.doesNotMatch(src, /catalogItemId: \{ type: 'string', description: 'ID from the provided catalog' \}/);
+    const schemaSlice = src.slice(src.indexOf("create_quote_items"), src.indexOf("tool_choice"));
+    assert.doesNotMatch(schemaSlice, /unitPriceCents: \{ type: 'integer'/);
+    assert.match(schemaSlice, /NEVER guess/);
   });
 });
