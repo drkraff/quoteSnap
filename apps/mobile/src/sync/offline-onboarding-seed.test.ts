@@ -1,12 +1,14 @@
 import { fetchCatalogItems } from '../api/catalog';
-import { seedCatalog } from '../api/onboarding';
+import { saveOnboardingProfile, seedCatalog } from '../api/onboarding';
 import { database } from '../db';
 import { OFFLINE_TRADE_TEMPLATES } from '../data/trade-templates';
 import {
   adoptServerIdsByName,
+  onboardingProfileEnqueueParams,
   onboardingSeedEnqueueParams,
   persistOfflineCatalog,
   persistOnlineSeed,
+  syncQueuedOnboardingProfile,
   syncQueuedOnboardingSeed,
 } from './offline-onboarding-seed';
 
@@ -19,6 +21,7 @@ jest.mock('../db', () => ({
 
 jest.mock('../api/onboarding', () => ({
   seedCatalog: jest.fn(),
+  saveOnboardingProfile: jest.fn(),
 }));
 
 jest.mock('../api/catalog', () => ({
@@ -48,6 +51,7 @@ const mockedDatabase = database as unknown as {
   get: jest.Mock;
 };
 const mockedSeedCatalog = seedCatalog as unknown as jest.Mock;
+const mockedSaveOnboardingProfile = saveOnboardingProfile as unknown as jest.Mock;
 const mockedFetchCatalog = fetchCatalogItems as unknown as jest.Mock;
 
 const contractorId = 'contractor-1';
@@ -67,6 +71,23 @@ describe('onboardingSeedEnqueueParams', () => {
       entityId: contractorId,
       action: 'seed',
       payload: { trade: 'plumbing' },
+    });
+  });
+});
+
+describe('onboardingProfileEnqueueParams', () => {
+  it('queues POST /onboarding/profile without catalog seed', () => {
+    expect(
+      onboardingProfileEnqueueParams(contractorId, {
+        trade: 'plumbing',
+        hourlyRateCents: 7500,
+        markupPercent: 20,
+      }),
+    ).toEqual({
+      entityType: 'onboarding',
+      entityId: contractorId,
+      action: 'profile',
+      payload: { trade: 'plumbing', hourlyRateCents: 7500, markupPercent: 20 },
     });
   });
 });
@@ -219,6 +240,7 @@ describe('syncQueuedOnboardingSeed', () => {
       }),
     ];
     mockedSeedCatalog.mockReset();
+    mockedSaveOnboardingProfile.mockReset();
     mockedFetchCatalog.mockReset();
     mockedDatabase.get.mockImplementation(() => ({
       query: () => ({
@@ -279,5 +301,39 @@ describe('syncQueuedOnboardingSeed', () => {
     });
     expect(mockedFetchCatalog).not.toHaveBeenCalled();
     expect(catalogItems[0]!.serverId).toBeNull();
+  });
+});
+
+describe('syncQueuedOnboardingProfile', () => {
+  beforeEach(() => {
+    mockedSeedCatalog.mockReset();
+    mockedSaveOnboardingProfile.mockReset();
+  });
+
+  it('posts trade + hourly without seeding catalog', async () => {
+    mockedSaveOnboardingProfile.mockResolvedValue({
+      contractor: {
+        id: contractorId,
+        email: null,
+        phone: null,
+        displayName: null,
+        trade: 'plumbing',
+        hourlyRateCents: 7500,
+        markupPercent: 20,
+      },
+    });
+
+    await syncQueuedOnboardingProfile({
+      trade: 'plumbing',
+      hourlyRateCents: 7500,
+      markupPercent: 20,
+    });
+
+    expect(mockedSaveOnboardingProfile).toHaveBeenCalledWith({
+      trade: 'plumbing',
+      hourlyRateCents: 7500,
+      markupPercent: 20,
+    });
+    expect(mockedSeedCatalog).not.toHaveBeenCalled();
   });
 });

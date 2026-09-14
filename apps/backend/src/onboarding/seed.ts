@@ -19,6 +19,10 @@ export const ALREADY_SEEDED_ERROR = "Catalog already seeded";
 export const SELECT_CONTRACTOR_FOR_UPDATE_SQL =
   "SELECT id, trade FROM contractors WHERE id = $1 FOR UPDATE";
 
+/** 409 is catalog-already-present, not "trade is set". Profile can persist trade first. */
+export const COUNT_CONTRACTOR_CATALOG_SQL =
+  "SELECT COUNT(*)::int AS count FROM catalog_items WHERE contractor_id = $1";
+
 export const UPDATE_CONTRACTOR_TRADE_SQL = `UPDATE contractors
        SET trade = $1
        WHERE id = $2 AND trade IS NULL
@@ -91,12 +95,13 @@ function resolvedTemplateItems(trade: Trade): Array<{
 }
 
 /**
- * Trade update + template catalog inserts on one query function so the caller
+ * Optional template catalog inserts on one query function so the caller
  * can wrap this in a single DB transaction (BEGIN/COMMIT/ROLLBACK).
  *
- * After a successful commit, `contractors.trade` set means the catalog is
- * complete — 409 is therefore "already fully seeded". A throw mid-insert
- * must propagate so `withTransaction` rolls back the trade write.
+ * 409 means catalog rows already exist — not "trade is set". Profile
+ * (`POST /onboarding/profile`) can persist trade + hourly with a zero
+ * catalog; seed after that still inserts the starter pack.
+ * A throw mid-insert must propagate so `withTransaction` rolls back.
  */
 export async function applyOnboardingSeed(
   queryFn: SeedQueryFn,
@@ -109,13 +114,18 @@ export async function applyOnboardingSeed(
     return { status: 404, json: { error: "Contractor not found" } };
   }
   const contractor = locked.rows[0] as ContractorLockRow;
-  if (contractor.trade) {
+
+  const counted = await queryFn(COUNT_CONTRACTOR_CATALOG_SQL, [args.contractorId]);
+  const catalogCount = (counted.rows[0] as { count?: number } | undefined)?.count ?? 0;
+  if (catalogCount > 0) {
     return { status: 409, json: { error: ALREADY_SEEDED_ERROR } };
   }
 
-  const updated = await queryFn(UPDATE_CONTRACTOR_TRADE_SQL, [args.trade, args.contractorId]);
-  if (updated.rows.length === 0) {
-    return { status: 409, json: { error: ALREADY_SEEDED_ERROR } };
+  if (!contractor.trade) {
+    const updated = await queryFn(UPDATE_CONTRACTOR_TRADE_SQL, [args.trade, args.contractorId]);
+    if (updated.rows.length === 0) {
+      return { status: 409, json: { error: ALREADY_SEEDED_ERROR } };
+    }
   }
 
   const insertedItems: SeedResponse["items"] = [];

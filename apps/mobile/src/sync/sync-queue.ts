@@ -20,7 +20,7 @@ import { Draft } from '../db/models/draft';
 import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
 import { createSingleFlight } from './single-flight';
 import { resolveAudioQuoteServerId, quoteServerIdFromUploadError } from './audio-parent';
-import { syncQueuedOnboardingSeed } from './offline-onboarding-seed';
+import { syncQueuedOnboardingProfile, syncQueuedOnboardingSeed } from './offline-onboarding-seed';
 import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
@@ -32,7 +32,7 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 export interface SyncEnqueueParams {
   entityType: 'quote' | 'catalog_item' | 'draft' | 'audio' | 'onboarding' | 'rate_card';
   entityId: string;
-  action: 'create' | 'update' | 'delete' | 'seed';
+  action: 'create' | 'update' | 'delete' | 'seed' | 'profile';
   payload: Record<string, unknown>;
 }
 
@@ -60,6 +60,16 @@ export async function enqueue(params: SyncEnqueueParams): Promise<void> {
 
 async function pushToServer(item: SyncQueueItem): Promise<void> {
   const payload = JSON.parse(item.payloadJson) as Record<string, unknown>;
+
+  if (item.entityType === 'onboarding' && item.action === 'profile') {
+    await syncQueuedOnboardingProfile({
+      trade: payload.trade as Trade,
+      hourlyRateCents: payload.hourlyRateCents as number,
+      markupPercent:
+        typeof payload.markupPercent === 'number' ? payload.markupPercent : null,
+    });
+    return;
+  }
 
   if (item.entityType === 'onboarding' && item.action === 'seed') {
     await syncQueuedOnboardingSeed(item.entityId, payload.trade as Trade);

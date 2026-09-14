@@ -14,6 +14,26 @@ export interface SeedResponse {
   }>;
 }
 
+export interface OnboardingProfileResponse {
+  contractor: {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    displayName: string | null;
+    trade: string;
+    hourlyRateCents: number;
+    markupPercent: number | null;
+  };
+}
+
+export async function saveOnboardingProfile(params: {
+  trade: Trade;
+  hourlyRateCents: number;
+  markupPercent?: number | null;
+}): Promise<OnboardingProfileResponse> {
+  return apiClient.post<OnboardingProfileResponse>('/onboarding/profile', params);
+}
+
 export async function seedCatalog(trade: Trade): Promise<SeedResponse> {
   return apiClient.post<SeedResponse>('/onboarding/seed', { trade });
 }

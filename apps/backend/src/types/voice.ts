@@ -14,6 +14,12 @@ export interface AILineItem {
   confidence?: number;
 }
 
+export interface VoiceExtractResult {
+  items: AILineItem[];
+  /** Integer hours spoken for the job. Omit/null if they did not say hours. */
+  spokenHours?: number | null;
+}
+
 export interface VoiceStatusResponse {
   status: 'processing' | 'complete' | 'failed';
   draftId?: string;

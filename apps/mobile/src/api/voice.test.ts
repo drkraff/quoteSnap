@@ -15,6 +15,8 @@ const contractor = {
   phone: null,
   displayName: 'Ada',
   trade: 'plumbing',
+  hourlyRateCents: 7500,
+  markupPercent: null,
 };
 
 function jsonResponse(status: number, body: unknown, statusText = 'Error'): Response {

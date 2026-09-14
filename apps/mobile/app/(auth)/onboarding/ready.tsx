@@ -9,9 +9,17 @@ export default function ReadyScreen(): JSX.Element {
   const { setOnboardingComplete } = useAuthStore();
 
   const tradeName = trade ? trade.charAt(0).toUpperCase() + trade.slice(1) : '';
+  const parsedCount = Number(itemCount);
+  const catalogCount = Number.isFinite(parsedCount) ? parsedCount : 0;
+  const skippedCatalog = catalogCount === 0;
 
   async function handleStartQuoting(): Promise<void> {
-    await setOnboardingComplete(trade ?? '');
+    const contractor = useAuthStore.getState().contractor;
+    await setOnboardingComplete({
+      trade: trade ?? contractor?.trade ?? '',
+      hourlyRateCents: contractor?.hourlyRateCents ?? null,
+      markupPercent: contractor?.markupPercent ?? null,
+    });
     router.replace(AUTHENTICATED_ENTRY_HREF);
   }
 
@@ -19,7 +27,9 @@ export default function ReadyScreen(): JSX.Element {
     <SafeAreaView style={styles.container}>
       <Text style={styles.heading}>You're ready to quote</Text>
       <Text style={styles.body}>
-        Your {tradeName} catalog has {itemCount} items. Start quoting or customize it in My Catalog.
+        {skippedCatalog
+          ? `No starter catalog. Labor uses your ${tradeName || 'trade'} hourly rate when hours are spoken. Unknown prices stay blank.`
+          : `Your ${tradeName} catalog has ${itemCount} items. Start quoting or customize it in My Catalog.`}
       </Text>
       <TouchableOpacity
         style={styles.cta}

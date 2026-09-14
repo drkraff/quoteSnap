@@ -4,6 +4,24 @@ export interface SeedBody {
   trade: "plumbing" | "electrical" | "hvac";
 }
 
+export interface OnboardingProfileBody {
+  trade: "plumbing" | "electrical" | "hvac";
+  hourlyRateCents: number;
+  markupPercent?: number | null;
+}
+
+export interface OnboardingProfileResponse {
+  contractor: {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    displayName: string | null;
+    trade: string;
+    hourlyRateCents: number;
+    markupPercent: number | null;
+  };
+}
+
 export type Trade = SeedBody["trade"];
 
 export interface TradeTemplateItem {

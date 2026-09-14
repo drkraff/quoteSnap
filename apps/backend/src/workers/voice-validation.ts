@@ -4,6 +4,8 @@ import type { AILineItem } from "../types/voice.js";
 import {
   attachOneVoicePrice,
   attachVoiceLinePrices,
+  ensureLaborLineFromSpokenHours,
+  parseSpokenHours,
   totalCentsFromPricedLines,
   voiceLineNeedsRateCard,
   type RateCardCentsLookup,
@@ -19,7 +21,7 @@ export type CatalogItemRow = {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type PriceSource = "spoken" | "catalog" | "learned" | "unknown";
+export type PriceSource = "spoken" | "catalog" | "learned" | "computed" | "unknown";
 
 /**
  * Drop AI-invented non-UUID catalog IDs before they are bound to
@@ -125,8 +127,12 @@ export function buildVoiceLineItems(
   return lines;
 }
 
-function finalizeLine(line: BuiltVoiceLine, rateCardCents: number | null): ValidatedLineItem {
-  const attached = attachOneVoicePrice(line, rateCardCents);
+function finalizeLine(
+  line: BuiltVoiceLine,
+  rateCardCents: number | null,
+  hourlyRateCents: number | null,
+): ValidatedLineItem {
+  const attached = attachOneVoicePrice(line, rateCardCents, hourlyRateCents);
   return {
     catalogItemId: line.catalogItemId,
     name: line.name,
@@ -140,7 +146,8 @@ function finalizeLine(line: BuiltVoiceLine, rateCardCents: number | null): Valid
 
 /**
  * Filters AI-returned items to catalog SKUs or adhoc spoken lines,
- * then attaches prices: spoken → catalog (mapped SKU) → exact rate-card → blank.
+ * then attaches prices: spoken → catalog (mapped SKU) → exact rate-card →
+ * computed labor (hours × hourly) → blank.
  * Optional sync lookup so unit tests can inject learned cents without I/O.
  */
 export function validateAndBuildLineItems(
@@ -149,11 +156,17 @@ export function validateAndBuildLineItems(
   options?: {
     lookupRateCard?: RateCardCentsLookup;
     trade?: string | null;
+    hourlyRateCents?: number | null;
+    spokenHours?: number | null;
   },
 ): { lineItems: ValidatedLineItem[]; totalCents: number } {
-  const built = buildVoiceLineItems(aiItems, validCatalogItems);
+  const built = ensureLaborLineFromSpokenHours(
+    buildVoiceLineItems(aiItems, validCatalogItems),
+    options?.spokenHours ?? null,
+  );
   const lookup = options?.lookupRateCard;
   const trade = options?.trade ?? null;
+  const hourlyRateCents = options?.hourlyRateCents ?? null;
 
   const lineItems = built.map((line) => {
     let rateCardCents: number | null = null;
@@ -163,7 +176,7 @@ export function validateAndBuildLineItems(
         rateCardCents = result;
       }
     }
-    return finalizeLine(line, rateCardCents);
+    return finalizeLine(line, rateCardCents, hourlyRateCents);
   });
 
   return {
@@ -178,15 +191,25 @@ export async function validateAndBuildLineItemsAsync(
   options?: {
     lookupRateCard?: RateCardCentsLookup;
     trade?: string | null;
+    hourlyRateCents?: number | null;
+    spokenHours?: number | null;
   },
 ): Promise<{ lineItems: ValidatedLineItem[]; totalCents: number }> {
-  const built = buildVoiceLineItems(aiItems, validCatalogItems);
+  const built = ensureLaborLineFromSpokenHours(
+    buildVoiceLineItems(aiItems, validCatalogItems),
+    options?.spokenHours ?? null,
+  );
   const lookup = options?.lookupRateCard ?? (() => null);
-  const lineItems = await attachVoiceLinePrices(built, lookup, options?.trade ?? null);
+  const lineItems = await attachVoiceLinePrices(
+    built,
+    lookup,
+    options?.trade ?? null,
+    options?.hourlyRateCents ?? null,
+  );
   return {
     lineItems,
     totalCents: totalCentsFromPricedLines(lineItems),
   };
 }
 
-export { attachOneVoicePrice, attachVoiceLinePrices };
+export { attachOneVoicePrice, attachVoiceLinePrices, parseSpokenHours };

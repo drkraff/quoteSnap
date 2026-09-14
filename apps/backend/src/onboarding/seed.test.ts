@@ -4,6 +4,7 @@ import { TRADE_TEMPLATES } from "../data/trade-templates.js";
 import { parseCatalogUnit } from "../catalog/units.js";
 import {
   ALREADY_SEEDED_ERROR,
+  COUNT_CONTRACTOR_CATALOG_SQL,
   INSERT_CATALOG_ITEM_SQL,
   INVALID_TRADE_ERROR,
   SELECT_CONTRACTOR_FOR_UPDATE_SQL,
@@ -63,6 +64,7 @@ describe("applyOnboardingSeed", () => {
     missingContractor?: boolean;
     failOnInsertIndex?: number;
     insertUnit?: string;
+    catalogCount?: number;
   } = {}) {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     let insertCount = 0;
@@ -75,6 +77,9 @@ describe("applyOnboardingSeed", () => {
         return {
           rows: [{ id: params?.[0], trade: options.trade === undefined ? null : options.trade }],
         };
+      }
+      if (sql === COUNT_CONTRACTOR_CATALOG_SQL) {
+        return { rows: [{ count: options.catalogCount ?? 0 }] };
       }
       if (sql === UPDATE_CONTRACTOR_TRADE_SQL) {
         if (options.trade) {
@@ -104,6 +109,7 @@ describe("applyOnboardingSeed", () => {
   function callKinds(calls: Array<{ sql: string }>): string[] {
     return calls.map((c) => {
       if (c.sql === SELECT_CONTRACTOR_FOR_UPDATE_SQL) return "lock";
+      if (c.sql === COUNT_CONTRACTOR_CATALOG_SQL) return "count";
       if (c.sql === UPDATE_CONTRACTOR_TRADE_SQL) return "update-trade";
       if (c.sql === INSERT_CATALOG_ITEM_SQL) return "insert";
       return "other";
@@ -126,15 +132,17 @@ describe("applyOnboardingSeed", () => {
 
     const kinds = callKinds(calls);
     assert.equal(kinds[0], "lock");
-    assert.equal(kinds[1], "update-trade");
+    assert.equal(kinds[1], "count");
+    assert.equal(kinds[2], "update-trade");
     assert.equal(kinds.filter((k) => k === "insert").length, template.length);
-    assert.deepEqual(kinds.slice(2), Array(template.length).fill("insert"));
+    assert.deepEqual(kinds.slice(3), Array(template.length).fill("insert"));
 
     assert.deepEqual(calls[0]?.params, [CONTRACTOR_ID]);
-    assert.deepEqual(calls[1]?.params, ["plumbing", CONTRACTOR_ID]);
+    assert.deepEqual(calls[1]?.params, [CONTRACTOR_ID]);
+    assert.deepEqual(calls[2]?.params, ["plumbing", CONTRACTOR_ID]);
 
     for (const [i, item] of template.entries()) {
-      const insert = calls[2 + i];
+      const insert = calls[3 + i];
       assert.equal(insert?.sql, INSERT_CATALOG_ITEM_SQL);
       assert.deepEqual(insert?.params, [
         CONTRACTOR_ID,
@@ -157,8 +165,9 @@ describe("applyOnboardingSeed", () => {
       trade: "hvac",
     });
     assert.deepEqual(own.calls[0]?.params, [CONTRACTOR_ID]);
-    assert.deepEqual(own.calls[1]?.params, ["hvac", CONTRACTOR_ID]);
-    assert.equal(own.calls[2]?.params?.[0], CONTRACTOR_ID);
+    assert.deepEqual(own.calls[1]?.params, [CONTRACTOR_ID]);
+    assert.deepEqual(own.calls[2]?.params, ["hvac", CONTRACTOR_ID]);
+    assert.equal(own.calls[3]?.params?.[0], CONTRACTOR_ID);
 
     const other = mockDb();
     await applyOnboardingSeed(other.queryFn, {
@@ -166,12 +175,13 @@ describe("applyOnboardingSeed", () => {
       trade: "hvac",
     });
     assert.deepEqual(other.calls[0]?.params, [OTHER_CONTRACTOR_ID]);
-    assert.deepEqual(other.calls[1]?.params, ["hvac", OTHER_CONTRACTOR_ID]);
-    assert.equal(other.calls[2]?.params?.[0], OTHER_CONTRACTOR_ID);
+    assert.deepEqual(other.calls[1]?.params, [OTHER_CONTRACTOR_ID]);
+    assert.deepEqual(other.calls[2]?.params, ["hvac", OTHER_CONTRACTOR_ID]);
+    assert.equal(other.calls[3]?.params?.[0], OTHER_CONTRACTOR_ID);
   });
 
-  it("returns 409 without writing when trade is already set (fully seeded)", async () => {
-    const { calls, queryFn } = mockDb({ trade: "plumbing" });
+  it("returns 409 without writing when catalog items already exist", async () => {
+    const { calls, queryFn } = mockDb({ trade: "plumbing", catalogCount: 10 });
     const outcome = await applyOnboardingSeed(queryFn, {
       contractorId: CONTRACTOR_ID,
       trade: "electrical",
@@ -180,7 +190,22 @@ describe("applyOnboardingSeed", () => {
       status: 409,
       json: { error: ALREADY_SEEDED_ERROR },
     });
-    assert.deepEqual(callKinds(calls), ["lock"]);
+    assert.deepEqual(callKinds(calls), ["lock", "count"]);
+  });
+
+  it("still inserts a starter catalog when trade is already set and catalog is empty", async () => {
+    const template = TRADE_TEMPLATES.plumbing;
+    const { calls, queryFn } = mockDb({ trade: "plumbing", catalogCount: 0 });
+    const outcome = await applyOnboardingSeed(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      trade: "plumbing",
+    });
+    assert.equal(outcome.status, 201);
+    if (outcome.status !== 201) return;
+    assert.equal(outcome.json.itemCount, template.length);
+    assert.deepEqual(callKinds(calls).slice(0, 2), ["lock", "count"]);
+    assert.equal(callKinds(calls).includes("update-trade"), false);
+    assert.equal(callKinds(calls).filter((k) => k === "insert").length, template.length);
   });
 
   it("throws on a mid-loop INSERT after the trade UPDATE so withTransaction can roll back", async () => {
@@ -195,9 +220,10 @@ describe("applyOnboardingSeed", () => {
     );
     const kinds = callKinds(calls);
     assert.equal(kinds[0], "lock");
-    assert.equal(kinds[1], "update-trade");
-    assert.equal(kinds[2], "insert");
+    assert.equal(kinds[1], "count");
+    assert.equal(kinds[2], "update-trade");
     assert.equal(kinds[3], "insert");
+    assert.equal(kinds[4], "insert");
     assert.equal(kinds.filter((k) => k === "insert").length, 2);
     assert.equal(
       kinds.includes("other"),

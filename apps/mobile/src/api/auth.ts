@@ -6,6 +6,8 @@ export interface ContractorResponse {
   phone: string | null;
   displayName: string | null;
   trade: string | null;
+  hourlyRateCents: number | null;
+  markupPercent: number | null;
 }
 
 export interface AuthResponse {

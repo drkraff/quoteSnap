@@ -51,6 +51,7 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
       'Voice recording',
     );
     expect(deadLetterTitle('onboarding', 'seed', '{"trade":"plumbing"}')).toBe('Catalog setup');
+    expect(deadLetterTitle('onboarding', 'profile', '{"trade":"plumbing"}')).toBe('Hourly rate');
     expect(
       deadLetterTitle(
         'rate_card',
@@ -70,6 +71,7 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
     expect(deadLetterSummary('quote', 'create')).toBe("Couldn't save a new quote");
     expect(deadLetterSummary('audio', 'create')).toBe("Couldn't upload this recording");
     expect(deadLetterSummary('onboarding', 'seed')).toBe("Couldn't finish catalog setup");
+    expect(deadLetterSummary('onboarding', 'profile')).toBe("Couldn't save your hourly rate");
     expect(deadLetterSummary('rate_card', 'update')).toBe("Couldn't save this learned price");
     expect(deadLetterSummary('nope', 'nope')).toBe("Couldn't sync this change");
   });

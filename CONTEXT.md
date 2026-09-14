@@ -12,7 +12,7 @@ Phase PLAN / SUMMARY / RESEARCH files under `.planning/phases/` are **historical
 
 Mobile-first quoting for solo trade contractors (plumbing, electrical, HVAC). Contractor describes a job by voice; Whisper + GPT-4o extract line items (catalog UUID when mapped, otherwise adhoc name/qty/unit) with **no AI-invented prices**; contractor reviews/edits the draft. SMS send + customer approval is **Phase 6 and is not implemented**.
 
-Core loop on `master`: register/login → trade onboarding + catalog seed → catalog CRUD → record voice or create a manual draft → review line items → archive unwanted quotes from the list (hard-delete only never-synced empty local drafts) → “Send” currently only marks the quote `draft_queued` locally (no Twilio).
+Core loop on `master`: register/login → trade + hourly (markup optional; catalog seed skippable) → catalog CRUD if they want it → record voice or create a manual draft → review line items → archive unwanted quotes from the list (hard-delete only never-synced empty local drafts) → “Send” currently only marks the quote `draft_queued` locally (no Twilio).
 
 ---
 
@@ -23,7 +23,7 @@ Re-check GitHub before treating anything else as landed. This briefing includes 
 | Phase | In code? | Honest status |
 |-------|----------|----------------|
 | 1 Foundation (auth + WatermelonDB) | Yes | Shipped. PRs #1 (rate-limit / pool) and #2 (refresh coalesce) merged. |
-| 2 Onboarding | Yes | Shipped. `ONBD-03` (90s on 1-bar LTE) and `ONBD-04` (offline seed) not human-validated. |
+| 2 Onboarding | Yes | Shipped. Catalog seed is **optional** (`POST /onboarding/profile` persists trade + hourly without catalog). `ONBD-03` (90s on 1-bar LTE) and `ONBD-04` (offline seed) not human-validated. |
 | 3 Catalog management | Yes | Shipped (`CAT-01`…`CAT-06`). |
 | 4 Quote review + history | Yes | Shipped (`REVIEW-*`, `HIST-01`…`HIST-05`). `HIST-05` is quote soft-archive (catalog analog) plus an Archived list with Unarchive. Never-synced empty local drafts (`!serverId`) can be hard-deleted from the device. |
 | 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
@@ -48,7 +48,8 @@ Recent **merged** work to reflect if you mention status:
 - **PR #38** — Quotes / Archived toggle; Unarchive swipe. Hydrate pulls `GET /quotes?archived=true` as well as the active list.
 - **PR #39** — Hard-delete never-synced empty local drafts (`!serverId`): confirm, then destroy quote + draft + pending queue rows locally. No server delete API.
 - **PR #44** — Per-contractor rate card learn on draft price confirm (`POST /rate-card`, `GET /rate-card` exact lookup).
-- **P0-B** — Adhoc voice lines (non-catalog UUID) persist name/qty/unit; price attach is spoken → exact rate-card → blank. Catalog-mapped SKUs still use catalog cents.
+- **P0-B** — Adhoc voice lines (non-catalog UUID) persist name/qty/unit; price attach is spoken → catalog SKU → exact rate-card → blank.
+- **P0-C** — Skippable catalog seed. Signup persists hourly labor rate (integer cents) + optional markup %. Labor unit price = hours × hourly (`computed`); unknown non-labor stays blank. Never invent SKU prices.
 
 **Still open (docs, not these fixes):**
 
@@ -66,7 +67,7 @@ npm workspaces, two apps:
 ```
 apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
-apps/backend/src/db/migrations/   001_foundation … 011_quote_line_item_unit
+apps/backend/src/db/migrations/   001_foundation … 012_contractor_hourly
 apps/mobile/src/db/               schema v3, models, SQLiteAdapter
 apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate (server-as-truth; SYNC-05 draft forks → needs_review)
 .github/workflows/ci.yml
@@ -80,7 +81,7 @@ There is no root `README.md`. Native `android/` and `ios/` are gitignored (Expo 
 |-------|------|
 | `GET /health` | Liveness |
 | `/auth` | register, login, refresh, logout (rate-limited register/login/refresh, 6 / 15 min per IP) |
-| `/onboarding` | trade catalog seed |
+| `/onboarding` | `POST /profile` (trade + hourlyRateCents + optional markupPercent, no catalog) + optional `POST /seed` |
 | `/catalog` | CRUD + `PATCH /:id/archive` |
 | `/quotes` | list/create/update quotes + line items + `PATCH /:id/archive` |
 | `/rate-card` | P0-A learned prices: `POST /` upsert last confirmed unit price; `GET /?name&unit&trade` exact lookup (`{ entry: null }` on miss). Does not rewrite catalog or quote snapshots. |
@@ -90,7 +91,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 
 ### Mobile screens (`apps/mobile/app`)
 
-- `(auth)` — login, register, onboarding (trade / seeding / ready)
+- `(auth)` — login, register, onboarding (trade + hourly / optional seeding / ready)
 - `(app)` — quotes list (default authenticated entry after login/restore/onboarding), catalog, `voice-record`, `draft/[id]`, `quote/[id]`. No Home tab; **Log Out** is a nav-header action (A-19). `/(app)` / index redirects to Quotes.
 
 ---
@@ -100,7 +101,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 1. **Money is integer cents.** Columns and fields are `*_cents` / `*Cents`. UI may format dollars; storage and API stay integers.
 2. **`quote_line_items` are snapshots.** Persist `name` + `unit_price_cents` on the row (optional `unit`, migration `011`). Catalog price edits must not rewrite historical quotes. Optional `catalog_item_id` (migration `004_voice.sql`, `ON DELETE SET NULL`) is provenance for AI rows — not a live price join. Adhoc voice lines have `catalog_item_id` null. Unknown prices store `0` and the draft UI flags them blank.
 3. **There is no `quote_snapshots` table.** Older planning docs claimed a write-once snapshot + DB trigger. That is a **Phase 6** design (`SMS-02` / `SMS-04`), not present in migrations. Do not document it as shipped.
-4. **Voice extract may return catalog IDs or adhoc name/qty/unit.** GPT maps to an active-catalog UUID when it clearly matches; otherwise it still emits the spoken line (`catalog_item_id` null). Prices are attached after extract: spoken cents if present → catalog SKU cents if mapped → `GET /rate-card` exact name+unit(+trade) → else blank/`null` (stored as `0` on the NOT NULL snapshot). Never invent a SKU, catalog ID, trade-default, or guessed price. `filterUuidCatalogIds` still drops non-UUID IDs before `ANY($n::uuid[])`.
+4. **Voice extract may return catalog IDs or adhoc name/qty/unit.** GPT maps to an active-catalog UUID when it clearly matches; otherwise it still emits the spoken line (`catalog_item_id` null). Prices are attached after extract: spoken cents if present → catalog SKU cents if mapped → `GET /rate-card` exact name+unit(+trade) → **computed labor** (hour-unit line, or synthesized Labor from `spokenHours`, times `contractors.hourly_rate_cents`) → else blank/`null` (stored as `0` on the NOT NULL snapshot). Never invent a SKU, catalog ID, trade-default, or guessed material price. `filterUuidCatalogIds` still drops non-UUID IDs before `ANY($n::uuid[])`.
 5. **Confidence in the UI is tiers, never raw floats.** `confidenceTier()`: `≥0.85` clean (no badge), `0.60–0.84` “Review” (amber), `<0.60` “Needs Input” (red, auto-scroll). `LineItemRow` takes `'review' | 'needs_input'`.
 6. **Offline-first.** Quotes, catalog, drafts, and `sync_queue_items` live in WatermelonDB. Retrofitting online-first is a rewrite.
 7. **Backend ESM.** `apps/backend/package.json` has `"type": "module"`; `tsconfig` is NodeNext. Relative imports **must** use `.js` extensions (`from "./routes/auth.js"`).
@@ -120,7 +121,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 - `.env.example` shows Postgres on **5432**.
 - Local convention documented in this repo: Docker container `quotesnap-db` is published on **5433** so it does not collide with a host Postgres on 5432. Match the port in the `.env` you actually use.
 - Start DB before the API: `docker start quotesnap-db`
-- Migrations: `cd apps/backend && npm run migrate` (files `001`…`010`). Safe to re-run: `_migrations` skips applied files.
+- Migrations: `cd apps/backend && npm run migrate` (files `001`…`012`). Safe to re-run: `_migrations` skips applied files.
 - **Railway / production boot:** repo-root `npm start` is `node dist/db/migrate.js && node dist/index.js` (after `npm run build`). Operators should leave **Start Command** empty or set `npm start`. Do not start with only `node dist/index.js` — `quotes.is_archived` (009) and later files will not land. Details: [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md).
 
 ### Backend
@@ -152,13 +153,13 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (catalog SKUs + adhoc name/qty/unit, UUID filter, spoken vs rate-card vs blank attach), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive` both directions, active vs `?archived=true` list SQL), production start chaining SQL migrate before listen, rate-card upsert/exact lookup (`010_rate_card_entries`), and quote snapshot `unit` (`011_quote_line_item_unit`). Mobile tests cover confidence, line-items (including null catalog/price adhoc parse), quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive/unarchive PATCH, skipping POST when a local quote was hard-deleted, and rate-card upsert), auth 401 handling, login/restore catalog+quote hydrate (active + archived pulls; Unarchive is not overwritten), offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), quote archive/unarchive copy, hard-delete of never-synced empty local drafts (`!serverId`), and draft price-edit rate-card learn payload (exact name+unit, no invented unit).
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (catalog SKUs + adhoc name/qty/unit, UUID filter, spoken vs rate-card vs computed labor vs blank attach), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive` both directions, active vs `?archived=true` list SQL), production start chaining SQL migrate before listen, rate-card upsert/exact lookup (`010_rate_card_entries`), quote snapshot `unit` (`011_quote_line_item_unit`), skippable onboarding profile (`012_contractor_hourly`, no catalog insert), and labor hours × hourly compute. Mobile tests cover confidence, line-items (including null catalog/price adhoc parse), quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive/unarchive PATCH, skipping POST when a local quote was hard-deleted, rate-card upsert, and onboarding profile without seed), auth 401 handling, login/restore catalog+quote hydrate (active + archived pulls; Unarchive is not overwritten), offline onboarding seed enqueue / 409 de-dupe, skippable seed (trade + hourly, itemCount 0), voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), quote archive/unarchive copy, hard-delete of never-synced empty local drafts (`!serverId`), and draft price-edit rate-card learn payload (exact name+unit, no invented unit).
 
 ---
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, #38, #39, and #44**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, hard-delete of never-synced empty local drafts, or rate-card learn (P0-A).
+These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, #38, #39, #44, and #45**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, hard-delete of never-synced empty local drafts, rate-card learn (P0-A), or adhoc voice lines + exact price attach (P0-B).
 
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).
