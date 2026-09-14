@@ -4,28 +4,28 @@ import { Quote } from '../../db/models/quote';
 import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { colors, spacing, typography } from '../../theme/tokens';
-import { isOnline } from '../../sync/network-monitor';
-import { getQuoteStatusDisplay } from '../../quotes/status-display';
+import { quoteRowDisplay } from '../../quotes/quote-row-display';
 
 interface QuoteRowProps {
   quote: Quote;
+  online: boolean;
   onPress: (quote: Quote) => void;
 }
 
-export function QuoteRow({ quote, onPress }: QuoteRowProps): JSX.Element {
-  const isAiProcessing = quote.status === 'ai_processing';
-  const online = isOnline();
-
-  const phone = isAiProcessing ? 'New job' : (quote.customerPhone || 'No phone');
-  const totalDisplay = `$${(quote.totalCents / 100).toFixed(2)}`;
+export function QuoteRow({ quote, online, onPress }: QuoteRowProps): JSX.Element {
+  const {
+    isAiProcessing,
+    phone,
+    totalDisplay,
+    processingCaption,
+    accessibilityLabel,
+  } = quoteRowDisplay({
+    status: quote.status,
+    totalCents: quote.totalCents,
+    customerPhone: quote.customerPhone,
+    online,
+  });
   const relativeDate = formatRelativeDate(quote.createdAt);
-
-  const statusLabel = getQuoteStatusDisplay(quote.status).label;
-  const accessibilityLabel = isAiProcessing
-    ? online
-      ? 'Quote processing'
-      : 'Quote queued, will upload when online'
-    : `Quote status ${statusLabel}, total ${totalDisplay}. Double tap to open.`;
 
   return (
     <Pressable
@@ -57,15 +57,15 @@ export function QuoteRow({ quote, onPress }: QuoteRowProps): JSX.Element {
       {/* Right: total price or processing indicator */}
       {isAiProcessing ? (
         <View style={styles.processingRight}>
-          {online ? (
+          {processingCaption === 'Processing...' ? (
             <>
               <ActivityIndicator size="small" color={colors.accent} />
-              <Text style={styles.processingText}>Processing...</Text>
+              <Text style={styles.processingText}>{processingCaption}</Text>
             </>
           ) : (
             <>
               <Ionicons name="cloud-upload-outline" size={16} color={colors.mutedText} />
-              <Text style={styles.processingText}>Queued</Text>
+              <Text style={styles.processingText}>{processingCaption}</Text>
             </>
           )}
         </View>
@@ -135,3 +135,4 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
   },
 });
+

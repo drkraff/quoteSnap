@@ -20,15 +20,21 @@ import { QuotesEmptyState } from '../../src/components/quotes/empty-state';
 import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
 import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
 import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
+import { useIsOnline } from '../../src/sync/use-is-online';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { fetchQuote } from '../../src/api/quotes';
-import { isOnline } from '../../src/sync/network-monitor';
 import { rememberServerRevision } from '../../src/sync/server-revision';
 import { quotePressTarget } from '../../src/quotes/status-display';
 import {
+  draftReadyLocalFields,
+  QUOTE_LIST_OBSERVE_COLUMNS,
+  quoteListRenderKey,
+} from '../../src/quotes/quote-list-observe';
+import {
   pollOneAiProcessingQuote,
   shouldPollAiProcessing,
+  shouldRunQuotesAiPoller,
 } from '../../src/quotes/poll-ai-processing';
 
 // Tab bar height constant (safe default for both iOS/Android)
@@ -42,16 +48,17 @@ export default function QuotesScreen(): JSX.Element {
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadLetterItems = useDeadLetterItems();
+  const online = useIsOnline();
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
-    const collection = database.get<Quote>('quotes');
-    const subscription = collection
+    const subscription = database
+      .get<Quote>('quotes')
       .query(
         Q.where('contractor_id', contractorId),
         Q.sortBy('created_at', 'desc'),
       )
-      .observe()
+      .observeWithColumns(QUOTE_LIST_OBSERVE_COLUMNS)
       .subscribe(setQuotes);
     return () => subscription.unsubscribe();
   }, []);
@@ -60,7 +67,7 @@ export default function QuotesScreen(): JSX.Element {
   useEffect(() => {
     const processingQuotes = quotes.filter(shouldPollAiProcessing);
 
-    if (processingQuotes.length === 0) {
+    if (!shouldRunQuotesAiPoller(quotes, online)) {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
       return;
     }
@@ -80,6 +87,7 @@ export default function QuotesScreen(): JSX.Element {
               fetchQuote,
               getDraftLineItems,
               async markDraftReady(_quote, lineItemsJson) {
+                const ready = draftReadyLocalFields(lineItemsJson);
                 await database.write(async () => {
                   // Write line items JSON to the draft record BEFORE updating quote status
                   const draftCollection = database.get<Draft>('drafts');
@@ -91,7 +99,8 @@ export default function QuotesScreen(): JSX.Element {
                     });
                   }
                   await q.update((r) => {
-                    r.status = 'draft_local';
+                    r.status = ready.status;
+                    r.totalCents = ready.totalCents;
                   });
                 });
               },
@@ -131,14 +140,12 @@ export default function QuotesScreen(): JSX.Element {
       pollTimerRef.current = setTimeout(() => { void pollProcessing(); }, 1500);
     }
 
-    if (isOnline()) {
-      pollTimerRef.current = setTimeout(() => { void pollProcessing(); }, 1500);
-    }
+    pollTimerRef.current = setTimeout(() => { void pollProcessing(); }, 1500);
 
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [quotes]);
+  }, [quotes, online]);
 
   function handleQuotePress(quote: Quote): void {
     const target = quotePressTarget(quote.status);
@@ -191,9 +198,10 @@ export default function QuotesScreen(): JSX.Element {
     <SafeAreaView style={styles.container}>
       <FlatList
         data={quotes}
+        extraData={quoteListRenderKey(quotes, online)}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <QuoteRow quote={item} onPress={handleQuotePress} />
+          <QuoteRow quote={item} online={online} onPress={handleQuotePress} />
         )}
         ListHeaderComponent={
           <DeadLetterBanner
