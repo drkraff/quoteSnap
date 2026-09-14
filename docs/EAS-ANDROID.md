@@ -55,7 +55,7 @@ https://your-service.up.railway.app
 
 That value is a public URL, not a secret. Still do not commit LAN IPs or `.env` files.
 
-The helper script uploads it to the Expo **preview** environment as plaintext (so the cloud builder sees the same URL), then starts the build:
+The helper script uploads it to the Expo **preview** environment as plaintext (so the cloud builder sees the same URL), then starts the build. `eas env:set` creates or updates the variable, so re-runs are safe.
 
 **PowerShell**
 
@@ -75,7 +75,7 @@ EXPO_PUBLIC_API_URL=https://your-service.up.railway.app npm run eas:android:prev
 Equivalent manual commands from `apps/mobile` (if you prefer not to use the script):
 
 ```powershell
-npx eas-cli env:set --name EXPO_PUBLIC_API_URL --value https://your-service.up.railway.app --environment preview --visibility plaintext
+npx eas-cli env:set --name EXPO_PUBLIC_API_URL --value https://your-service.up.railway.app --environment preview --visibility plaintext --non-interactive
 npx eas-cli build --platform android --profile preview
 ```
 
