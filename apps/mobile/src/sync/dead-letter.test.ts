@@ -51,6 +51,13 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
       'Voice recording',
     );
     expect(deadLetterTitle('onboarding', 'seed', '{"trade":"plumbing"}')).toBe('Catalog setup');
+    expect(
+      deadLetterTitle(
+        'rate_card',
+        'update',
+        JSON.stringify({ name: 'Copper Pipe', unit: 'foot', unitPriceCents: 5200 }),
+      ),
+    ).toBe('Saved price: Copper Pipe');
     expect(deadLetterTitle('mystery', 'frob', '{}')).toBe('Saved change');
   });
 
@@ -63,6 +70,7 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
     expect(deadLetterSummary('quote', 'create')).toBe("Couldn't save a new quote");
     expect(deadLetterSummary('audio', 'create')).toBe("Couldn't upload this recording");
     expect(deadLetterSummary('onboarding', 'seed')).toBe("Couldn't finish catalog setup");
+    expect(deadLetterSummary('rate_card', 'update')).toBe("Couldn't save this learned price");
     expect(deadLetterSummary('nope', 'nope')).toBe("Couldn't sync this change");
   });
 

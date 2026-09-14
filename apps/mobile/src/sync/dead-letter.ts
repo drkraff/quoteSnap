@@ -44,6 +44,8 @@ const TITLE_BY_ENTITY_ACTION: Record<string, string> = {
   'audio:create': 'Voice recording',
   'audio:update': 'Voice recording',
   'onboarding:seed': 'Catalog setup',
+  'rate_card:update': 'Saved price',
+  'rate_card:create': 'Saved price',
 };
 
 const SUMMARY_BY_ENTITY_ACTION: Record<string, string> = {
@@ -57,6 +59,8 @@ const SUMMARY_BY_ENTITY_ACTION: Record<string, string> = {
   'audio:create': "Couldn't upload this recording",
   'audio:update': "Couldn't upload this recording",
   'onboarding:seed': "Couldn't finish catalog setup",
+  'rate_card:update': "Couldn't save this learned price",
+  'rate_card:create': "Couldn't save this learned price",
 };
 
 export function canRetryDeadLetter(status: string): boolean {
@@ -148,7 +152,10 @@ function payloadDisplayName(entityType: string, payloadJson: string): string | n
   } catch {
     return null;
   }
-  if (entityType === 'catalog_item' && typeof payload.name === 'string') {
+  if (
+    (entityType === 'catalog_item' || entityType === 'rate_card') &&
+    typeof payload.name === 'string'
+  ) {
     const name = payload.name.trim();
     return name === '' ? null : name;
   }

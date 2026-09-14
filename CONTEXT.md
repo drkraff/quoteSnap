@@ -64,7 +64,7 @@ npm workspaces, two apps:
 ```
 apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
-apps/backend/src/db/migrations/   001_foundation … 009_quote_archive
+apps/backend/src/db/migrations/   001_foundation … 010_rate_card_entries
 apps/mobile/src/db/               schema v3, models, SQLiteAdapter
 apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate (server-as-truth; SYNC-05 draft forks → needs_review)
 .github/workflows/ci.yml
@@ -81,6 +81,7 @@ There is no root `README.md`. Native `android/` and `ios/` are gitignored (Expo 
 | `/onboarding` | trade catalog seed |
 | `/catalog` | CRUD + `PATCH /:id/archive` |
 | `/quotes` | list/create/update quotes + line items + `PATCH /:id/archive` |
+| `/rate-card` | P0-A learned prices: `POST /` upsert last confirmed unit price; `GET /?name&unit&trade` exact lookup (`{ entry: null }` on miss). Does not rewrite catalog or quote snapshots. |
 | `/voice` | `POST /upload`, `GET /status/:jobId`, `GET /draft/:quoteId` |
 
 Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing-reaper.ts` (queue `ai-processing-reaper`, every minute). No Twilio, FCM, or approval-page routes. Postgres `contractors.fcm_token` is reserved for FAIL-08 / SMS-08 (COMMENT in migration `008`); unused — do not drop or implement FCM.
@@ -102,9 +103,10 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 6. **Offline-first.** Quotes, catalog, drafts, and `sync_queue_items` live in WatermelonDB. Retrofitting online-first is a rewrite.
 7. **Backend ESM.** `apps/backend/package.json` has `"type": "module"`; `tsconfig` is NodeNext. Relative imports **must** use `.js` extensions (`from "./routes/auth.js"`).
 8. **WatermelonDB adapter:** `newArchEnabled: false` in `apps/mobile/app.config.ts`; `SQLiteAdapter({ jsi: false })` in `apps/mobile/src/db/index.ts`. Do not flip these without a native rebuild and device verification. (An early decision to enable JSI was reversed for RN 0.76.) There is no Expo `web` target — product is mobile-first and the API has no CORS.
-9. **SQL is parameterized and tenant-scoped.** Catalog/quote lookups always include `contractor_id` from the JWT.
+9. **SQL is parameterized and tenant-scoped.** Catalog/quote/rate-card lookups always include `contractor_id` from the JWT.
 10. **`failed_send` ≠ `ai_failed`.** `ai_failed` is the voice pipeline; `failed_send` is reserved for SMS (Phase 6).
 11. **Audio PII:** delete from R2 **after** Whisper + GPT + DB commit succeed, not immediately after transcription. Delete failures after success are logged; they must not fail the job (avoids duplicate line items on retry).
+12. **Rate card does not invent prices.** `rate_card_entries` stores last typed/confirmed unit prices keyed by exact normalized name + unit + optional trade. GPT/voice mapping still uses the active catalog only. Catalog SKU edits and quote snapshots stay independent. Attach-on-match is P0-B.
 
 ---
 
@@ -116,7 +118,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 - `.env.example` shows Postgres on **5432**.
 - Local convention documented in this repo: Docker container `quotesnap-db` is published on **5433** so it does not collide with a host Postgres on 5432. Match the port in the `.env` you actually use.
 - Start DB before the API: `docker start quotesnap-db`
-- Migrations: `cd apps/backend && npm run migrate` (files `001`…`009`). Safe to re-run: `_migrations` skips applied files.
+- Migrations: `cd apps/backend && npm run migrate` (files `001`…`010`). Safe to re-run: `_migrations` skips applied files.
 - **Railway / production boot:** repo-root `npm start` is `node dist/db/migrate.js && node dist/index.js` (after `npm run build`). Operators should leave **Start Command** empty or set `npm start`. Do not start with only `node dist/index.js` — `quotes.is_archived` (009) and later files will not land. Details: [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md).
 
 ### Backend
@@ -148,7 +150,7 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive` both directions, active vs `?archived=true` list SQL), and production start chaining SQL migrate before listen. Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive/unarchive PATCH and skipping POST when a local quote was hard-deleted), auth 401 handling, login/restore catalog+quote hydrate (active + archived pulls; Unarchive is not overwritten), offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), quote archive/unarchive copy, and hard-delete of never-synced empty local drafts (`!serverId`).
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive` both directions, active vs `?archived=true` list SQL), production start chaining SQL migrate before listen, and rate-card upsert/exact lookup (`010_rate_card_entries`). Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive/unarchive PATCH, skipping POST when a local quote was hard-deleted, and rate-card upsert), auth 401 handling, login/restore catalog+quote hydrate (active + archived pulls; Unarchive is not overwritten), offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), quote archive/unarchive copy, hard-delete of never-synced empty local drafts (`!serverId`), and draft price-edit rate-card learn payload (exact name+unit, no invented unit).
 
 ---
 

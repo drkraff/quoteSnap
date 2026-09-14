@@ -14,6 +14,7 @@ import { uploadAudio } from '../api/voice';
 import type { Trade } from '../api/onboarding';
 import { CatalogItem } from '../db/models/catalog-item';
 import { archiveQuote, createQuoteOnServer, unarchiveQuote, updateQuoteOnServer } from '../api/quotes';
+import { upsertRateCardEntry } from '../api/rate-card';
 import { Quote } from '../db/models/quote';
 import { Draft } from '../db/models/draft';
 import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
@@ -29,7 +30,7 @@ const queueFlight = createSingleFlight();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface SyncEnqueueParams {
-  entityType: 'quote' | 'catalog_item' | 'draft' | 'audio' | 'onboarding';
+  entityType: 'quote' | 'catalog_item' | 'draft' | 'audio' | 'onboarding' | 'rate_card';
   entityId: string;
   action: 'create' | 'update' | 'delete' | 'seed';
   payload: Record<string, unknown>;
@@ -235,6 +236,18 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       }
       throw error;
     }
+    return;
+  }
+
+  if (item.entityType === 'rate_card') {
+    const unit = parseCatalogUnit(payload.unit) ?? (payload.unit as string);
+    await upsertRateCardEntry({
+      name: payload.name as string,
+      unit,
+      unitPriceCents: payload.unitPriceCents as number,
+      trade: typeof payload.trade === 'string' ? payload.trade : undefined,
+      source: payload.source === 'confirmed' ? 'confirmed' : 'typed',
+    });
     return;
   }
 
