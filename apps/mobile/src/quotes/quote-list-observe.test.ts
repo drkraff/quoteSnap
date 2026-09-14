@@ -1,0 +1,56 @@
+import {
+  draftReadyLocalFields,
+  QUOTE_LIST_OBSERVE_COLUMNS,
+  quoteListRenderKey,
+} from './quote-list-observe';
+
+describe('QUOTE_LIST_OBSERVE_COLUMNS', () => {
+  it('watches the fields the Quotes row actually displays', () => {
+    expect(QUOTE_LIST_OBSERVE_COLUMNS).toEqual([
+      'status',
+      'total_cents',
+      'customer_phone',
+      'voice_job_id',
+    ]);
+  });
+
+  it('does not rely on created_at (sort-only) to surface status writes', () => {
+    expect(QUOTE_LIST_OBSERVE_COLUMNS).not.toContain('created_at');
+    expect(QUOTE_LIST_OBSERVE_COLUMNS).not.toContain('contractor_id');
+  });
+});
+
+describe('draftReadyLocalFields', () => {
+  it('sets draft_local and the catalog-sum total in cents', () => {
+    const lineItemsJson = JSON.stringify([
+      { catalogItemId: 'sw', name: 'Switch Replacement', quantity: 2, unitPriceCents: 8500 },
+      { catalogItemId: 'out', name: 'Outlet Install', quantity: 3, unitPriceCents: 17500 },
+    ]);
+
+    expect(draftReadyLocalFields(lineItemsJson)).toEqual({
+      status: 'draft_local',
+      totalCents: 69500,
+    });
+  });
+
+  it('uses 0 when the draft payload is empty or invalid', () => {
+    expect(draftReadyLocalFields('[]')).toEqual({ status: 'draft_local', totalCents: 0 });
+    expect(draftReadyLocalFields('{')).toEqual({ status: 'draft_local', totalCents: 0 });
+  });
+});
+
+describe('quoteListRenderKey', () => {
+  const row = { id: 'q1', status: 'ai_processing', totalCents: 0 };
+
+  it('changes when status, total, or connectivity changes (FlatList extraData)', () => {
+    const processingOffline = quoteListRenderKey([row], false);
+    expect(processingOffline).not.toBe(
+      quoteListRenderKey([{ ...row, status: 'draft_local', totalCents: 69500 }], false),
+    );
+    expect(processingOffline).not.toBe(quoteListRenderKey([row], true));
+  });
+
+  it('stays stable when nothing visible changed', () => {
+    expect(quoteListRenderKey([row], true)).toBe(quoteListRenderKey([row], true));
+  });
+});

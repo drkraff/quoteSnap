@@ -46,6 +46,18 @@ export function shouldPollAiProcessing(quote: {
   return hasText(quote.voiceJobId) || hasText(quote.serverId);
 }
 
+/** Start the 1.5s poll loop only when online — reconnect must re-enter this. */
+export function shouldRunQuotesAiPoller(
+  quotes: Array<{
+    status: string;
+    serverId: string | null;
+    voiceJobId: string | null;
+  }>,
+  online: boolean,
+): boolean {
+  return online && quotes.some(shouldPollAiProcessing);
+}
+
 async function applyComplete(
   quote: PollableAiQuote,
   draftId: string,

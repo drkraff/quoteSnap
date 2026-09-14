@@ -1,6 +1,7 @@
 import {
   pollOneAiProcessingQuote,
   shouldPollAiProcessing,
+  shouldRunQuotesAiPoller,
   type PollableAiQuote,
 } from './poll-ai-processing';
 
@@ -61,6 +62,26 @@ describe('shouldPollAiProcessing', () => {
   it('does not poll non-processing statuses', () => {
     expect(
       shouldPollAiProcessing(quote({ status: 'draft_local', voiceJobId: 'job-1' })),
+    ).toBe(false);
+  });
+});
+
+describe('shouldRunQuotesAiPoller', () => {
+  it('does not run while offline even if a processing quote exists', () => {
+    expect(
+      shouldRunQuotesAiPoller([quote({ voiceJobId: 'job-1' })], false),
+    ).toBe(false);
+  });
+
+  it('starts on reconnect when a processing quote is already on the list', () => {
+    const rows = [quote({ voiceJobId: 'job-1' })];
+    expect(shouldRunQuotesAiPoller(rows, false)).toBe(false);
+    expect(shouldRunQuotesAiPoller(rows, true)).toBe(true);
+  });
+
+  it('does not run when online but nothing is ai_processing', () => {
+    expect(
+      shouldRunQuotesAiPoller([quote({ status: 'draft_local', voiceJobId: 'job-1' })], true),
     ).toBe(false);
   });
 });
