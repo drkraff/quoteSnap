@@ -29,7 +29,7 @@ Re-check GitHub before treating anything else as landed. This briefing includes 
 | 5 Voice-to-quote | Yes | **Code-complete.** All four plans have SUMMARY files. Physical Android UAT is still open (see `.planning/PHYSICAL-DEVICE-TESTING.md` and `05-HUMAN-UAT.md`). Stale `ai_processing` rows are reaped to `ai_failed` (PR #9). |
 | 6 SMS + customer approval | No | Not started (`SMS-01`…`SMS-10`). |
 | 7 Sync hardening + 16 failure scenarios | Partial | **`SYNC-03`** retry/backoff then `dead_letter`. **`SYNC-04`** dead-letter UI. **`SYNC-05`** server-as-truth + “Review before sending” on pre-send draft forks. **`SYNC-06`** and **`FAIL-*`** are **not** done. |
-| Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` scripts exist for Railway. `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `eas.json` / `railway.toml` in the repo.** Do not claim a live demo deploy. |
+| Backlog 999.1 Railway + EAS demo | Partial | Root `build`/`start` exist. **`npm start` runs pending SQL migrations then the API** (see [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md)). `app.config.ts` reads `EXPO_PUBLIC_API_URL`. **No `eas.json` / `railway.toml`.** Do not claim a live demo deploy. |
 
 Recent **merged** work to reflect if you mention status:
 
@@ -50,7 +50,7 @@ Recent **merged** work to reflect if you mention status:
 - **PR #6** — draft Phase 5 UAT runbook.
 - **PR #4** — older GSD ROADMAP/STATE/PROJECT rewrite; superseded by this `CONTEXT.md` approach.
 
-Do **not** implement Phase 6 SMS, Railway/EAS, or product features unless a task explicitly asks.
+Do **not** implement Phase 6 SMS, EAS, or product features unless a task explicitly asks. Railway migrate-on-boot is in `npm start` (not a live demo).
 
 ---
 
@@ -113,7 +113,8 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 - `.env.example` shows Postgres on **5432**.
 - Local convention documented in this repo: Docker container `quotesnap-db` is published on **5433** so it does not collide with a host Postgres on 5432. Match the port in the `.env` you actually use.
 - Start DB before the API: `docker start quotesnap-db`
-- Migrations: `cd apps/backend && npm run migrate` (files `001`…`009`).
+- Migrations: `cd apps/backend && npm run migrate` (files `001`…`009`). Safe to re-run: `_migrations` skips applied files.
+- **Railway / production boot:** repo-root `npm start` is `node dist/db/migrate.js && node dist/index.js` (after `npm run build`). Operators should leave **Start Command** empty or set `npm start`. Do not start with only `node dist/index.js` — `quotes.is_archived` (009) and later files will not land. Details: [docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md).
 
 ### Backend
 
@@ -144,7 +145,7 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, and quote soft-archive (`PATCH /quotes/:id/archive`, active-list SQL). Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive PATCH), auth 401 handling, login/restore catalog+quote hydrate (including hiding server-backed quotes omitted from the active list), offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), and quote archive copy / hydrate hide rules.
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (including UUID filter), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive`, active-list SQL), and production start chaining SQL migrate before listen. Mobile tests cover confidence, line-items, quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive PATCH), auth 401 handling, login/restore catalog+quote hydrate (including hiding server-backed quotes omitted from the active list), offline onboarding seed enqueue / 409 de-dupe, voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), and quote archive copy / hydrate hide rules.
 
 ---
 
@@ -165,6 +166,7 @@ When you mention defects, prefer what is in the tree on `master` over open-PR sp
 | Path | Trust |
 |------|--------|
 | `CONTEXT.md` (this file) | Current agent briefing |
+| `docs/DEPLOY-RAILWAY.md` | Railway Start Command: `npm start` runs SQL migrations then the API |
 | `.planning/REQUIREMENTS.md` | Requirement IDs and checkbox intent |
 | `.planning/phases/**/SUMMARY.md` | Historical “what landed in that plan” |
 | `.planning/PHYSICAL-DEVICE-TESTING.md` | Device UAT procedure (fix LAN URL there if you change it) |
