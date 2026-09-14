@@ -40,6 +40,7 @@ import {
   sendBlockedByReview,
 } from '../../../src/sync/draft-conflict';
 import { fetchAndResolveDraftFork } from '../../../src/sync/draft-conflict-sync';
+import { FROZEN_QUOTE_WRITE_MESSAGE, isFrozenQuoteStatus } from '../../../src/sync/frozen-quote';
 import {
   acknowledgeDraftReview,
   isNeedsReviewForDraft,
@@ -229,6 +230,13 @@ export default function DraftScreen(): JSX.Element {
     };
   }, [phoneSync]);
 
+  function rejectFrozenMoneyWrite(): boolean {
+    const status = quote?.status ?? quoteStatus;
+    if (!isFrozenQuoteStatus(status)) return false;
+    setValidationError(FROZEN_QUOTE_WRITE_MESSAGE);
+    return true;
+  }
+
   /** Local + queued recovery so A-06 PUT can accept line items / send. */
   async function recoverFromAiFailed(): Promise<void> {
     if (!quote || quote.status !== 'ai_failed') return;
@@ -248,6 +256,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handleQuantityChange(index: number, delta: number): Promise<void> {
     if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
     await recoverFromAiFailed();
     const newItems = updateQuantity(lineItems, index, delta);
     const newTotal = recalculateTotal(newItems);
@@ -269,6 +278,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handlePriceSave(newPriceCents: number): Promise<void> {
     if (!draft || !quote || priceEditIndex === null) return;
+    if (rejectFrozenMoneyWrite()) return;
     const pricedLine = lineItems[priceEditIndex];
     await recoverFromAiFailed();
     const newItems = updatePrice(lineItems, priceEditIndex, newPriceCents);
@@ -310,6 +320,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handleDeleteItem(index: number): Promise<void> {
     if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
     await recoverFromAiFailed();
     const deleted = lineItems[index];
     setUndoItem({ item: deleted, index });
@@ -339,6 +350,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handleUndoDelete(): Promise<void> {
     if (!undoItem || !draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
     if (undoTimerRef.current) {
       clearTimeout(undoTimerRef.current);
       undoTimerRef.current = null;
@@ -368,6 +380,7 @@ export default function DraftScreen(): JSX.Element {
     catalogItem: { id: string; name: string; unitPriceCents: number },
   ): Promise<void> {
     if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
     await recoverFromAiFailed();
     const newItems = addItem(lineItems, {
       id: catalogItem.id,
@@ -422,6 +435,7 @@ export default function DraftScreen(): JSX.Element {
       setValidationError(REVIEW_BEFORE_SENDING);
       return;
     }
+    if (rejectFrozenMoneyWrite()) return;
     if (!canSend(lineItems.length, phone)) {
       if (lineItems.length === 0) {
         setValidationError('Add at least one item before sending');
@@ -439,6 +453,10 @@ export default function DraftScreen(): JSX.Element {
       if (outcome === 'conflict') {
         setNeedsReview(true);
         setValidationError(REVIEW_BEFORE_SENDING);
+        return;
+      }
+      if (outcome === 'frozen') {
+        setValidationError(FROZEN_QUOTE_WRITE_MESSAGE);
         return;
       }
     }

@@ -12,6 +12,7 @@ import {
   parseQuantity,
   parseQuoteCreateBody,
   parseQuotePutBody,
+  QUOTE_MONEY_FROZEN_ERROR,
   resolveReplacementLineItems,
   SELECT_QUOTE_FOR_UPDATE_SQL,
   totalCentsFromLineItems,
@@ -517,6 +518,100 @@ describe("applyQuotePut", () => {
       calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL),
       false,
     );
+  });
+
+  it("rejects line-item and total mutations on frozen post-send statuses (SYNC-06)", async () => {
+    const existing: QuoteLineItemRow[] = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        quote_id: QUOTE_ID,
+        name: "Copper pipe",
+        quantity: 2,
+        unit_price_cents: 1500,
+        created_at: new Date("2026-09-01T12:01:00.000Z"),
+        confidence: 0.91,
+        catalog_item_id: CATALOG_ID,
+        unit: "foot",
+      },
+    ];
+    for (const status of ["sent", "approved", "declined", "expired", "failed_send"]) {
+      const { queryFn, calls } = mockDb({
+        quote: quoteRow({ status, total_cents: 3000 }),
+        existingLines: existing,
+      });
+      const outcome = await applyQuotePut(queryFn, {
+        quoteId: QUOTE_ID,
+        contractorId: CONTRACTOR_ID,
+        body: {
+          lineItems: [{ name: "Copper pipe", quantity: 9, unitPriceCents: 9999 }],
+          totalCents: 1,
+        },
+      });
+      assert.deepEqual(
+        outcome,
+        { status: 409, json: { error: QUOTE_MONEY_FROZEN_ERROR } },
+        `expected freeze 409 for ${status}`,
+      );
+      assert.equal(
+        calls.some((c) => c.sql.startsWith("UPDATE quotes")),
+        false,
+        `${status} must not UPDATE totals`,
+      );
+      assert.equal(
+        calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL || c.sql === INSERT_LINE_ITEM_SQL),
+        false,
+        `${status} must not replace line items`,
+      );
+      assert.equal(
+        calls.some((c) => c.sql.includes("FROM quote_line_items") && c.sql.includes("SELECT")),
+        false,
+        `${status} must not read lines for replace`,
+      );
+    }
+  });
+
+  it("rejects totalCents-only PUT on sent without touching line items", async () => {
+    const { queryFn, calls } = mockDb({ quote: quoteRow({ status: "sent", total_cents: 3000 }) });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { totalCents: 1 },
+    });
+    assert.deepEqual(outcome, { status: 409, json: { error: QUOTE_MONEY_FROZEN_ERROR } });
+    assert.equal(calls.some((c) => c.sql.startsWith("UPDATE quotes")), false);
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+  });
+
+  it("keeps a generic 409 for non-money PUTs on sent (GET and archive stay separate)", async () => {
+    const { queryFn, calls } = mockDb({ quote: quoteRow({ status: "sent" }) });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { customerPhone: "+15555550100" },
+    });
+    assert.deepEqual(outcome, {
+      status: 409,
+      json: { error: "Quote cannot be updated in its current status" },
+    });
+    assert.equal(calls.some((c) => c.sql.startsWith("UPDATE quotes")), false);
+  });
+
+  it("still replaces line items on draft_local and draft_queued", async () => {
+    for (const status of ["draft_local", "draft_queued"]) {
+      const { queryFn, calls } = mockDb({
+        quote: quoteRow({ status, total_cents: 1500 }),
+        existingLines: [],
+      });
+      const outcome = await applyQuotePut(queryFn, {
+        quoteId: QUOTE_ID,
+        contractorId: CONTRACTOR_ID,
+        body: {
+          lineItems: [{ name: "Elbow", quantity: 2, unitPriceCents: 400 }],
+        },
+      });
+      assert.equal(outcome.status, 200, `expected 200 for ${status}`);
+      assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), true, `${status} should INSERT`);
+    }
   });
 
   it("allows line-item replace on ai_failed so the contractor can recover (A-10)", async () => {

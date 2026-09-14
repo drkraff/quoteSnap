@@ -13,6 +13,7 @@ import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLette
 import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer } from '../api/quotes';
 import { upsertRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
+import { QUOTE_MONEY_FROZEN_ERROR } from './frozen-quote';
 import { rememberServerRevision, resetServerRevisionsForTests } from './server-revision';
 
 jest.mock('../db', () => ({
@@ -992,6 +993,221 @@ describe('processQueue', () => {
     ]);
     expect(quote.customerPhone).toBe('+15550001111');
     expect(queueItems.some((row) => row.status === NEEDS_REVIEW_STATUS)).toBe(true);
+  });
+
+  it('does not PUT draft line replacements when the local quote is sent (SYNC-06)', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'sent',
+      serverId: 'srv-q1',
+      totalCents: 1500,
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    mockedFetchQuote.mockRejectedValue(new Error('offline'));
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 9, unitPriceCents: 9999 }]),
+        totalCents: 89991,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(item.status).toBe('dead_letter');
+    expect(item.lastError).toBe(QUOTE_MONEY_FROZEN_ERROR);
+    expect(item.nextRetryAt).toBeNull();
+    expect(item.retryCount).toBe(0);
+  });
+
+  it('does not PUT line replacements for approved, declined, expired, or failed_send', async () => {
+    for (const status of ['approved', 'declined', 'expired', 'failed_send']) {
+      resetSyncQueueForTests();
+      mockedUpdateQuoteOnServer.mockReset();
+      mockedFetchQuote.mockReset();
+      const quote = makeQuote({
+        id: 'q1',
+        status,
+        serverId: 'srv-q1',
+      });
+      quotes = [quote];
+      drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+      mockedFetchQuote.mockRejectedValue(new Error('offline'));
+      const item = makeQueueItem({
+        entityType: 'draft',
+        entityId: 'd1',
+        action: 'update',
+        payloadJson: JSON.stringify({
+          lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+          totalCents: 3000,
+        }),
+      });
+      queueItems = [item];
+
+      await processQueue();
+
+      expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+      expect(item.status).toBe('dead_letter');
+      expect(item.lastError).toBe(QUOTE_MONEY_FROZEN_ERROR);
+    }
+  });
+
+  it('does not PUT a queued send payload when GET shows the quote is already sent', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_queued',
+      serverId: 'srv-q1',
+      totalCents: 3000,
+    });
+    const draft = makeDraft({
+      id: 'd1',
+      quoteId: 'q1',
+      lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+    });
+    quotes = [quote];
+    drafts = [draft];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'sent',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T13:00:00.000Z',
+        sentAt: '2026-09-01T13:00:00.000Z',
+        voiceJobId: null,
+      },
+      lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+    });
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        status: 'draft_queued',
+        totalCents: 3000,
+        lineItems: [{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }],
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(item.status).toBe('dead_letter');
+    expect(item.lastError).toBe(QUOTE_MONEY_FROZEN_ERROR);
+    expect(quote.status).toBe('sent');
+    expect(quote.totalCents).toBe(1500);
+    expect(JSON.parse(draft.lineItemsJson)).toEqual([
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+    ]);
+  });
+
+  it('still PUTs draft line replacements on draft_local', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T12:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+      },
+      lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+    });
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+        totalCents: 3000,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('still archives a sent quote via PATCH', async () => {
+    quotes = [
+      makeQuote({
+        id: 'local-quote-1',
+        serverId: 'srv-q1',
+        status: 'sent',
+      }),
+    ];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'update',
+      payloadJson: JSON.stringify({ isArchived: true }),
+    });
+    queueItems = [item];
+    mockedArchiveQuote.mockResolvedValue(undefined);
+
+    await processQueue();
+
+    expect(mockedArchiveQuote).toHaveBeenCalledWith('srv-q1');
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('dead-letters a freeze 409 from the server without retry backoff', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    mockedFetchQuote.mockRejectedValue(new Error('offline'));
+    mockedUpdateQuoteOnServer.mockRejectedValue({
+      status: 409,
+      error: QUOTE_MONEY_FROZEN_ERROR,
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+        totalCents: 3000,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(item.status).toBe('dead_letter');
+    expect(item.lastError).toBe(QUOTE_MONEY_FROZEN_ERROR);
+    expect(item.nextRetryAt).toBeNull();
+    expect(item.retryCount).toBe(0);
   });
 
   it('posts a typed rate-card upsert and maps alias units', async () => {

@@ -24,6 +24,13 @@ import { syncQueuedOnboardingProfile, syncQueuedOnboardingSeed } from './offline
 import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
+import {
+  FrozenQuoteWriteError,
+  QUOTE_MONEY_FROZEN_ERROR,
+  isFrozenQuoteStatus,
+  isFrozenQuoteWriteError,
+  payloadMutatesQuoteMoney,
+} from './frozen-quote';
 import { rememberServerRevision } from './server-revision';
 
 const queueFlight = createSingleFlight();
@@ -160,18 +167,23 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         await unarchiveQuote(serverId);
         return;
       }
+      const localQuote = localItems[0];
       const payloadLines = lineItemsFromQueuePayload(payload);
-      if (payloadLines && localItems[0]) {
-        const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', localItems[0].id)).fetch();
+      if (payloadMutatesQuoteMoney(payload) && payloadLines && localQuote) {
+        const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', localQuote.id)).fetch();
         const parentDraft = drafts[0];
         if (parentDraft) {
           const outcome = await fetchAndResolveDraftFork({
-            quote: localItems[0],
+            quote: localQuote,
             draft: parentDraft,
             localLines: payloadLines,
           });
           if (outcome === 'conflict') return;
+          if (outcome === 'frozen') throw new FrozenQuoteWriteError();
         }
+      }
+      if (payloadMutatesQuoteMoney(payload) && localQuote && isFrozenQuoteStatus(localQuote.status)) {
+        throw new FrozenQuoteWriteError();
       }
       const updated = await updateQuoteOnServer(serverId, {
         status: payload.status as string | undefined,
@@ -206,6 +218,10 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         localLines: payloadLines,
       });
       if (outcome === 'conflict') return;
+      if (outcome === 'frozen') throw new FrozenQuoteWriteError();
+      if (payloadMutatesQuoteMoney(payload) && isFrozenQuoteStatus(quote.status)) {
+        throw new FrozenQuoteWriteError();
+      }
       const updated = await updateQuoteOnServer(quote.serverId, { lineItems: items, totalCents: payload.totalCents as number | undefined });
       rememberServerRevision(quote.serverId, updated.updatedAt);
     }
@@ -318,6 +334,16 @@ async function processQueueOnce(): Promise<void> {
         await item.destroyPermanently();
       });
     } catch (error) {
+      if (isFrozenQuoteWriteError(error)) {
+        await database.write(async () => {
+          await item.update((record) => {
+            record.status = 'dead_letter';
+            record.lastError = QUOTE_MONEY_FROZEN_ERROR;
+            record.nextRetryAt = null;
+          });
+        });
+        continue;
+      }
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const nextCount = item.retryCount + 1;
       const schedule = applyFailureSchedule(nextCount, Date.now());

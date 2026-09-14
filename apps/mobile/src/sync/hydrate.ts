@@ -17,6 +17,7 @@ import {
   dropPendingQuoteDraftUpdatesInWrite,
   ensureNeedsReviewInWrite,
 } from './draft-conflict-queue';
+import { isFrozenQuoteStatus } from './frozen-quote';
 import { toDraftLineItems } from './draft-line-items';
 import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
@@ -259,7 +260,9 @@ export async function upsertQuotes(
         continue;
       }
 
-      if (!blockedQuoteIds.has(localQuote.id)) {
+      const frozen = isFrozenQuoteStatus(quote.status);
+
+      if (!blockedQuoteIds.has(localQuote.id) || frozen) {
         await localQuote.update((record) => {
           record.status = quote.status;
           record.customerPhone = quote.customerPhone;
@@ -283,7 +286,7 @@ export async function upsertQuotes(
         });
       }
       if (draft) {
-        if (!blockedDraftIds.has(draft.id)) {
+        if (!blockedDraftIds.has(draft.id) || frozen) {
           await draft.update((record) => {
             record.lineItemsJson = lineItemsJson;
             record.updatedAt = parseMs(quote.updatedAt);
@@ -333,7 +336,9 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * a name — then the local row is adopted (A-03 offline seed de-dupe).
  * Catalog and unblocked quotes are server-as-truth. A dirty pre-send draft whose
  * line items disagree with the server is applied from the server and parked as
- * `needs_review` (SYNC-05) instead of a silent queue overwrite. Hydrate pulls
+ * `needs_review` (SYNC-05) instead of a silent queue overwrite. Frozen post-send
+ * quotes (SYNC-06) always take the server snapshot, even if a draft PUT is queued.
+ * Hydrate pulls
  * active GET /quotes and GET /quotes?archived=true so Archived can restore after
  * login. Server-backed quotes missing from both lists are soft-archived locally.
  * A queued Unarchive (including dead_letter) and a newer local archive flag are

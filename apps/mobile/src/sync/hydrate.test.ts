@@ -651,6 +651,71 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     });
   });
 
+  it('applies server line items on a sent quote even when a draft PUT is queued (SYNC-06)', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_queued',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Pipe', quantity: 2, unitPriceCents: 1500 },
+        { name: 'Elbow', quantity: 1, unitPriceCents: 400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [
+      {
+        entityType: 'draft',
+        entityId: 'local-draft-1',
+        action: 'update',
+        status: 'pending',
+      },
+    ];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'sent',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: '2026-09-02T01:00:00.000Z',
+        voiceJobId: null,
+        lineItems: [
+          {
+            id: 'li-1',
+            name: 'Pipe',
+            quantity: 1,
+            unitPriceCents: 1500,
+          },
+        ],
+      },
+    ]);
+
+    expect(localQuote.status).toBe('sent');
+    expect(localQuote.totalCents).toBe(1500);
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+    ]);
+    expect(queueItems[0]!.status).toBe('pending');
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
   it('does not park needs_review when a dirty draft already matches the server', async () => {
     const localQuote = attachUpdate<FakeQuote>({
       id: 'local-quote-1',

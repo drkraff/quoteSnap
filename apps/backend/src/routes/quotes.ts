@@ -109,7 +109,7 @@ router.get("/:id", authenticateToken, async (req: Request, res: Response): Promi
   }
 });
 
-// PUT /:id — update quote metadata and optionally replace line items (one transaction)
+// PUT /:id — draft metadata + line replace; frozen post-send statuses reject money writes (SYNC-06)
 router.put("/:id", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;

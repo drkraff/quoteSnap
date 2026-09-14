@@ -9,11 +9,20 @@ import {
 } from "../routes/quotes-payload.js";
 import {
   CLIENT_QUOTE_STATUSES,
+  FROZEN_QUOTE_STATUSES,
+  QUOTE_MONEY_FROZEN_ERROR,
   isClientQuoteStatus,
+  isFrozenQuoteStatus,
   type ClientQuoteStatus,
 } from "./statuses.js";
 
-export { CLIENT_QUOTE_STATUSES, isClientQuoteStatus };
+export {
+  CLIENT_QUOTE_STATUSES,
+  FROZEN_QUOTE_STATUSES,
+  QUOTE_MONEY_FROZEN_ERROR,
+  isClientQuoteStatus,
+  isFrozenQuoteStatus,
+};
 export type { ClientQuoteStatus };
 
 const UUID_RE =
@@ -72,6 +81,13 @@ export type QuotePutOutcome =
 
 export function isQuoteEditable(status: string): boolean {
   return isClientQuoteStatus(status) || status === "ai_failed";
+}
+
+/** SYNC-06: lineItems or totalCents on a frozen post-send quote. */
+function putMutatesQuoteMoney(
+  parsed: Extract<ParsedQuotePutBody, { ok: true }>,
+): boolean {
+  return parsed.lineItems !== undefined || parsed.totalCents !== undefined;
 }
 
 /**
@@ -407,6 +423,12 @@ export async function applyQuotePut(
     return { status: 404, json: { error: "Quote not found" } };
   }
   const current = quoteResult.rows[0] as QuoteRow;
+
+  // SYNC-06: freeze line items / totals on sent + siblings before any DELETE/INSERT.
+  // GET and PATCH /archive are separate routes and stay allowed.
+  if (isFrozenQuoteStatus(current.status) && putMutatesQuoteMoney(parsed)) {
+    return { status: 409, json: { error: QUOTE_MONEY_FROZEN_ERROR } };
+  }
 
   if (!isQuoteEditable(current.status)) {
     return { status: 409, json: { error: "Quote cannot be updated in its current status" } };

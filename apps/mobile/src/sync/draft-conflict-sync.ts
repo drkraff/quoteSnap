@@ -9,16 +9,18 @@ import {
   isPreSendDraftStatus,
   type ComparableLine,
 } from './draft-conflict';
+import { isFrozenQuoteStatus } from './frozen-quote';
 import {
   dropPendingQuoteDraftUpdatesInWrite,
   ensureNeedsReviewInWrite,
 } from './draft-conflict-queue';
 import { getServerRevision, rememberServerRevision } from './server-revision';
 
-export type DraftForkOutcome = 'conflict' | 'clear' | 'skipped';
+export type DraftForkOutcome = 'conflict' | 'clear' | 'skipped' | 'frozen';
 
 /**
  * GET /quotes/:id and, on a true fork, apply server-as-truth then park needs_review.
+ * Frozen post-send statuses apply the server snapshot and return `frozen` (no PUT).
  * Network failures return `skipped` so offline send/sync still proceeds.
  */
 export async function fetchAndResolveDraftFork(args: {
@@ -36,11 +38,25 @@ export async function fetchAndResolveDraftFork(args: {
     return 'skipped';
   }
 
+  const lastKnownUpdatedAt = getServerRevision(serverId);
+
+  if (isFrozenQuoteStatus(remote.quote.status)) {
+    const lineItemsJson = await serverLineItemsJsonForContractor(
+      args.quote.contractorId,
+      remote.lineItems,
+    );
+    await database.write(async () => {
+      await applyServerQuoteInWrite(args.quote, args.draft, remote.quote, lineItemsJson);
+    });
+    rememberServerRevision(serverId, remote.quote.updatedAt);
+    return 'frozen';
+  }
+
   const serverLines = comparableLineItems(remote.lineItems);
   const forked =
     isPreSendDraftStatus(remote.quote.status)
     && isDraftContentFork({
-      lastKnownUpdatedAt: getServerRevision(serverId),
+      lastKnownUpdatedAt,
       serverUpdatedAt: remote.quote.updatedAt,
       localLines: args.localLines,
       serverLines,
