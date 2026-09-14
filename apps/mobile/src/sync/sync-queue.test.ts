@@ -10,7 +10,7 @@ import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
 import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems } from './sync-queue';
-import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer } from '../api/quotes';
+import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer } from '../api/quotes';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
 import { rememberServerRevision, resetServerRevisionsForTests } from './server-revision';
 
@@ -108,6 +108,7 @@ const mockedFetchQuote = fetchQuote as unknown as jest.Mock;
 const mockedUpdateQuoteOnServer = updateQuoteOnServer as unknown as jest.Mock;
 const mockedArchiveQuote = archiveQuote as unknown as jest.Mock;
 const mockedUnarchiveQuote = unarchiveQuote as unknown as jest.Mock;
+const mockedCreateQuoteOnServer = createQuoteOnServer as unknown as jest.Mock;
 
 function makeQueueItem(overrides: Partial<FakeQueueItem> = {}): FakeQueueItem {
   const item: FakeQueueItem = {
@@ -188,6 +189,7 @@ describe('processQueue', () => {
     mockedUpdateQuoteOnServer.mockReset();
     mockedArchiveQuote.mockReset();
     mockedUnarchiveQuote.mockReset();
+    mockedCreateQuoteOnServer.mockReset();
     resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
@@ -722,6 +724,52 @@ describe('processQueue', () => {
     expect(mockedUnarchiveCatalogItem).toHaveBeenCalledWith('srv-pipe');
     expect(mockedArchiveCatalogItem).not.toHaveBeenCalled();
     expect(mockedUpdateCatalogItem).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('stamps a quote server id on create when the local row still exists', async () => {
+    const quote = makeQuote({
+      id: 'local-quote-1',
+      serverId: null,
+      status: 'draft_local',
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'create',
+      payloadJson: JSON.stringify({ status: 'draft_local', totalCents: 0 }),
+    });
+    queueItems = [item];
+    mockedCreateQuoteOnServer.mockResolvedValue({
+      id: 'srv-new',
+      updatedAt: '2026-09-14T12:00:00.000Z',
+    });
+
+    await processQueue();
+
+    expect(mockedCreateQuoteOnServer).toHaveBeenCalledWith({
+      status: 'draft_local',
+      customerPhone: undefined,
+      totalCents: 0,
+    });
+    expect(quote.serverId).toBe('srv-new');
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('does not create a server quote when the local row was hard-deleted', async () => {
+    quotes = [];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'create',
+      payloadJson: JSON.stringify({ status: 'draft_local', totalCents: 0 }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedCreateQuoteOnServer).not.toHaveBeenCalled();
     expect(item.status).toBe('destroyed');
   });
 

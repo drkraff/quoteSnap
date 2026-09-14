@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { database } from '../../src/db';
 import { Quote } from '../../src/db/models/quote';
 import { Draft } from '../../src/db/models/draft';
+import { SyncQueueItem } from '../../src/db/models/sync-queue-item';
 import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
@@ -36,6 +37,13 @@ import {
   archiveQuoteSyncPayload,
   unarchiveQuoteSyncPayload,
 } from '../../src/quotes/archive-quote';
+import {
+  DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE,
+  DELETE_LOCAL_QUOTE_CONFIRM_TITLE,
+  canHardDeleteLocalQuote,
+  quoteRowSwipeAction,
+  shouldDropQueueItemForDeletedLocalQuote,
+} from '../../src/quotes/delete-local-quote';
 import {
   ACTIVE_QUOTES_HEADER_TITLE,
   ARCHIVED_QUOTES_HEADER_TITLE,
@@ -214,6 +222,62 @@ export default function QuotesScreen(): JSX.Element {
     ]);
   }
 
+  function confirmDeleteLocalQuote(quote: Quote): void {
+    Alert.alert(DELETE_LOCAL_QUOTE_CONFIRM_TITLE, DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE, [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void handleDeleteLocalQuote(quote);
+        },
+      },
+    ]);
+  }
+
+  async function handleDeleteLocalQuote(quote: Quote): Promise<void> {
+    try {
+      const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', quote.id)).fetch();
+      if (
+        !canHardDeleteLocalQuote({
+          serverId: quote.serverId,
+          status: quote.status,
+          totalCents: quote.totalCents,
+          lineItemsJson: drafts[0]?.lineItemsJson ?? '[]',
+        })
+      ) {
+        return;
+      }
+      const draftIds = drafts.map((draft) => draft.id);
+      const queueByQuoteId = await database
+        .get<SyncQueueItem>('sync_queue_items')
+        .query(Q.where('entity_id', quote.id))
+        .fetch();
+      const queueByDraftId: SyncQueueItem[] = [];
+      for (const draftId of draftIds) {
+        const items = await database
+          .get<SyncQueueItem>('sync_queue_items')
+          .query(Q.where('entity_id', draftId))
+          .fetch();
+        queueByDraftId.push(...items);
+      }
+      const queueItems = [...queueByQuoteId, ...queueByDraftId];
+      await database.write(async () => {
+        for (const item of queueItems) {
+          if (shouldDropQueueItemForDeletedLocalQuote(item, quote.id, draftIds)) {
+            await item.destroyPermanently();
+          }
+        }
+        for (const draft of drafts) {
+          await draft.destroyPermanently();
+        }
+        await quote.destroyPermanently();
+      });
+    } catch {
+      // Stay on the list; swipe again to retry
+    }
+  }
+
   async function persistArchiveFlag(quote: Quote, isArchived: boolean): Promise<void> {
     try {
       await database.write(async () => {
@@ -267,21 +331,37 @@ export default function QuotesScreen(): JSX.Element {
     }
   }
 
+  function swipeHandlerFor(action: ReturnType<typeof quoteRowSwipeAction>): (quote: Quote) => void {
+    if (action === 'delete') return confirmDeleteLocalQuote;
+    if (action === 'unarchive') return confirmUnarchiveQuote;
+    return confirmArchiveQuote;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
         data={quotes}
         extraData={quoteListRenderKey(quotes, online)}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <QuoteRow
-            quote={item}
-            online={online}
-            onPress={handleQuotePress}
-            swipeAction={showArchived ? 'unarchive' : 'archive'}
-            onSwipeAction={showArchived ? confirmUnarchiveQuote : confirmArchiveQuote}
-          />
-        )}
+        renderItem={({ item }) => {
+          const swipeAction = quoteRowSwipeAction(
+            listMode,
+            canHardDeleteLocalQuote({
+              serverId: item.serverId,
+              status: item.status,
+              totalCents: item.totalCents,
+            }),
+          );
+          return (
+            <QuoteRow
+              quote={item}
+              online={online}
+              onPress={handleQuotePress}
+              swipeAction={swipeAction}
+              onSwipeAction={swipeHandlerFor(swipeAction)}
+            />
+          );
+        }}
         ListHeaderComponent={
           <>
             <DeadLetterBanner

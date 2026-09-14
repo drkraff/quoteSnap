@@ -116,20 +116,24 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
 
   if (item.entityType === 'quote') {
     if (item.action === 'create') {
+      const quoteCollection = database.get<Quote>('quotes');
+      const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
+      const localQuote = localItems[0];
+      // Hard-deleted never-synced local drafts must not be recreated on the server
+      // (hydrate would then resurrect them).
+      if (!localQuote) {
+        return;
+      }
       const response = await createQuoteOnServer({
         status: payload.status as string | undefined,
         customerPhone: payload.customerPhone as string | undefined,
         totalCents: payload.totalCents as number | undefined,
       });
-      const quoteCollection = database.get<Quote>('quotes');
-      const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
-      if (localItems[0]) {
-        await database.write(async () => {
-          await localItems[0].update((r) => {
-            r.serverId = response.id;
-          });
+      await database.write(async () => {
+        await localQuote.update((r) => {
+          r.serverId = response.id;
         });
-      }
+      });
       rememberServerRevision(response.id, response.updatedAt);
     } else if (item.action === 'update') {
       const quoteCollection = database.get<Quote>('quotes');

@@ -6,8 +6,9 @@ import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import { quoteRowDisplay } from '../../quotes/quote-row-display';
+import type { QuoteRowSwipeAction } from '../../quotes/delete-local-quote';
 
-export type QuoteRowSwipeAction = 'archive' | 'unarchive';
+export type { QuoteRowSwipeAction };
 
 interface QuoteRowProps {
   quote: Quote;
@@ -16,6 +17,15 @@ interface QuoteRowProps {
   swipeAction: QuoteRowSwipeAction;
   onSwipeAction: (quote: Quote) => void;
 }
+
+const SWIPE_ACTION_UI: Record<
+  QuoteRowSwipeAction,
+  { icon: 'archive-outline' | 'arrow-undo-outline' | 'trash-outline'; label: (phone: string) => string }
+> = {
+  archive: { icon: 'archive-outline', label: (phone) => `Archive quote ${phone}` },
+  unarchive: { icon: 'arrow-undo-outline', label: (phone) => `Unarchive quote ${phone}` },
+  delete: { icon: 'trash-outline', label: (phone) => `Delete quote ${phone}` },
+};
 
 export function QuoteRow({
   quote,
@@ -40,6 +50,7 @@ export function QuoteRow({
 
   function renderRightActions(): JSX.Element {
     const isUnarchive = swipeAction === 'unarchive';
+    const ui = SWIPE_ACTION_UI[swipeAction];
     return (
       <Pressable
         style={({ pressed }) => [
@@ -48,15 +59,9 @@ export function QuoteRow({
         ]}
         onPress={() => onSwipeAction(quote)}
         accessibilityRole="button"
-        accessibilityLabel={
-          isUnarchive ? `Unarchive quote ${phone}` : `Archive quote ${phone}`
-        }
+        accessibilityLabel={ui.label(phone)}
       >
-        <Ionicons
-          name={isUnarchive ? 'arrow-undo-outline' : 'archive-outline'}
-          size={24}
-          color="#ffffff"
-        />
+        <Ionicons name={ui.icon} size={24} color="#ffffff" />
       </Pressable>
     );
   }
