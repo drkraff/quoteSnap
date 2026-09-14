@@ -9,6 +9,7 @@
   "scripts": {
     "build": "npm run build --workspace=apps/backend",
     "start": "npm run start --workspace=apps/backend",
+    "migrate": "npm run migrate --workspace=apps/backend",
     "mobile": "npm run start --workspace=apps/mobile",
     "backend": "npm run dev --workspace=apps/backend",
     "postinstall": "node scripts/post-prebuild-guard.js"

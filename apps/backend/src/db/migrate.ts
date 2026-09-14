@@ -3,11 +3,13 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import pool from "./connection.js";
+import { resolveMigrationsDir } from "./migrations-path.js";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-const MIGRATIONS_DIR = path.join(__dirname, "migrations");
+/** Session advisory lock so two Railway replicas cannot apply the same file. */
+const MIGRATE_LOCK_CLASS = 87;
+const MIGRATE_LOCK_ID = 9009;
 
 async function ensureMigrationsTable(): Promise<void> {
   await pool.query(`
@@ -28,44 +30,61 @@ async function getAppliedMigrations(): Promise<Set<string>> {
 export async function runMigrations(): Promise<void> {
   console.info("Running migrations...");
 
-  await ensureMigrationsTable();
-  const applied = await getAppliedMigrations();
+  const lockClient = await pool.connect();
+  try {
+    await lockClient.query("SELECT pg_advisory_lock($1, $2)", [
+      MIGRATE_LOCK_CLASS,
+      MIGRATE_LOCK_ID,
+    ]);
 
-  const migrationFiles = fs
-    .readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+    await ensureMigrationsTable();
+    const applied = await getAppliedMigrations();
+    const migrationsDir = resolveMigrationsDir();
 
-  for (const filename of migrationFiles) {
-    if (applied.has(filename)) {
-      console.info(`  Skipping already-applied migration: ${filename}`);
-      continue;
+    const migrationFiles = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+
+    for (const filename of migrationFiles) {
+      if (applied.has(filename)) {
+        console.info(`  Skipping already-applied migration: ${filename}`);
+        continue;
+      }
+
+      const filePath = path.join(migrationsDir, filename);
+      const sql = fs.readFileSync(filePath, "utf8");
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query("INSERT INTO _migrations (name) VALUES ($1)", [
+          filename,
+        ]);
+        await client.query("COMMIT");
+        console.info(`  Applied migration: ${filename}`);
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw new Error(
+          `Migration failed: ${filename}\n${err instanceof Error ? err.message : String(err)}`
+        );
+      } finally {
+        client.release();
+      }
     }
 
-    const filePath = path.join(MIGRATIONS_DIR, filename);
-    const sql = fs.readFileSync(filePath, "utf8");
-
-    const client = await pool.connect();
+    console.info("Migrations complete.");
+  } finally {
     try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query(
-        "INSERT INTO _migrations (name) VALUES ($1)",
-        [filename]
-      );
-      await client.query("COMMIT");
-      console.info(`  Applied migration: ${filename}`);
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw new Error(
-        `Migration failed: ${filename}\n${err instanceof Error ? err.message : String(err)}`
-      );
+      await lockClient.query("SELECT pg_advisory_unlock($1, $2)", [
+        MIGRATE_LOCK_CLASS,
+        MIGRATE_LOCK_ID,
+      ]);
     } finally {
-      client.release();
+      lockClient.release();
     }
   }
-
-  console.info("Migrations complete.");
 }
 
 // Main block: run directly if this is the entry point
@@ -77,7 +96,8 @@ const isMain =
 
 if (isMain) {
   runMigrations()
-    .then(() => {
+    .then(async () => {
+      await pool.end();
       process.exit(0);
     })
     .catch((err: unknown) => {
