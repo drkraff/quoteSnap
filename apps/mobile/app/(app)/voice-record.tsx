@@ -119,6 +119,7 @@ export default function VoiceRecordScreen(): JSX.Element {
           r.contractorId = contractorId;
           r.status = 'ai_processing';
           r.totalCents = 0;
+          r.isArchived = false;
         });
         newQuoteId = newQuote.id;
         await database.get<Draft>('drafts').create((r) => {

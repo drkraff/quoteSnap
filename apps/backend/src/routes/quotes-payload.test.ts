@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  LIST_ACTIVE_QUOTES_SQL,
   lineItemRowToResponse,
   nestLineItems,
   quoteRowToResponse,
@@ -20,6 +21,7 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
     updated_at: new Date("2026-09-01T12:30:00.000Z"),
     sent_at: null,
     voice_job_id: null,
+    is_archived: false,
     ...overrides,
   };
 }
@@ -53,11 +55,17 @@ describe("quoteRowToResponse", () => {
       updatedAt: "2026-09-01T12:30:00.000Z",
       sentAt: null,
       voiceJobId: "job-abc",
+      isArchived: false,
     });
   });
 
   it("maps a null voice_job_id to null, not omit", () => {
     assert.equal(quoteRowToResponse(quoteRow()).voiceJobId, null);
+  });
+
+  it("maps is_archived so hydrate can hide archived quotes", () => {
+    assert.equal(quoteRowToResponse(quoteRow()).isArchived, false);
+    assert.equal(quoteRowToResponse(quoteRow({ is_archived: true })).isArchived, true);
   });
 });
 
@@ -125,5 +133,12 @@ describe("GET /quotes line-item id filter", () => {
       ]),
       ["11111111-1111-4111-8111-111111111111", "44444444-4444-4444-8444-444444444444"]
     );
+  });
+});
+
+describe("LIST_ACTIVE_QUOTES_SQL", () => {
+  it("excludes archived quotes the same way catalog GET excludes archived SKUs", () => {
+    assert.match(LIST_ACTIVE_QUOTES_SQL, /is_archived = FALSE/);
+    assert.match(LIST_ACTIVE_QUOTES_SQL, /contractor_id = \$1/);
   });
 });

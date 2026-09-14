@@ -34,6 +34,7 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
     updated_at: new Date("2026-09-01T12:30:00.000Z"),
     sent_at: null,
     voice_job_id: null,
+    is_archived: false,
     ...overrides,
   };
 }

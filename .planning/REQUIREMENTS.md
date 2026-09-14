@@ -74,6 +74,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [x] **HIST-02**: Contractor can view a history list of all quotes sorted by recency
 - [x] **HIST-03**: Contractor can open a past quote to view its full line items and status
 - [x] **HIST-04**: Quote history is accessible offline without a network connection
+- [x] **HIST-05**: Contractor can archive a quote from the Quotes list (soft-delete — data retained, hidden from the main list; server-backed quotes PATCH `/quotes/:id/archive` so hydrate does not resurrect them)
 
 ### Offline Sync
 
@@ -185,6 +186,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 | HIST-02 | Phase 4 | Complete |
 | HIST-03 | Phase 4 | Complete |
 | HIST-04 | Phase 4 | Complete |
+| HIST-05 | Phase 4 | Complete |
 | SYNC-01 | Phase 1 | Complete |
 | SYNC-02 | Phase 1 | Complete |
 | SYNC-03 | Phase 7 | Complete |
@@ -201,10 +203,10 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 | FAIL-08 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 52 total
-- Mapped to phases: 52
+- v1 requirements: 53 total
+- Mapped to phases: 53
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-10 — IDs preserved; SYNC-05 draft conflict UX (server-as-truth + Review before sending); status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-14 — HIST-05 quote archive (soft-delete, catalog analog); status narrative lives in CONTEXT.md*

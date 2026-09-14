@@ -59,6 +59,7 @@ type FakeQuote = {
   updatedAt: Date;
   sentAt: Date | null;
   voiceJobId: string | null;
+  isArchived: boolean;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -212,6 +213,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
             updatedAt: new Date(0),
             sentAt: null,
             voiceJobId: null,
+            isArchived: false,
           });
           writer(record);
           quotes.push(record);
@@ -590,6 +592,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       updatedAt: new Date(0),
       sentAt: null,
       voiceJobId: null,
+      isArchived: false,
     });
     const localDraft = attachUpdate<FakeDraft>({
       id: 'local-draft-1',
@@ -660,6 +663,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       updatedAt: new Date(0),
       sentAt: null,
       voiceJobId: null,
+      isArchived: false,
     });
     const localDraft = attachUpdate<FakeDraft>({
       id: 'local-draft-1',
@@ -699,6 +703,67 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(queueItems).toHaveLength(1);
     expect(queueItems[0]!.status).toBe('pending');
     expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
+  it('soft-archives a local server-backed quote omitted from the active list', async () => {
+    const leftover = attachUpdate<FakeQuote>({
+      id: 'local-old-test',
+      serverId: 'srv-old-test',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+    });
+    const keep = attachUpdate<FakeQuote>({
+      id: 'local-keep',
+      serverId: 'srv-keep',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+    });
+    const localOnly = attachUpdate<FakeQuote>({
+      id: 'local-only',
+      serverId: null,
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+    });
+    quotes = [leftover, keep, localOnly];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-keep',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [],
+      },
+    ]);
+
+    expect(leftover.isArchived).toBe(true);
+    expect(keep.isArchived).toBe(false);
+    expect(localOnly.isArchived).toBe(false);
   });
 });
 

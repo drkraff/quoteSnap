@@ -10,6 +10,7 @@ export type QuoteRow = {
   updated_at: Date;
   sent_at: Date | null;
   voice_job_id: string | null;
+  is_archived: boolean;
 };
 
 export type QuoteLineItemRow = {
@@ -24,7 +25,13 @@ export type QuoteLineItemRow = {
 };
 
 export const QUOTE_COLUMNS =
-  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id";
+  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived";
+
+/** Active Quotes list (catalog GET analog). Hydrate treats omitted server ids as archived. */
+export const LIST_ACTIVE_QUOTES_SQL = `SELECT ${QUOTE_COLUMNS}
+       FROM quotes
+       WHERE contractor_id = $1 AND is_archived = FALSE
+       ORDER BY created_at DESC`;
 
 export const LINE_ITEM_COLUMNS =
   "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id";
@@ -39,6 +46,7 @@ export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
     updatedAt: row.updated_at.toISOString(),
     sentAt: row.sent_at ? row.sent_at.toISOString() : null,
     voiceJobId: row.voice_job_id,
+    isArchived: row.is_archived,
   };
 }
 

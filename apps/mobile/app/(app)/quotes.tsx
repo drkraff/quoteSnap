@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
@@ -26,6 +27,11 @@ import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { fetchQuote } from '../../src/api/quotes';
 import { rememberServerRevision } from '../../src/sync/server-revision';
 import { quotePressTarget } from '../../src/quotes/status-display';
+import {
+  ARCHIVE_QUOTE_CONFIRM_MESSAGE,
+  ARCHIVE_QUOTE_CONFIRM_TITLE,
+  archiveQuoteSyncPayload,
+} from '../../src/quotes/archive-quote';
 import {
   draftReadyLocalFields,
   QUOTE_LIST_OBSERVE_COLUMNS,
@@ -56,6 +62,8 @@ export default function QuotesScreen(): JSX.Element {
       .get<Quote>('quotes')
       .query(
         Q.where('contractor_id', contractorId),
+        // v2→v3 leaves existing rows null; null means still on the list.
+        Q.or(Q.where('is_archived', false), Q.where('is_archived', null)),
         Q.sortBy('created_at', 'desc'),
       )
       .observeWithColumns(QUOTE_LIST_OBSERVE_COLUMNS)
@@ -161,6 +169,37 @@ export default function QuotesScreen(): JSX.Element {
     router.push(`/quote/${quote.id}` as any);
   }
 
+  function confirmArchiveQuote(quote: Quote): void {
+    Alert.alert(ARCHIVE_QUOTE_CONFIRM_TITLE, ARCHIVE_QUOTE_CONFIRM_MESSAGE, [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Archive',
+        style: 'destructive',
+        onPress: () => {
+          void handleArchiveQuote(quote);
+        },
+      },
+    ]);
+  }
+
+  async function handleArchiveQuote(quote: Quote): Promise<void> {
+    try {
+      await database.write(async () => {
+        await quote.update((record) => {
+          record.isArchived = true;
+        });
+      });
+      await enqueue({
+        entityType: 'quote',
+        entityId: quote.id,
+        action: 'update',
+        payload: archiveQuoteSyncPayload(),
+      });
+    } catch {
+      // Stay on the list; swipe again to retry
+    }
+  }
+
   async function handleManualQuotePress(): Promise<void> {
     if (isCreating) return;
     setIsCreating(true);
@@ -174,6 +213,7 @@ export default function QuotesScreen(): JSX.Element {
           r.contractorId = contractorId;
           r.status = 'draft_local';
           r.totalCents = 0;
+          r.isArchived = false;
         });
         newQuoteId = newQuote.id;
         await draftCollection.create((r) => {
@@ -201,7 +241,12 @@ export default function QuotesScreen(): JSX.Element {
         extraData={quoteListRenderKey(quotes, online)}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <QuoteRow quote={item} online={online} onPress={handleQuotePress} />
+          <QuoteRow
+            quote={item}
+            online={online}
+            onPress={handleQuotePress}
+            onArchive={confirmArchiveQuote}
+          />
         )}
         ListHeaderComponent={
           <DeadLetterBanner

@@ -13,5 +13,16 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 3,
+      steps: [
+        addColumns({
+          table: 'quotes',
+          columns: [
+            { name: 'is_archived', type: 'boolean', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });

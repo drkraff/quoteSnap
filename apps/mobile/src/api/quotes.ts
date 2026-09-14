@@ -9,6 +9,7 @@ export interface QuoteResponse {
   updatedAt: string;
   sentAt: string | null;
   voiceJobId: string | null;
+  isArchived?: boolean;
 }
 
 export interface QuoteLineItemResponse {
@@ -71,4 +72,16 @@ export async function updateQuoteOnServer(
     body,
   );
   return data.quote;
+}
+
+export async function archiveQuote(serverId: string): Promise<void> {
+  await apiClient.patch<{ archived: boolean }>(`/quotes/${serverId}/archive`, {
+    archived: true,
+  });
+}
+
+export async function unarchiveQuote(serverId: string): Promise<void> {
+  await apiClient.patch<{ archived: boolean }>(`/quotes/${serverId}/archive`, {
+    archived: false,
+  });
 }

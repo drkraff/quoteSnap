@@ -7,6 +7,7 @@ export interface QuoteResponse {
   updatedAt: string;
   sentAt: string | null;
   voiceJobId: string | null;
+  isArchived: boolean;
 }
 
 export interface QuoteLineItemResponse {
