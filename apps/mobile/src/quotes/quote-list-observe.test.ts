@@ -18,6 +18,10 @@ describe('QUOTE_LIST_OBSERVE_COLUMNS', () => {
     expect(QUOTE_LIST_OBSERVE_COLUMNS).not.toContain('created_at');
     expect(QUOTE_LIST_OBSERVE_COLUMNS).not.toContain('contractor_id');
   });
+
+  it('does not watch is_archived; archived rows leave the WHERE is_archived=false set', () => {
+    expect(QUOTE_LIST_OBSERVE_COLUMNS).not.toContain('is_archived');
+  });
 });
 
 describe('draftReadyLocalFields', () => {

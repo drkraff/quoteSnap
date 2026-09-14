@@ -10,7 +10,7 @@ import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
 import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems } from './sync-queue';
-import { fetchQuote, updateQuoteOnServer } from '../api/quotes';
+import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer } from '../api/quotes';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
 import { rememberServerRevision, resetServerRevisionsForTests } from './server-revision';
 
@@ -46,6 +46,8 @@ jest.mock('../api/quotes', () => ({
   createQuoteOnServer: jest.fn(),
   updateQuoteOnServer: jest.fn(),
   fetchQuote: jest.fn(),
+  archiveQuote: jest.fn(),
+  unarchiveQuote: jest.fn(),
 }));
 
 type FakeQueueItem = {
@@ -104,6 +106,8 @@ const mockedSeedCatalog = seedCatalog as unknown as jest.Mock;
 const mockedFetchCatalogItems = fetchCatalogItems as unknown as jest.Mock;
 const mockedFetchQuote = fetchQuote as unknown as jest.Mock;
 const mockedUpdateQuoteOnServer = updateQuoteOnServer as unknown as jest.Mock;
+const mockedArchiveQuote = archiveQuote as unknown as jest.Mock;
+const mockedUnarchiveQuote = unarchiveQuote as unknown as jest.Mock;
 
 function makeQueueItem(overrides: Partial<FakeQueueItem> = {}): FakeQueueItem {
   const item: FakeQueueItem = {
@@ -182,6 +186,8 @@ describe('processQueue', () => {
     mockedFetchCatalogItems.mockReset();
     mockedFetchQuote.mockReset();
     mockedUpdateQuoteOnServer.mockReset();
+    mockedArchiveQuote.mockReset();
+    mockedUnarchiveQuote.mockReset();
     resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
@@ -716,6 +722,31 @@ describe('processQueue', () => {
     expect(mockedUnarchiveCatalogItem).toHaveBeenCalledWith('srv-pipe');
     expect(mockedArchiveCatalogItem).not.toHaveBeenCalled();
     expect(mockedUpdateCatalogItem).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+  });
+
+  it('archives a quote via PATCH when the payload is isArchived true', async () => {
+    quotes = [
+      makeQuote({
+        id: 'local-quote-1',
+        serverId: 'srv-q1',
+        status: 'draft_local',
+      }),
+    ];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'update',
+      payloadJson: JSON.stringify({ isArchived: true }),
+    });
+    queueItems = [item];
+    mockedArchiveQuote.mockResolvedValue(undefined);
+
+    await processQueue();
+
+    expect(mockedArchiveQuote).toHaveBeenCalledWith('srv-q1');
+    expect(mockedUnarchiveQuote).not.toHaveBeenCalled();
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
     expect(item.status).toBe('destroyed');
   });
 

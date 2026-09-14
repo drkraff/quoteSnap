@@ -1,18 +1,20 @@
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { Quote } from '../../db/models/quote';
 import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import { quoteRowDisplay } from '../../quotes/quote-row-display';
 
 interface QuoteRowProps {
   quote: Quote;
   online: boolean;
   onPress: (quote: Quote) => void;
+  onArchive: (quote: Quote) => void;
 }
 
-export function QuoteRow({ quote, online, onPress }: QuoteRowProps): JSX.Element {
+export function QuoteRow({ quote, online, onPress, onArchive }: QuoteRowProps): JSX.Element {
   const {
     isAiProcessing,
     phone,
@@ -27,52 +29,70 @@ export function QuoteRow({ quote, online, onPress }: QuoteRowProps): JSX.Element
   });
   const relativeDate = formatRelativeDate(quote.createdAt);
 
+  function renderRightActions(): JSX.Element {
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.archiveAction,
+          pressed && styles.archiveActionPressed,
+        ]}
+        onPress={() => onArchive(quote)}
+        accessibilityRole="button"
+        accessibilityLabel={`Archive quote ${phone}`}
+      >
+        <Ionicons name="archive-outline" size={24} color="#ffffff" />
+      </Pressable>
+    );
+  }
+
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.row,
-        isAiProcessing && styles.rowProcessing,
-        pressed && !isAiProcessing && styles.rowPressed,
-      ]}
-      onPress={() => {
-        if (!isAiProcessing) onPress(quote);
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      disabled={isAiProcessing}
-    >
-      {/* Left column: phone + date */}
-      <View style={styles.leftColumn}>
-        <Text style={styles.phone} numberOfLines={1}>
-          {phone}
-        </Text>
-        <Text style={styles.date}>{relativeDate}</Text>
-      </View>
-
-      {/* Center: status badge */}
-      <View style={styles.badgeWrap}>
-        <StatusBadge status={quote.status} />
-      </View>
-
-      {/* Right: total price or processing indicator */}
-      {isAiProcessing ? (
-        <View style={styles.processingRight}>
-          {processingCaption === 'Processing...' ? (
-            <>
-              <ActivityIndicator size="small" color={colors.accent} />
-              <Text style={styles.processingText}>{processingCaption}</Text>
-            </>
-          ) : (
-            <>
-              <Ionicons name="cloud-upload-outline" size={16} color={colors.mutedText} />
-              <Text style={styles.processingText}>{processingCaption}</Text>
-            </>
-          )}
+    <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          isAiProcessing && styles.rowProcessing,
+          pressed && !isAiProcessing && styles.rowPressed,
+        ]}
+        onPress={() => {
+          if (!isAiProcessing) onPress(quote);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        disabled={isAiProcessing}
+      >
+        {/* Left column: phone + date */}
+        <View style={styles.leftColumn}>
+          <Text style={styles.phone} numberOfLines={1}>
+            {phone}
+          </Text>
+          <Text style={styles.date}>{relativeDate}</Text>
         </View>
-      ) : (
-        <Text style={styles.total}>{totalDisplay}</Text>
-      )}
-    </Pressable>
+
+        {/* Center: status badge */}
+        <View style={styles.badgeWrap}>
+          <StatusBadge status={quote.status} />
+        </View>
+
+        {/* Right: total price or processing indicator */}
+        {isAiProcessing ? (
+          <View style={styles.processingRight}>
+            {processingCaption === 'Processing...' ? (
+              <>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text style={styles.processingText}>{processingCaption}</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="cloud-upload-outline" size={16} color={colors.mutedText} />
+                <Text style={styles.processingText}>{processingCaption}</Text>
+              </>
+            )}
+          </View>
+        ) : (
+          <Text style={styles.total}>{totalDisplay}</Text>
+        )}
+      </Pressable>
+    </Swipeable>
   );
 }
 
@@ -134,5 +154,14 @@ const styles = StyleSheet.create({
     lineHeight: typography.label.lineHeight,
     color: colors.mutedText,
   },
+  archiveAction: {
+    backgroundColor: colors.destructive,
+    width: 80,
+    minHeight: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archiveActionPressed: {
+    backgroundColor: colors.destructivePressed,
+  },
 });
-

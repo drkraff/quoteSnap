@@ -6,7 +6,8 @@ import { parseLineItems, recalculateTotal } from '../utils/line-items';
  * `status = dead_letter` is in the query — a status write drops the row
  * from the set.
  *
- * The Quotes list shows every quote, sorted by created_at, so status /
+ * The Quotes list shows active quotes (`is_archived` false or null), sorted by
+ * created_at. Archiving drops the row from the observed set. Status /
  * total_cents / customer_phone / voice_job_id writes would otherwise stay
  * invisible until another quote is created or the screen remounts (FlatList
  * also skips cells when the Model instance identity is unchanged).

@@ -20,6 +20,7 @@ import {
 import { toDraftLineItems } from './draft-line-items';
 import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
+import { shouldArchiveLocalQuoteOnHydrate } from '../quotes/archive-quote';
 
 export { toDraftLineItems } from './draft-line-items';
 
@@ -192,6 +193,8 @@ export async function upsertQuotes(
       }
     }
 
+    const pulledServerIds = new Set(quotes.map((quote) => quote.id));
+
     for (const quote of quotes) {
       rememberServerRevision(quote.id, quote.updatedAt);
 
@@ -207,6 +210,7 @@ export async function upsertQuotes(
           record.updatedAt = parseMs(quote.updatedAt);
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
+          record.isArchived = quote.isArchived === true;
         });
         quoteByServerId.set(quote.id, local);
       }
@@ -243,6 +247,7 @@ export async function upsertQuotes(
           record.updatedAt = parseMs(quote.updatedAt);
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
+          record.isArchived = quote.isArchived === true;
         });
       }
       if (draft) {
@@ -261,6 +266,21 @@ export async function upsertQuotes(
         draftByQuoteId.set(localQuote.id, created);
       }
     }
+
+    for (const local of existingQuotes) {
+      if (
+        shouldArchiveLocalQuoteOnHydrate({
+          serverId: local.serverId,
+          isArchived: local.isArchived === true,
+          blocked: blockedQuoteIds.has(local.id),
+          pulledServerIds,
+        })
+      ) {
+        await local.update((record) => {
+          record.isArchived = true;
+        });
+      }
+    }
   });
 }
 
@@ -277,7 +297,9 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * a name — then the local row is adopted (A-03 offline seed de-dupe).
  * Catalog and unblocked quotes are server-as-truth. A dirty pre-send draft whose
  * line items disagree with the server is applied from the server and parked as
- * `needs_review` (SYNC-05) instead of a silent queue overwrite. Failures propagate.
+ * `needs_review` (SYNC-05) instead of a silent queue overwrite. Server-backed
+ * quotes missing from GET /quotes (active list) are soft-archived locally so
+ * they do not reappear after login/restore. Failures propagate.
  */
 export async function hydrateFromServer(contractorId: string): Promise<void> {
   return hydrateFlight.run(() => hydrateOnce(contractorId));

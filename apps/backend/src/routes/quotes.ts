@@ -2,9 +2,11 @@ import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query, withTransaction } from "../db/connection.js";
 import { applyQuotePut, parseQuoteCreateBody, parseQuotePutBody } from "../quotes/quote-write.js";
+import { applyQuoteArchivePatch } from "../quotes/archive.js";
 import { filterUuidCatalogIds } from "../workers/voice-validation.js";
 import {
   LINE_ITEM_COLUMNS,
+  LIST_ACTIVE_QUOTES_SQL,
   QUOTE_COLUMNS,
   lineItemRowToResponse,
   nestLineItems,
@@ -19,13 +21,7 @@ export const router = Router();
 router.get("/", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
-    const result = await query(
-      `SELECT ${QUOTE_COLUMNS}
-       FROM quotes
-       WHERE contractor_id = $1
-       ORDER BY created_at DESC`,
-      [contractorId]
-    );
+    const result = await query(LIST_ACTIVE_QUOTES_SQL, [contractorId]);
     const quoteRows = result.rows as QuoteRow[];
     const quoteIds = filterUuidCatalogIds(quoteRows.map((row) => row.id));
 
@@ -126,6 +122,23 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
     console.error("PUT /quotes/:id error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PATCH /:id/archive — soft-delete (or `{ archived: false }` undo). Does not change HIST-01 status.
+router.patch("/:id/archive", authenticateToken, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contractorId = req.contractor!.contractorId;
+    const { id } = req.params as { id: string };
+    const outcome = await applyQuoteArchivePatch(query, {
+      quoteId: id,
+      contractorId,
+      body: req.body,
+    });
+    res.status(outcome.status).json(outcome.json);
+  } catch (err) {
+    console.error("PATCH /quotes/:id/archive error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

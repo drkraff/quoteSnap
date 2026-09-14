@@ -13,7 +13,7 @@ import {
 import { uploadAudio } from '../api/voice';
 import type { Trade } from '../api/onboarding';
 import { CatalogItem } from '../db/models/catalog-item';
-import { createQuoteOnServer, updateQuoteOnServer } from '../api/quotes';
+import { archiveQuote, createQuoteOnServer, unarchiveQuote, updateQuoteOnServer } from '../api/quotes';
 import { Quote } from '../db/models/quote';
 import { Draft } from '../db/models/draft';
 import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
@@ -136,6 +136,15 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
       const serverId = localItems[0]?.serverId;
       if (!serverId) throw new Error('Cannot sync update: no server ID for quote');
+      // Soft-archive is PATCH, not a HIST-01 status PUT (and not a hard delete).
+      if (payload.isArchived === true) {
+        await archiveQuote(serverId);
+        return;
+      }
+      if (payload.isArchived === false) {
+        await unarchiveQuote(serverId);
+        return;
+      }
       const payloadLines = lineItemsFromQueuePayload(payload);
       if (payloadLines && localItems[0]) {
         const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', localItems[0].id)).fetch();
