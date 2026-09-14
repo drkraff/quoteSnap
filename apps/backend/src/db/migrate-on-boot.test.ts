@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { resolveMigrationsDir } from "./migrations-path.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const backendRoot = path.join(here, "../..");
-const repoRoot = path.join(backendRoot, "..");
+const backendRoot = path.resolve(here, "../..");
+const repoRoot = path.resolve(backendRoot, "../..");
 
 describe("resolveMigrationsDir", () => {
   it("finds numbered SQL files including 009_quote_archive.sql", () => {
