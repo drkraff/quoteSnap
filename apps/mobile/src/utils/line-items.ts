@@ -6,6 +6,7 @@ import {
   parseOptionRole,
   type OptionRole,
 } from '../quotes/option-groups';
+import { parseRoomId } from '../quotes/rooms';
 import { parsePriceSource, typedPriceSource, type PriceSource } from './price-source';
 
 export interface LineItem {
@@ -23,6 +24,8 @@ export interface LineItem {
   optionGroupId?: string;
   /** base = in the quote total; alt = visible, excluded from total. */
   optionRole?: OptionRole;
+  /** Optional room/zone. Undefined = ungrouped / default single-memo. */
+  roomId?: string;
 }
 
 const UNIT_SHORT: Record<string, string> = {
@@ -90,6 +93,10 @@ function coerceLineItem(value: unknown): LineItem {
     line.optionGroupId = optionGroupId;
     line.optionRole = optionRole;
   }
+  const roomId = parseRoomId(raw.roomId);
+  if (roomId) {
+    line.roomId = roomId;
+  }
   return line;
 }
 
@@ -105,18 +112,21 @@ export function parseLineItems(json: string): LineItem[] {
 export function addItem(
   items: LineItem[],
   catalogItem: { id: string; name: string; unitPriceCents: number; unit?: string },
+  roomId?: string | null,
 ): LineItem[] {
-  return [
-    ...items,
-    {
-      catalogItemId: catalogItem.id,
-      name: catalogItem.name,
-      quantity: 1,
-      unitPriceCents: catalogItem.unitPriceCents,
-      priceSource: 'catalog',
-      ...(catalogItem.unit ? { unit: catalogItem.unit } : {}),
-    },
-  ];
+  const line: LineItem = {
+    catalogItemId: catalogItem.id,
+    name: catalogItem.name,
+    quantity: 1,
+    unitPriceCents: catalogItem.unitPriceCents,
+    priceSource: 'catalog',
+    ...(catalogItem.unit ? { unit: catalogItem.unit } : {}),
+  };
+  const parsedRoom = parseRoomId(roomId);
+  if (parsedRoom) {
+    line.roomId = parsedRoom;
+  }
+  return [...items, line];
 }
 
 export function removeItem(items: LineItem[], index: number): LineItem[] {
@@ -178,6 +188,9 @@ export function addAlternate(
   }
   if (alternate.priceSource) {
     altLine.priceSource = alternate.priceSource;
+  }
+  if (base.roomId) {
+    altLine.roomId = base.roomId;
   }
   const next = items.map((item, i) =>
     i === baseIndex

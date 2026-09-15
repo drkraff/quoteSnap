@@ -16,4 +16,5 @@ export class Quote extends Model {
   @field('is_archived') isArchived!: boolean | null;
   @text('private_note') privateNote!: string | null;
   @text('client_sentence') clientSentence!: string | null;
+  @text('rooms_json') roomsJson!: string | null;
 }

@@ -34,6 +34,11 @@ export interface DraftLineItemsResponse {
   quoteId: string;
   totalCents: number;
   clientSentence?: string | null;
+  rooms?: {
+    id: string;
+    name: string;
+    privateNote?: string | null;
+  }[];
   lineItems: Array<{
     catalogItemId: string | null;
     name: string;
@@ -42,6 +47,7 @@ export interface DraftLineItemsResponse {
     unit?: string | null;
     confidence: number | undefined;
     priceSource?: string | null;
+    roomId?: string | null;
   }>;
 }
 

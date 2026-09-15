@@ -1,6 +1,7 @@
 import { parseCatalogUnit } from "../catalog/units.js";
 import { displayRateCardName } from "../rate-card/normalize.js";
 import type { AILineItem } from "../types/voice.js";
+import { normalizeRoomName } from "../quotes/rooms.js";
 import {
   attachOneVoicePrice,
   attachVoiceLinePrices,
@@ -39,6 +40,7 @@ export interface BuiltVoiceLine {
   spokenUnitPriceCents: number | null;
   catalogUnitPriceCents: number | null;
   confidence: number;
+  roomName: string | null;
 }
 
 export interface ValidatedLineItem {
@@ -49,6 +51,7 @@ export interface ValidatedLineItem {
   unitPriceCents: number | null;
   priceSource: PriceSource;
   confidence: number;
+  roomName: string | null;
 }
 
 export function parseSpokenUnitPriceCents(value: unknown): number | null {
@@ -122,6 +125,7 @@ export function buildVoiceLineItems(
       spokenUnitPriceCents: parseSpokenUnitPriceCents(item.spokenUnitPriceCents),
       catalogUnitPriceCents: catalogItem?.unit_price_cents ?? null,
       confidence: parseVoiceConfidence(item.confidence),
+      roomName: normalizeRoomName(item.room),
     });
   }
   return lines;
@@ -141,6 +145,7 @@ function finalizeLine(
     unitPriceCents: attached.unitPriceCents,
     priceSource: attached.priceSource,
     confidence: line.confidence,
+    roomName: line.roomName,
   };
 }
 

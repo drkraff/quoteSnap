@@ -237,6 +237,19 @@ describe('validateAndBuildLineItems', () => {
     assert.equal(totalCents, 15000);
   });
 
+  it('copies an optional spoken room name and does not invent one', () => {
+    const { lineItems } = validateAndBuildLineItems(
+      [
+        { name: 'Cabinets', quantity: 14, unit: 'foot', confidence: 0.8, room: '  Kitchen  ' },
+        { name: 'Breaker', quantity: 1, unit: 'each', confidence: 0.7 },
+      ],
+      [],
+    );
+    assert.equal(lineItems[0]!.roomName, 'Kitchen');
+    assert.equal(lineItems[0]!.unitPriceCents, null);
+    assert.equal(lineItems[1]!.roomName, null);
+  });
+
   it('adds a Labor line from spokenHours when none exists, then computes hourly', () => {
     const { lineItems } = validateAndBuildLineItems(
       [{ name: 'Supplier run', quantity: 1, unit: 'job', confidence: 0.6 }],

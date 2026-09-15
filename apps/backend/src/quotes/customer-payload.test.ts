@@ -40,6 +40,7 @@ describe("toCustomerQuotePayload", () => {
           quantity: 3,
           unitPriceCents: 25000,
           unit: "each",
+          roomName: null,
         },
       ],
     });
@@ -111,5 +112,36 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(JSON.stringify(payload).includes("Keep the tub"), false);
     assert.equal(JSON.stringify(payload).includes("optionRole"), false);
     assert.equal(JSON.stringify(payload).includes("optionGroupId"), false);
+  });
+
+  it("includes a customer-facing room name and drops room private notes", () => {
+    const kitchenId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const payload = toCustomerQuotePayload({
+      customerPhone: "+15555550100",
+      totalCents: 0,
+      rooms: [
+        {
+          id: kitchenId,
+          name: "Kitchen",
+          privateNote: "don't tell the client about the neighbor pipe",
+        },
+      ],
+      lineItems: [
+        {
+          name: "Cabinets",
+          quantity: 14,
+          unitPriceCents: null,
+          unit: "foot",
+          roomId: kitchenId,
+        },
+      ],
+    });
+    assert.equal(payload.lineItems[0]!.roomName, "Kitchen");
+    assert.equal(payload.lineItems[0]!.unitPriceCents, null);
+    const json = JSON.stringify(payload);
+    assert.equal(json.includes("don't tell the client"), false);
+    assert.equal(json.includes("privateNote"), false);
+    assert.equal(json.includes(kitchenId), false);
+    assert.equal(json.includes("Kitchen"), true);
   });
 });

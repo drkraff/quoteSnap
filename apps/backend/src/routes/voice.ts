@@ -7,6 +7,7 @@ import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
 import { snapshotPriceSourceFromRow } from '../quotes/price-source.js';
+import { roomsFromDb } from '../quotes/rooms.js';
 import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
 import {
   failedVoiceStatusPayload,
@@ -176,7 +177,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
 
     // Verify quote exists and belongs to contractor
     const quoteResult = await query(
-      `SELECT id, status, total_cents, client_sentence FROM quotes WHERE id = $1 AND contractor_id = $2`,
+      `SELECT id, status, total_cents, client_sentence, rooms FROM quotes WHERE id = $1 AND contractor_id = $2`,
       [quoteId, contractorId]
     );
 
@@ -190,6 +191,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       status: string;
       total_cents: number;
       client_sentence: string | null;
+      rooms: unknown;
     };
 
     if (!isVoiceDraftReadable(quoteRow.status)) {
@@ -205,7 +207,8 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
               qli.unit_price_cents AS "unitPriceCents",
               qli.unit,
               qli.confidence,
-              qli.price_source AS "priceSource"
+              qli.price_source AS "priceSource",
+              qli.room_id AS "roomId"
        FROM quote_line_items qli
        WHERE qli.quote_id = $1
        ORDER BY qli.created_at ASC`,
@@ -220,6 +223,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       unit: string | null;
       confidence: number | null;
       priceSource: string | null;
+      roomId: string | null;
     };
 
     const lineItems = (lineItemsResult.rows as LineItemRow[]).map((row) => ({
@@ -230,12 +234,14 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       unit: row.unit,
       confidence: row.confidence ?? undefined,
       priceSource: snapshotPriceSourceFromRow(row.priceSource, row.unitPriceCents),
+      roomId: row.roomId,
     }));
 
     res.json({
       quoteId,
       totalCents: quoteRow.total_cents,
       clientSentence: quoteRow.client_sentence ?? null,
+      rooms: roomsFromDb(quoteRow.rooms),
       lineItems,
     });
   } catch (err) {

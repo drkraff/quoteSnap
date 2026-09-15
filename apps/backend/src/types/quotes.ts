@@ -1,3 +1,10 @@
+export interface QuoteRoomResponse {
+  id: string;
+  name: string;
+  /** Contractor-only. Never copy into a customer PDF/SMS/approval payload. */
+  privateNote: string | null;
+}
+
 export interface QuoteResponse {
   id: string;
   status: string;
@@ -12,6 +19,8 @@ export interface QuoteResponse {
   privateNote: string | null;
   /** Customer-facing scope / assumptions. Include on PDF/SMS/approval. */
   clientSentence: string | null;
+  /** Thin rooms/zones. Empty = single-memo / ungrouped. */
+  rooms: QuoteRoomResponse[];
 }
 
 export interface QuoteLineItemResponse {
@@ -31,6 +40,8 @@ export interface QuoteLineItemResponse {
   optionGroupId?: string | null;
   /** base = in the quote total; alt = visible, excluded from total. */
   optionRole?: string | null;
+  /** Optional room/zone. Null = ungrouped / default single-memo. */
+  roomId?: string | null;
 }
 
 export interface QuoteListItemResponse extends QuoteResponse {
@@ -62,6 +73,8 @@ export interface UpdateQuoteLineItemBody {
   optionGroupId?: string | null;
   /** Omit to preserve; null clears the pair. base | alt. */
   optionRole?: string | null;
+  /** Omit to preserve; null clears. Matches quotes.rooms[].id. */
+  roomId?: string | null;
 }
 
 export interface UpdateQuoteBody {
@@ -72,5 +85,7 @@ export interface UpdateQuoteBody {
   privateNote?: string | null;
   /** Customer-facing quote note. Omit to preserve; null clears. */
   clientSentence?: string | null;
+  /** Full replacement of rooms/zones. Omit to preserve; [] clears. */
+  rooms?: QuoteRoomResponse[];
   lineItems?: UpdateQuoteLineItemBody[];
 }

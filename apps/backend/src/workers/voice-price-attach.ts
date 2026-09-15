@@ -51,6 +51,7 @@ export function ensureLaborLineFromSpokenHours(
       spokenUnitPriceCents: null,
       catalogUnitPriceCents: null,
       confidence: 0.8,
+      roomName: null,
     },
   ];
 }
@@ -146,6 +147,7 @@ export async function attachVoiceLinePrices(
       unitPriceCents: attached.unitPriceCents,
       priceSource: attached.priceSource,
       confidence: line.confidence,
+      roomName: line.roomName,
     });
   }
   return priced;

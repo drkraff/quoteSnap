@@ -1,4 +1,5 @@
 import { snapshotPriceSourceFromRow } from "../quotes/price-source.js";
+import { roomsFromDb } from "../quotes/rooms.js";
 import type { QuoteLineItemResponse, QuoteListItemResponse, QuoteResponse } from "../types/quotes.js";
 
 export type QuoteRow = {
@@ -14,6 +15,7 @@ export type QuoteRow = {
   is_archived: boolean;
   private_note: string | null;
   client_sentence: string | null;
+  rooms: unknown;
 };
 
 export type QuoteLineItemRow = {
@@ -30,10 +32,11 @@ export type QuoteLineItemRow = {
   price_source: string | null;
   option_group_id: string | null;
   option_role: string | null;
+  room_id: string | null;
 };
 
 export const QUOTE_COLUMNS =
-  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note, client_sentence";
+  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note, client_sentence, rooms";
 
 /** Active Quotes list (catalog GET analog). Default GET /quotes. */
 export function listQuotesSql(archived: boolean): string {
@@ -53,7 +56,7 @@ export function parseQuotesListArchivedQuery(archived: unknown): boolean {
 }
 
 export const LINE_ITEM_COLUMNS =
-  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role";
+  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role, room_id";
 
 export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
   return {
@@ -68,6 +71,7 @@ export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
     isArchived: row.is_archived,
     privateNote: row.private_note,
     clientSentence: row.client_sentence,
+    rooms: roomsFromDb(row.rooms),
   };
 }
 
@@ -84,6 +88,7 @@ export function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemRespo
     priceSource: snapshotPriceSourceFromRow(row.price_source, row.unit_price_cents),
     optionGroupId: row.option_group_id,
     optionRole: row.option_role,
+    roomId: row.room_id,
   };
 }
 

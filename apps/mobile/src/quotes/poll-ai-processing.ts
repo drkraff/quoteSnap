@@ -40,8 +40,14 @@ export type PollAiProcessingDeps = {
     quote: PollableAiQuote,
     lineItemsJson: string,
     clientSentence?: string | null,
+    roomsJson?: string | null,
   ) => Promise<void>;
-  markFailed: (quote: PollableAiQuote, lineItemsJson: string, clientSentence?: string | null) => Promise<void>;
+  markFailed: (
+    quote: PollableAiQuote,
+    lineItemsJson: string,
+    clientSentence?: string | null,
+    roomsJson?: string | null,
+  ) => Promise<void>;
   stampVoiceJobId: (quote: PollableAiQuote, jobId: string) => Promise<void>;
 };
 
@@ -93,6 +99,7 @@ async function applyComplete(
       quote,
       lineItemsJsonFromUnknown(draftData.lineItems),
       draftData.clientSentence ?? null,
+      draftData.rooms ? JSON.stringify(draftData.rooms) : null,
     );
   } catch {
     // Same as the existing quotes-list poller: do not stay in ai_processing
@@ -129,6 +136,7 @@ async function applyFailed(
         quote,
         lineItemsJsonFromUnknown(draftData.lineItems),
         draftData.clientSentence ?? null,
+        draftData.rooms ? JSON.stringify(draftData.rooms) : null,
       );
       return 'ai_failed';
     } catch {

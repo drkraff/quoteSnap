@@ -6,6 +6,7 @@ import { Draft } from '../db/models/draft';
 import { Quote } from '../db/models/quote';
 import { serializeLineItems } from '../utils/line-items';
 import { toDraftLineItems } from './draft-line-items';
+import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 
 export function parseServerDate(iso: string): Date {
   const date = new Date(iso);
@@ -46,6 +47,7 @@ export async function applyServerQuoteInWrite(
     record.isArchived = serverQuote.isArchived === true;
     record.privateNote = serverQuote.privateNote ?? null;
     record.clientSentence = serverQuote.clientSentence ?? null;
+    record.roomsJson = serializeRooms((serverQuote.rooms ?? []) as QuoteRoom[]);
   });
   await draft.update((record) => {
     record.lineItemsJson = lineItemsJson;

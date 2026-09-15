@@ -14,6 +14,12 @@ export interface QuoteResponse {
   privateNote?: string | null;
   /** Customer-facing scope / assumptions. Include on PDF/SMS. */
   clientSentence?: string | null;
+  /** Thin rooms/zones. Empty = single-memo / ungrouped. */
+  rooms?: {
+    id: string;
+    name: string;
+    privateNote?: string | null;
+  }[];
 }
 
 export interface QuoteLineItemResponse {
@@ -32,6 +38,8 @@ export interface QuoteLineItemResponse {
   optionGroupId?: string | null;
   /** base = in the quote total; alt = visible, excluded from total. */
   optionRole?: string | null;
+  /** Optional room/zone. Null = ungrouped / default single-memo. */
+  roomId?: string | null;
 }
 
 export interface QuoteListItem extends QuoteResponse {
@@ -84,6 +92,11 @@ export async function updateQuoteOnServer(
     totalCents?: number;
     privateNote?: string | null;
     clientSentence?: string | null;
+    rooms?: {
+      id: string;
+      name: string;
+      privateNote?: string | null;
+    }[];
     lineItems?: {
       name: string;
       quantity: number;
@@ -93,6 +106,7 @@ export async function updateQuoteOnServer(
       priceSource?: string | null;
       optionGroupId?: string | null;
       optionRole?: string | null;
+      roomId?: string | null;
     }[];
   },
 ): Promise<QuoteResponse> {

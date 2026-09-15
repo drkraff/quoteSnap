@@ -17,6 +17,8 @@ import {
 } from '../voice/ai-failure.js';
 import { replaceVoiceQuoteLines } from '../voice/commit-voice-result.js';
 import { joinAssumptionsToClientSentence } from '../voice/assumptions.js';
+import { attachVoiceRooms } from '../quotes/rooms.js';
+import { randomUUID } from 'node:crypto';
 
 export const boss = new PgBoss(process.env['DATABASE_URL']!);
 
@@ -40,11 +42,12 @@ async function processVoiceJobs(jobs: Job<VoiceJobData>[]): Promise<void> {
 
 async function commitVoiceQuote(args: {
   quoteId: string;
-  lineItems: ValidatedLineItem[];
+  lineItems: Array<ValidatedLineItem & { roomId?: string | null }>;
   status: 'draft_local' | 'ai_failed';
   totalCents: number;
   failureStage: AiFailureStage | null;
   clientSentence?: string | null;
+  roomsJson?: string | null;
 }): Promise<void> {
   const client = await pool.connect();
   try {
@@ -62,9 +65,10 @@ async function commitVoiceQuote(args: {
 async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
   const { quoteId, contractorId, r2Key } = job.data;
   let stage: AiFailureStage = 'asr';
-  let builtLineItems: ValidatedLineItem[] | null = null;
+  let builtLineItems: (ValidatedLineItem & { roomId?: string | null })[] | null = null;
   let builtTotalCents = 0;
   let clientSentence: string | null = null;
+  let builtRoomsJson: string | null = null;
 
   try {
     // a) Fetch audio from R2
@@ -134,7 +138,8 @@ Rules:
 - spokenUnitPriceCents is integer cents ONLY if the contractor stated a dollar amount (example: "eight fifty a foot" → 850). If they did not say a price, omit it or null.
 - spokenHours is integer hours for the job ONLY if they stated labor time (example: "call it two hours" → 2). Omit or null if they did not say hours. Do not guess duration.
 - assumptions: client-facing scope sentences they said (what is not included). Example: "appliances not included". Empty array if they said none. Do not invent exclusions, private notes, or prices.
-- NEVER invent a price, SKU, catalog ID, or typical trade rate. Never copy a price from the catalog; prices are attached later.
+- room: the room or zone they named for that line (kitchen, bath, living room). Omit or null if they did not name a room. Never invent a room.
+- NEVER invent a price, SKU, catalog ID, typical trade rate, or room. Never copy a price from the catalog; prices are attached later.
 - Do not add catalog items they did not mention.`,
         },
         {
@@ -181,6 +186,11 @@ Rules:
                         minimum: 0,
                         maximum: 1,
                         description: 'How well the transcript supports this line',
+                      },
+                      room: {
+                        type: ['string', 'null'],
+                        description:
+                          'Room or zone the contractor named for this line. Null/omit if they did not name a room. NEVER invent.',
                       },
                     },
                     required: ['name', 'quantity', 'unit', 'confidence'],
@@ -254,16 +264,20 @@ Rules:
       },
     );
 
-    builtLineItems = lineItems;
+    const attached = attachVoiceRooms(lineItems, () => randomUUID());
+    builtLineItems = attached.lines;
     builtTotalCents = totalCents;
+    builtRoomsJson =
+      attached.rooms.length > 0 ? JSON.stringify(attached.rooms) : null;
 
     await commitVoiceQuote({
       quoteId,
-      lineItems,
+      lineItems: attached.lines,
       status: 'draft_local',
       totalCents,
       failureStage: null,
       clientSentence,
+      roomsJson: builtRoomsJson,
     });
 
     // PII: delete audio only after a durable success so retries still have the object.
@@ -287,6 +301,7 @@ Rules:
             totalCents: builtTotalCents,
             failureStage: 'mapping',
             clientSentence,
+            roomsJson: builtRoomsJson,
           });
         } catch (partialErr) {
           console.error('Failed to persist partial mapping draft:', partialErr);

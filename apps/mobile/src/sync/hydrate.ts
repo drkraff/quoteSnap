@@ -21,6 +21,7 @@ import { isFrozenQuoteStatus } from './frozen-quote';
 import { toDraftLineItems } from './draft-line-items';
 import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
+import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import {
   hydrateArchivedFlag,
   isQuoteUnarchiveQueueItem,
@@ -234,6 +235,7 @@ export async function upsertQuotes(
           record.isArchived = quote.isArchived === true;
           record.privateNote = quote.privateNote ?? null;
           record.clientSentence = quote.clientSentence ?? null;
+          record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
         });
         quoteByServerId.set(quote.id, local);
       }
@@ -273,6 +275,7 @@ export async function upsertQuotes(
           record.voiceJobId = quote.voiceJobId;
           record.privateNote = quote.privateNote ?? null;
           record.clientSentence = quote.clientSentence ?? null;
+          record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
           const serverArchived = quote.isArchived === true;
           const nextArchived = unarchiveHeldIds.has(localQuote.id)
             ? false

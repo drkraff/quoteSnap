@@ -62,6 +62,7 @@ type FakeQuote = {
   isArchived: boolean;
   privateNote?: string | null;
   clientSentence?: string | null;
+  roomsJson?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -197,6 +198,28 @@ describe('toDraftLineItems', () => {
       optionRole: 'alt',
     });
   });
+
+  it('keeps roomId on hydrate draft JSON', () => {
+    const kitchenId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const items = toDraftLineItems(
+      [
+        {
+          id: 'li-1',
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          catalogItemId: null,
+          roomId: kitchenId,
+        },
+      ],
+      new Map(),
+    );
+    expect(items[0]).toMatchObject({
+      name: 'Cabinets',
+      roomId: kitchenId,
+      unitPriceCents: null,
+    });
+  });
 });
 
 describe('upsertCatalogItems / upsertQuotes', () => {
@@ -259,6 +282,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
             isArchived: false,
             privateNote: null,
             clientSentence: null,
+            roomsJson: null,
           });
           writer(record);
           quotes.push(record);
@@ -328,6 +352,13 @@ describe('upsertCatalogItems / upsertQuotes', () => {
         voiceJobId: null,
         privateNote: 'subcontractor check',
         clientSentence: 'Appliances not included.',
+        rooms: [
+          {
+            id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            name: 'Kitchen',
+            privateNote: 'internal only',
+          },
+        ],
         lineItems: [
           {
             id: 'li-1',
@@ -358,6 +389,13 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       privateNote: 'subcontractor check',
       clientSentence: 'Appliances not included.',
     });
+    expect(JSON.parse(quotes[0]!.roomsJson ?? '[]')).toEqual([
+      {
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        name: 'Kitchen',
+        privateNote: 'internal only',
+      },
+    ]);
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.quoteId).toBe(quotes[0]!.id);
     expect(JSON.parse(drafts[0]!.lineItemsJson)).toEqual([

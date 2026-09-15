@@ -18,11 +18,12 @@ export type VoiceCommitLine = {
   unitPriceCents: number | null;
   confidence: number;
   priceSource?: SnapshotPriceSource | string | null;
+  roomId?: string | null;
 };
 
 export const DELETE_VOICE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_VOICE_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence, unit, price_source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`;
+export const INSERT_VOICE_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence, unit, price_source, room_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`;
 
 function commitPriceSource(item: VoiceCommitLine): SnapshotPriceSource {
   const cents = snapshotUnitPriceCents(item.unitPriceCents);
@@ -32,7 +33,7 @@ function commitPriceSource(item: VoiceCommitLine): SnapshotPriceSource {
   return inferSnapshotPriceSource(cents);
 }
 
-export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3, client_sentence = COALESCE($4, client_sentence) WHERE id = $5`;
+export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3, client_sentence = COALESCE($4, client_sentence), rooms = COALESCE($5::jsonb, rooms) WHERE id = $6`;
 
 /**
  * Replace line items and set quote status in the caller's transaction.
@@ -48,6 +49,8 @@ export async function replaceVoiceQuoteLines(
     failureStage: AiFailureStage | null;
     /** Joined extract assumptions. Null leaves the existing column. */
     clientSentence?: string | null;
+    /** Extracted rooms. Null leaves the existing column. */
+    roomsJson?: string | null;
   },
 ): Promise<void> {
   await client.query(DELETE_VOICE_LINE_ITEMS_SQL, [args.quoteId]);
@@ -61,6 +64,7 @@ export async function replaceVoiceQuoteLines(
       item.confidence,
       item.unit,
       commitPriceSource(item),
+      item.roomId ?? null,
     ]);
   }
   await client.query(UPDATE_VOICE_QUOTE_RESULT_SQL, [
@@ -68,6 +72,7 @@ export async function replaceVoiceQuoteLines(
     args.totalCents,
     args.status === "ai_failed" ? args.failureStage : null,
     args.clientSentence ?? null,
+    args.roomsJson ?? null,
     args.quoteId,
   ]);
 }

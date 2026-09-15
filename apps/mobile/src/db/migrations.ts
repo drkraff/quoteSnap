@@ -61,5 +61,16 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 7,
+      steps: [
+        addColumns({
+          table: 'quotes',
+          columns: [
+            { name: 'rooms_json', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });
