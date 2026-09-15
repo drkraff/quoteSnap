@@ -57,7 +57,7 @@ import { useAuthStore } from '../../../src/store/auth-store';
 import { createDraftPhoneSync, createLatestDebouncer, PHONE_SYNC_DEBOUNCE_MS } from '../../../src/quotes/draft-phone-sync';
 import { QUOTE_NOT_FOUND, findQuoteRecord } from '../../../src/quotes/find-quote';
 import { LineItemRow } from '../../../src/components/quotes/line-item-row';
-import { PriceEditSheet } from '../../../src/components/quotes/price-edit-sheet';
+import { PriceEditSheet, type PriceEditSave } from '../../../src/components/quotes/price-edit-sheet';
 import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picker-sheet';
 import { AlternateOptionSheet } from '../../../src/components/quotes/alternate-option-sheet';
 import { PrivateNoteField } from '../../../src/components/quotes/private-note-field';
@@ -143,6 +143,7 @@ export default function DraftScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const markupPercent = useAuthStore((s) => s.contractor?.markupPercent ?? null);
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteStatus, setQuoteStatus] = useState('');
@@ -493,12 +494,15 @@ export default function DraftScreen(): JSX.Element {
     });
   }
 
-  async function handlePriceSave(newPriceCents: number): Promise<void> {
+  async function handlePriceSave(result: PriceEditSave): Promise<void> {
     if (!draft || !quote || priceEditIndex === null) return;
     if (rejectFrozenMoneyWrite()) return;
     const pricedLine = lineItems[priceEditIndex];
     await recoverFromAiFailed();
-    const newItems = updatePrice(lineItems, priceEditIndex, newPriceCents);
+    const newItems = updatePrice(lineItems, priceEditIndex, result.unitPriceCents, {
+      priceSource: result.priceSource,
+      materialCostCents: result.materialCostCents,
+    });
     const newTotal = recalculateTotal(newItems);
     await database.write(async () => {
       await draft.update((r) => {
@@ -514,23 +518,25 @@ export default function DraftScreen(): JSX.Element {
       action: 'update',
       payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
     });
-    const learned = buildRateCardLearnPayload(
-      {
-        name: pricedLine.name,
-        unitPriceCents: newPriceCents,
-        catalogItemId: pricedLine.catalogItemId,
-        unit: pricedLine.unit ?? undefined,
-        trade: useAuthStore.getState().contractor?.trade,
-      },
-      catalogItems,
-    );
-    if (learned) {
-      await enqueue({
-        entityType: 'rate_card',
-        entityId: rateCardQueueEntityId(learned),
-        action: 'update',
-        payload: learned,
-      });
+    if (result.unitPriceCents != null && result.unitPriceCents > 0) {
+      const learned = buildRateCardLearnPayload(
+        {
+          name: pricedLine.name,
+          unitPriceCents: result.unitPriceCents,
+          catalogItemId: pricedLine.catalogItemId,
+          unit: pricedLine.unit ?? undefined,
+          trade: useAuthStore.getState().contractor?.trade,
+        },
+        catalogItems,
+      );
+      if (learned) {
+        await enqueue({
+          entityType: 'rate_card',
+          entityId: rateCardQueueEntityId(learned),
+          action: 'update',
+          payload: learned,
+        });
+      }
     }
     setPriceEditIndex(null);
   }
@@ -1372,7 +1378,17 @@ export default function DraftScreen(): JSX.Element {
         currentPriceCents={
           priceEditIndex !== null ? lineItems[priceEditIndex].unitPriceCents : null
         }
-        onSave={(newPrice) => { void handlePriceSave(newPrice); }}
+        currentPriceSource={
+          priceEditIndex !== null ? lineItems[priceEditIndex].priceSource : null
+        }
+        currentMaterialCostCents={
+          priceEditIndex !== null
+            ? lineItems[priceEditIndex].materialCostCents ?? null
+            : null
+        }
+        markupPercent={markupPercent}
+        unit={priceEditIndex !== null ? lineItems[priceEditIndex].unit : null}
+        onSave={(result) => { void handlePriceSave(result); }}
         onDismiss={() => setPriceEditIndex(null)}
       />
 
