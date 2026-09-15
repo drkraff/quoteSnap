@@ -26,6 +26,7 @@ describe("toCustomerQuotePayload", () => {
           unit: "each",
           privateNote: SECRET_LINE,
           notes: "also not customer-facing",
+          priceSource: "spoken",
         },
       ],
     });
@@ -57,7 +58,11 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(json.includes("privateNote"), false);
     assert.equal(json.includes("private_note"), false);
     assert.equal(json.includes("notes"), false);
+    assert.equal(json.includes("priceSource"), false);
+    assert.equal(json.includes("price_source"), false);
     assert.equal(json.includes("Appliances and decorative lighting not included."), true);
+    assert.equal(customerQuotePayloadKeys().includes("privateNote"), false);
+    assert.equal(customerLinePayloadKeys().includes("priceSource"), false);
   });
 
   it("does not invent prices — unknown unitPriceCents stays null", () => {

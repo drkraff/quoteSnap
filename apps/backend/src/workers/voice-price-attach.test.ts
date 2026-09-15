@@ -295,6 +295,67 @@ describe("attachVoiceLinePrices", () => {
     assert.equal(priced[0]?.unitPriceCents, 11500);
     assert.equal(priced[0]?.priceSource, "computed");
   });
+
+  it("applies spoken $ > learned exact > labor×hourly > blank in one attach pass", async () => {
+    const lookups: string[] = [];
+    const priced = await attachVoiceLinePrices(
+      [
+        line({
+          name: "Tear-out",
+          quantity: 1,
+          unit: "job",
+          spokenUnitPriceCents: 900,
+        }),
+        line({ name: "Laminate cabinets", quantity: 14, unit: "foot" }),
+        line({ name: "Labor", quantity: 2, unit: "hour" }),
+        line({ name: "Mystery assembly", quantity: 1, unit: "job" }),
+      ],
+      ({ name }) => {
+        lookups.push(name);
+        return name === "Laminate cabinets" ? 180000 : null;
+      },
+      "plumbing",
+      7500,
+    );
+
+    assert.deepEqual(
+      priced.map((item) => ({
+        name: item.name,
+        unitPriceCents: item.unitPriceCents,
+        priceSource: item.priceSource,
+        catalogItemId: item.catalogItemId,
+      })),
+      [
+        { name: "Tear-out", unitPriceCents: 900, priceSource: "spoken", catalogItemId: null },
+        {
+          name: "Laminate cabinets",
+          unitPriceCents: 180000,
+          priceSource: "learned",
+          catalogItemId: null,
+        },
+        { name: "Labor", unitPriceCents: 7500, priceSource: "computed", catalogItemId: null },
+        {
+          name: "Mystery assembly",
+          unitPriceCents: null,
+          priceSource: "unknown",
+          catalogItemId: null,
+        },
+      ],
+    );
+    assert.equal(lookups.includes("Tear-out"), false);
+    assert.deepEqual(lookups, ["Laminate cabinets", "Labor", "Mystery assembly"]);
+  });
+
+  it("does not invent a learned price from a similar name", async () => {
+    const priced = await attachVoiceLinePrices(
+      [line({ name: "Copper Pipes", unit: "foot" })],
+      ({ name }) => (name === "Copper Pipe" ? 4500 : null),
+      "plumbing",
+      7500,
+    );
+    assert.equal(priced[0]?.unitPriceCents, null);
+    assert.equal(priced[0]?.priceSource, "unknown");
+  });
 });
 
 describe("lookupExactRateCardCents", () => {
@@ -341,6 +402,15 @@ describe("lookupExactRateCardCents", () => {
         contractorId: CONTRACTOR_ID,
         name: "Laminate cabinets",
         unit: "each",
+        trade: "plumbing",
+      }),
+      null,
+    );
+    assert.equal(
+      await lookupExactRateCardCents(queryFn, {
+        contractorId: CONTRACTOR_ID,
+        name: "Laminate cabinet",
+        unit: "foot",
         trade: "plumbing",
       }),
       null,
@@ -453,5 +523,16 @@ describe("voice-processor material markup wiring", () => {
     assert.match(src, /markupPercent,/);
     assert.match(src, /spokenMaterialCostCents/);
     assert.match(src, /spokenUnitPriceCents is integer cents ONLY if the contractor stated a sell\/charge price/);
+  });
+
+  it("attaches prices through the async exact-lookup path before commit", () => {
+    const src = readFileSync(path.join(here, "voice-processor.ts"), "utf8");
+    assert.match(src, /validateAndBuildLineItemsAsync/);
+    assert.match(src, /lookupExactRateCardCents/);
+    assert.match(src, /replaceVoiceQuoteLines/);
+    assert.match(
+      src,
+      /spoken sell → catalog SKU → exact rate-card → computed labor/,
+    );
   });
 });

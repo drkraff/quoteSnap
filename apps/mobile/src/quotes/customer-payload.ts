@@ -38,6 +38,7 @@ export type CustomerQuoteSource = {
     unit?: string | null;
     privateNote?: string | null;
     notes?: string | null;
+    priceSource?: string | null;
     optionGroupId?: string | null;
     optionRole?: string | null;
     roomId?: string | null;

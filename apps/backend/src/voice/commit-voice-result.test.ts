@@ -173,4 +173,76 @@ describe("replaceVoiceQuoteLines", () => {
       "quote-4",
     ]);
   });
+
+  it("persists attach price_source on adhoc lines (spoken, learned, computed, unknown)", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    await replaceVoiceQuoteLines(
+      {
+        query: async (sql, params) => {
+          calls.push({ sql, params });
+        },
+      },
+      {
+        quoteId: "quote-5",
+        status: "draft_local",
+        totalCents: 2535900,
+        failureStage: null,
+        lineItems: [
+          {
+            catalogItemId: null,
+            name: "Tear-out",
+            quantity: 1,
+            unit: "job",
+            unitPriceCents: 900,
+            confidence: 0.9,
+            priceSource: "spoken",
+          },
+          {
+            catalogItemId: null,
+            name: "Laminate cabinets",
+            quantity: 14,
+            unit: "foot",
+            unitPriceCents: 180000,
+            confidence: 0.8,
+            priceSource: "learned",
+          },
+          {
+            catalogItemId: null,
+            name: "Labor",
+            quantity: 2,
+            unit: "hour",
+            unitPriceCents: 7500,
+            confidence: 0.8,
+            priceSource: "computed",
+          },
+          {
+            catalogItemId: null,
+            name: "Mystery assembly",
+            quantity: 1,
+            unit: "job",
+            unitPriceCents: null,
+            confidence: 0.4,
+            priceSource: "unknown",
+          },
+        ],
+      },
+    );
+
+    const inserts = calls.filter((c) => c.sql === INSERT_VOICE_LINE_ITEM_SQL);
+    assert.equal(inserts.length, 4);
+    assert.deepEqual(
+      inserts.map((c) => ({
+        catalogItemId: c.params?.[1],
+        name: c.params?.[2],
+        cents: c.params?.[4],
+        priceSource: c.params?.[7],
+      })),
+      [
+        { catalogItemId: null, name: "Tear-out", cents: 900, priceSource: "spoken" },
+        { catalogItemId: null, name: "Laminate cabinets", cents: 180000, priceSource: "learned" },
+        { catalogItemId: null, name: "Labor", cents: 7500, priceSource: "computed" },
+        { catalogItemId: null, name: "Mystery assembly", cents: 0, priceSource: "unknown" },
+      ],
+    );
+  });
 });

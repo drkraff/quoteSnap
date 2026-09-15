@@ -5,6 +5,7 @@ import {
   filterUuidCatalogIds,
   parseSpokenUnitPriceCents,
   validateAndBuildLineItems,
+  validateAndBuildLineItemsAsync,
 } from './voice-validation.js';
 import type { CatalogItemRow } from './voice-validation.js';
 import type { AILineItem } from '../types/voice.js';
@@ -347,6 +348,61 @@ describe('validateAndBuildLineItems', () => {
     assert.equal(lineItems[1]!.catalogItemId, null);
     assert.equal(lineItems[1]!.name, 'Burnt kitchen box');
     assert.equal(lineItems[1]!.unitPriceCents, null);
+  });
+});
+
+describe('validateAndBuildLineItemsAsync', () => {
+  it('sets price_source for spoken $ > learned exact > labor×hourly > blank', async () => {
+    const { lineItems, totalCents } = await validateAndBuildLineItemsAsync(
+      [
+        {
+          name: 'Tear-out',
+          quantity: 1,
+          unit: 'job',
+          spokenUnitPriceCents: 900,
+          confidence: 0.9,
+        },
+        { name: 'Laminate cabinets', quantity: 14, unit: 'foot', confidence: 0.8 },
+        { name: 'Labor', quantity: 2, unit: 'hour', confidence: 0.8 },
+        { name: 'Mystery assembly', quantity: 1, unit: 'job', confidence: 0.4 },
+      ],
+      [],
+      {
+        trade: 'plumbing',
+        hourlyRateCents: 7500,
+        lookupRateCard: async ({ name, unit, trade }) => {
+          assert.equal(trade, 'plumbing');
+          if (name === 'Laminate cabinets' && unit === 'foot') {
+            return 180000;
+          }
+          return null;
+        },
+      },
+    );
+
+    assert.equal(lineItems.length, 4);
+    assert.equal(lineItems[0]!.catalogItemId, null);
+    assert.equal(lineItems[0]!.unitPriceCents, 900);
+    assert.equal(lineItems[0]!.priceSource, 'spoken');
+    assert.equal(lineItems[1]!.unitPriceCents, 180000);
+    assert.equal(lineItems[1]!.priceSource, 'learned');
+    assert.equal(lineItems[2]!.unitPriceCents, 7500);
+    assert.equal(lineItems[2]!.priceSource, 'computed');
+    assert.equal(lineItems[3]!.unitPriceCents, null);
+    assert.equal(lineItems[3]!.priceSource, 'unknown');
+    assert.equal(totalCents, 900 + 14 * 180000 + 2 * 7500);
+  });
+
+  it('does not invent a SKU price when the empty catalog skips seed', async () => {
+    const { lineItems, totalCents } = await validateAndBuildLineItemsAsync(
+      [{ name: 'Burnt kitchen box', quantity: 1, unit: 'each', confidence: 0.6 }],
+      [],
+      { hourlyRateCents: 12500, markupPercent: 20 },
+    );
+    assert.equal(lineItems[0]!.catalogItemId, null);
+    assert.equal(lineItems[0]!.unitPriceCents, null);
+    assert.equal(lineItems[0]!.priceSource, 'unknown');
+    assert.equal(totalCents, 0);
   });
 });
 

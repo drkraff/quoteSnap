@@ -25,6 +25,7 @@ describe('toCustomerQuotePayload', () => {
           unit: 'each',
           privateNote: SECRET_LINE,
           notes: 'also not customer-facing',
+          priceSource: 'spoken',
         },
       ],
     });
@@ -55,7 +56,11 @@ describe('toCustomerQuotePayload', () => {
     expect(json).not.toContain('privateNote');
     expect(json).not.toContain('private_note');
     expect(json).not.toContain('notes');
+    expect(json).not.toContain('priceSource');
+    expect(json).not.toContain('price_source');
     expect(json).toContain('Appliances and decorative lighting not included.');
+    expect(customerQuotePayloadKeys()).not.toContain('privateNote');
+    expect(customerLinePayloadKeys()).not.toContain('priceSource');
   });
 
   it('does not invent prices — unknown unitPriceCents stays null', () => {

@@ -57,8 +57,21 @@ describe('canFinishOnboarding / skip catalog', () => {
       kind: 'seed',
       trade: 'electrical',
     });
-    expect(onboardingAfterProfile('import_quotes', 'hvac')).toEqual({
+    expect(
+      onboardingAfterProfile('import_quotes', 'hvac'),
+    ).toEqual({
       kind: 'import',
+      trade: 'hvac',
+      itemCount: 0,
+    });
+  });
+
+  it('skip catalog still finishes onboarding so quote create is not blocked', () => {
+    expect(
+      canFinishOnboarding({ trade: 'hvac', hourlyRateCents: 9000, markupOk: true }),
+    ).toBe(true);
+    expect(onboardingAfterProfile('skip_catalog', 'hvac')).toEqual({
+      kind: 'ready',
       trade: 'hvac',
       itemCount: 0,
     });
