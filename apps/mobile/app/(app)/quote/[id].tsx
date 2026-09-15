@@ -26,11 +26,15 @@ import { serializeRooms } from '../../../src/quotes/rooms';
 import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos } from '../../../src/quotes/photos';
 import { useAuthStore } from '../../../src/store/auth-store';
 import {
+  SHARE_QUOTE_ALERT_CANNOT,
+  SHARE_QUOTE_ALERT_FAILED,
   SHARE_QUOTE_EMPTY,
+  SHARE_QUOTE_FAILED,
   SHARE_QUOTE_LABEL,
-  shareCustomerQuote,
+  alertForFailedShare,
+  hasCustomerFacingLines,
 } from '../../../src/quotes/share-customer-quote';
-import { markQuoteSentAfterShare } from '../../../src/quotes/mark-quote-sent';
+import { shareCustomerQuoteAndMarkSent } from '../../../src/quotes/share-and-mark-sent';
 import { findQuoteRecord } from '../../../src/quotes/find-quote';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
@@ -127,14 +131,16 @@ export default function QuoteDetailScreen(): JSX.Element {
 
   async function handleSharePress(): Promise<void> {
     if (!quote || sharing) return;
-    const selectedCount = lineItems.filter((item) => item.optionRole !== 'alt').length;
-    if (selectedCount < 1) {
-      Alert.alert('Cannot share', SHARE_QUOTE_EMPTY);
+    if (!hasCustomerFacingLines(lineItems)) {
+      Alert.alert(SHARE_QUOTE_ALERT_CANNOT, SHARE_QUOTE_EMPTY);
       return;
     }
     setSharing(true);
     try {
-      const result = await shareCustomerQuote(
+      const found = await findQuoteRecord(() =>
+        database.get<Quote>('quotes').find(id),
+      );
+      const { share, marked } = await shareCustomerQuoteAndMarkSent(
         {
           customerPhone: quote.customerPhone,
           totalCents: quote.totalCents,
@@ -144,21 +150,18 @@ export default function QuoteDetailScreen(): JSX.Element {
           photos: quote.photos,
           lineItems,
         },
+        found.ok ? found.record : null,
         {
           displayName: contractor?.displayName,
           trade: contractor?.trade,
         },
       );
-      if (!result.ok) {
-        Alert.alert('Cannot share', result.message);
+      if (!share.ok) {
+        const alert = alertForFailedShare(share);
+        Alert.alert(alert.title, alert.message);
         return;
       }
-      const found = await findQuoteRecord(() =>
-        database.get<Quote>('quotes').find(id),
-      );
-      if (!found.ok) return;
-      const outcome = await markQuoteSentAfterShare(found.record);
-      if (outcome === 'sent') {
+      if (marked === 'sent' && found.ok) {
         setQuote((prev) =>
           prev
             ? {
@@ -169,6 +172,8 @@ export default function QuoteDetailScreen(): JSX.Element {
             : prev,
         );
       }
+    } catch {
+      Alert.alert(SHARE_QUOTE_ALERT_FAILED, SHARE_QUOTE_FAILED);
     } finally {
       setSharing(false);
     }

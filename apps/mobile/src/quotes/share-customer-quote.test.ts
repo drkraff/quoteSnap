@@ -1,7 +1,14 @@
 import {
+  SHARE_QUOTE_ALERT_CANCELLED,
+  SHARE_QUOTE_ALERT_CANNOT,
+  SHARE_QUOTE_ALERT_FAILED,
+  SHARE_QUOTE_CANCELLED,
   SHARE_QUOTE_EMPTY,
   SHARE_QUOTE_FAILED,
   SHARE_QUOTE_UNAVAILABLE,
+  alertForFailedShare,
+  classifyShareError,
+  hasCustomerFacingLines,
   shareCustomerQuote,
   type ShareCustomerQuoteDeps,
 } from './share-customer-quote';
@@ -99,6 +106,33 @@ describe('shareCustomerQuote', () => {
     );
     expect(result).toEqual({ ok: false, reason: 'empty', message: SHARE_QUOTE_EMPTY });
     expect(deps.printToPdf).not.toHaveBeenCalled();
+    expect(deps.shareFile).not.toHaveBeenCalled();
+    if (result.ok) throw new Error('expected empty share to fail');
+    expect(alertForFailedShare(result)).toEqual({
+      title: SHARE_QUOTE_ALERT_CANNOT,
+      message: SHARE_QUOTE_EMPTY,
+    });
+  });
+
+  it('blocks a quote with no lines at all without crashing', async () => {
+    const deps = fakeDeps();
+    const result = await shareCustomerQuote(
+      {
+        customerPhone: null,
+        totalCents: 0,
+        privateNote: SECRET_JOB,
+        lineItems: [],
+      },
+      {},
+      deps,
+    );
+    expect(result).toEqual({ ok: false, reason: 'empty', message: SHARE_QUOTE_EMPTY });
+    expect(deps.printToPdf).not.toHaveBeenCalled();
+    expect(deps.shareFile).not.toHaveBeenCalled();
+    expect(hasCustomerFacingLines([])).toBe(false);
+    expect(hasCustomerFacingLines(undefined)).toBe(false);
+    expect(hasCustomerFacingLines([{ optionRole: 'alt' }])).toBe(false);
+    expect(hasCustomerFacingLines([{ optionRole: 'base' }])).toBe(true);
   });
 
   it('falls back to a shareable HTML file when print-to-pdf fails', async () => {
@@ -143,5 +177,87 @@ describe('shareCustomerQuote', () => {
     });
     const result = await shareCustomerQuote(source, {}, deps);
     expect(result).toEqual({ ok: false, reason: 'failed', message: SHARE_QUOTE_FAILED });
+    if (result.ok) throw new Error('expected share to fail');
+    expect(alertForFailedShare(result)).toEqual({
+      title: SHARE_QUOTE_ALERT_FAILED,
+      message: SHARE_QUOTE_FAILED,
+    });
+  });
+
+  it('treats share-sheet cancel as cancelled and does not fall back to HTML', async () => {
+    const deps = fakeDeps({
+      shareFile: jest.fn(async () => {
+        throw new Error('User did not share');
+      }),
+    });
+    const result = await shareCustomerQuote(source, {}, deps);
+    expect(result).toEqual({
+      ok: false,
+      reason: 'cancelled',
+      message: SHARE_QUOTE_CANCELLED,
+    });
+    expect(deps.printToPdf).toHaveBeenCalledTimes(1);
+    expect(deps.writeTextFile).not.toHaveBeenCalled();
+    expect(deps.shareFile).toHaveBeenCalledTimes(1);
+    if (result.ok) throw new Error('expected share to be cancelled');
+    expect(alertForFailedShare(result)).toEqual({
+      title: SHARE_QUOTE_ALERT_CANCELLED,
+      message: SHARE_QUOTE_CANCELLED,
+    });
+  });
+
+  it('treats share API failure as failed and does not fall back to HTML', async () => {
+    const deps = fakeDeps({
+      shareFile: jest.fn(async () => {
+        throw new Error('Another share request is being processed now');
+      }),
+    });
+    const result = await shareCustomerQuote(source, {}, deps);
+    expect(result).toEqual({ ok: false, reason: 'failed', message: SHARE_QUOTE_FAILED });
+    expect(deps.writeTextFile).not.toHaveBeenCalled();
+    expect(deps.shareFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats HTML-fallback share cancel as cancelled, not success', async () => {
+    const deps = fakeDeps({
+      printToPdf: jest.fn(async () => {
+        throw new Error('no print');
+      }),
+      shareFile: jest.fn(async () => {
+        throw new Error('User cancelled');
+      }),
+    });
+    const result = await shareCustomerQuote(source, {}, deps);
+    expect(result).toEqual({
+      ok: false,
+      reason: 'cancelled',
+      message: SHARE_QUOTE_CANCELLED,
+    });
+    expect(deps.writeTextFile).toHaveBeenCalledTimes(1);
+    const html = (deps.writeTextFile as jest.Mock).mock.calls[0]![1] as string;
+    expect(html).not.toContain(SECRET_JOB);
+    expect(html).not.toContain(SECRET_LINE);
+  });
+
+  it('does not crash when lineItems is missing', async () => {
+    const deps = fakeDeps();
+    const result = await shareCustomerQuote(
+      { customerPhone: null, totalCents: 0, lineItems: undefined as never },
+      {},
+      deps,
+    );
+    expect(result).toEqual({ ok: false, reason: 'empty', message: SHARE_QUOTE_EMPTY });
+    expect(deps.printToPdf).not.toHaveBeenCalled();
+  });
+
+  it('classifies cancel vs share-API errors', () => {
+    expect(classifyShareError(new Error('User cancelled'))).toBe('cancelled');
+    expect(classifyShareError(new Error('Share dismissed'))).toBe('cancelled');
+    expect(classifyShareError(new Error('User did not share'))).toBe('cancelled');
+    expect(classifyShareError({ message: 'NSError domain code 3072' })).toBe('cancelled');
+    expect(classifyShareError(new Error('NSError domain code 3072'))).toBe('cancelled');
+    expect(classifyShareError(new Error('Another share request is being processed now'))).toBe(
+      'failed',
+    );
   });
 });

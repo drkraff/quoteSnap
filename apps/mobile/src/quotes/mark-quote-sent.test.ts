@@ -25,6 +25,7 @@ type FakeQuote = {
   status: string;
   sentAt: Date | null;
   customerPhone: string | null;
+  totalCents: number;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -34,6 +35,7 @@ function makeQuote(overrides: Partial<FakeQuote> = {}): FakeQuote {
     status: 'draft_local',
     sentAt: null,
     customerPhone: null,
+    totalCents: 25000,
     async update(fn) {
       fn(quote);
     },
@@ -59,10 +61,11 @@ describe('shouldMarkQuoteSentAfterShare / applyShareSentLocalFields', () => {
     const sentAt = new Date('2026-09-01T13:00:00.000Z');
     for (const status of ['sent', 'approved', 'declined', 'expired', 'failed_send', 'ai_processing']) {
       expect(shouldMarkQuoteSentAfterShare(status)).toBe(false);
-      const record = { status, sentAt };
+      const record = { status, sentAt, totalCents: 25000 };
       expect(applyShareSentLocalFields(record, now)).toBe(false);
       expect(record.status).toBe(status);
       expect(record.sentAt).toBe(sentAt);
+      expect(record.totalCents).toBe(25000);
     }
   });
 
@@ -101,12 +104,14 @@ describe('markQuoteSentAfterShare', () => {
 
   it('does not enqueue or rewrite sentAt when the quote is already sent', async () => {
     const sentAt = new Date('2026-09-01T13:00:00.000Z');
-    const quote = makeQuote({ status: 'sent', sentAt });
+    const quote = makeQuote({ status: 'sent', sentAt, totalCents: 25000 });
 
     await expect(markQuoteSentAfterShare(quote as unknown as never)).resolves.toBe('noop');
 
     expect(quote.status).toBe('sent');
     expect(quote.sentAt).toBe(sentAt);
+    expect(quote.totalCents).toBe(25000);
+    expect(quote.customerPhone).toBeNull();
     expect(mockedEnqueue).not.toHaveBeenCalled();
     expect(mockedWrite).not.toHaveBeenCalled();
   });
