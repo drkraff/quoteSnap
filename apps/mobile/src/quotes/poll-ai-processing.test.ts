@@ -153,6 +153,7 @@ describe('pollOneAiProcessingQuote', () => {
         },
       ]),
       null,
+      null,
     );
   });
 
@@ -224,7 +225,7 @@ describe('pollOneAiProcessingQuote', () => {
     const row = quote({ voiceJobId: 'job-1' });
 
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('draft_ready');
-    expect(api.markDraftReady).toHaveBeenCalledWith(row, '[]', 'appliances not included');
+    expect(api.markDraftReady).toHaveBeenCalledWith(row, '[]', 'appliances not included', null);
   });
 
   it('with serverId and no voiceJobId stays processing when the server has no job yet', async () => {
@@ -335,7 +336,7 @@ describe('pollOneAiProcessingQuote', () => {
 
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
     expect(api.getDraftLineItems).toHaveBeenCalledWith('srv-1');
-    expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial), null);
+    expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial), null, null);
     expect(api.markDraftReady).not.toHaveBeenCalled();
   });
 

@@ -31,6 +31,11 @@ import {
   parseOptionGroupFields,
   type OptionRole,
 } from "./option-groups.js";
+import {
+  parseOptionalRoomId,
+  parseOptionalRooms,
+  type QuoteRoom,
+} from "./rooms.js";
 
 export {
   CLIENT_QUOTE_STATUSES,
@@ -69,6 +74,8 @@ export type ParsedLineItemInput = {
   optionGroupId?: string | null;
   /** undefined = omitted (preserve); null = explicit clear (with id). */
   optionRole?: OptionRole | null;
+  /** undefined = omitted (preserve); null = explicit clear. */
+  roomId?: string | null;
 };
 
 export type ResolvedLineItem = {
@@ -82,6 +89,7 @@ export type ResolvedLineItem = {
   priceSource: SnapshotPriceSource;
   optionGroupId: string | null;
   optionRole: OptionRole | null;
+  roomId: string | null;
 };
 
 export type ParsedQuotePutBody =
@@ -93,6 +101,7 @@ export type ParsedQuotePutBody =
       totalCents?: number;
       privateNote?: string | null;
       clientSentence?: string | null;
+      rooms?: QuoteRoom[];
       lineItems?: ParsedLineItemInput[];
     };
 
@@ -312,6 +321,15 @@ export function parseLineItemInput(
     optionRole = pair.fields.optionRole;
   }
 
+  let roomId: string | null | undefined;
+  if (hasOwn(raw, "roomId")) {
+    const parsed = parseOptionalRoomId(raw.roomId);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    roomId = parsed.roomId;
+  }
+
   return {
     ok: true,
     item: {
@@ -325,6 +343,7 @@ export function parseLineItemInput(
       priceSource,
       optionGroupId,
       optionRole,
+      roomId,
     },
   };
 }
@@ -360,6 +379,7 @@ export function resolveReplacementLineItems(
       | "price_source"
       | "option_group_id"
       | "option_role"
+      | "room_id"
     >
   >,
 ): ResolvedLineItem[] {
@@ -430,6 +450,15 @@ export function resolveReplacementLineItems(
       optionRole = null;
     }
 
+    let roomId: string | null;
+    if (item.roomId === null) {
+      roomId = null;
+    } else if (item.roomId !== undefined) {
+      roomId = item.roomId;
+    } else {
+      roomId = match?.room_id ?? null;
+    }
+
     return {
       name: item.name,
       quantity: item.quantity,
@@ -441,6 +470,7 @@ export function resolveReplacementLineItems(
       priceSource,
       optionGroupId,
       optionRole,
+      roomId,
     };
   });
 }
@@ -529,6 +559,14 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
     parsed.clientSentence = sentence.sentence;
   }
 
+  if (hasOwn(raw, "rooms")) {
+    const rooms = parseOptionalRooms(raw.rooms);
+    if (!rooms.ok) {
+      return rooms;
+    }
+    parsed.rooms = rooms.rooms;
+  }
+
   if (hasOwn(raw, "totalCents") && raw.totalCents !== undefined) {
     const cents = parseNonNegativeCents(raw.totalCents, "totalCents");
     if (!cents.ok) {
@@ -558,6 +596,7 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
     parsed.totalCents === undefined &&
     parsed.privateNote === undefined &&
     parsed.clientSentence === undefined &&
+    parsed.rooms === undefined &&
     parsed.lineItems === undefined
   ) {
     return { ok: false, error: "At least one field required" };
@@ -578,8 +617,8 @@ export const SELECT_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
 
 export const DELETE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`;
+export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role, room_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`;
 
 /**
  * Quote metadata + line-item replace on one query function so the caller can
@@ -651,6 +690,10 @@ export async function applyQuotePut(
     params.push(parsed.clientSentence);
     setClauses.push(`client_sentence = $${params.length}`);
   }
+  if (parsed.rooms !== undefined) {
+    params.push(JSON.stringify(parsed.rooms));
+    setClauses.push(`rooms = $${params.length}::jsonb`);
+  }
   if (totalCents !== undefined) {
     params.push(totalCents);
     setClauses.push(`total_cents = $${params.length}`);
@@ -688,6 +731,7 @@ export async function applyQuotePut(
         item.priceSource,
         item.optionGroupId,
         item.optionRole,
+        item.roomId,
       ]);
     }
   }

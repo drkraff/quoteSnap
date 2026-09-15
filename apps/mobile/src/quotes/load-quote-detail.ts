@@ -2,6 +2,7 @@ import type { QuoteLineItemResponse, QuoteResponse } from '../api/quotes';
 import { parseLineItems, serializeLineItems, type LineItem } from '../utils/line-items';
 import { parseOptionGroupId, parseOptionRole } from './option-groups';
 import { parsePriceSource } from '../utils/price-source';
+import { parseRoomId, parseRoomsJson, type QuoteRoom } from './rooms';
 
 export const QUOTE_DETAIL_OFFLINE_ERROR =
   'Connect to the internet to view full details';
@@ -19,6 +20,7 @@ export type LocalQuoteRecord = {
   voiceJobId?: string | null;
   privateNote?: string | null;
   clientSentence?: string | null;
+  roomsJson?: string | null;
 };
 
 export type QuoteDetailSnapshot = {
@@ -29,6 +31,7 @@ export type QuoteDetailSnapshot = {
   sentAt: string | null;
   privateNote?: string | null;
   clientSentence?: string | null;
+  rooms?: QuoteRoom[];
 };
 
 export type QuoteDetailSource = 'local' | 'network' | 'none';
@@ -80,6 +83,9 @@ export function lineItemsFromDraftJson(json: string): QuoteLineItemResponse[] {
       row.optionGroupId = item.optionGroupId;
       row.optionRole = item.optionRole;
     }
+    if (item.roomId) {
+      row.roomId = item.roomId;
+    }
     return row;
   });
 }
@@ -114,6 +120,10 @@ export function remoteLineItemsToDraftJson(
       line.optionGroupId = optionGroupId;
       line.optionRole = optionRole;
     }
+    const roomId = parseRoomId(item.roomId);
+    if (roomId) {
+      line.roomId = roomId;
+    }
     return line;
   });
   return serializeLineItems(lines);
@@ -128,6 +138,7 @@ function snapshotFromLocal(quote: LocalQuoteRecord): QuoteDetailSnapshot {
     sentAt: quote.sentAt?.toISOString() ?? null,
     privateNote: quote.privateNote ?? null,
     clientSentence: quote.clientSentence ?? null,
+    rooms: parseRoomsJson(quote.roomsJson),
   };
 }
 
@@ -140,6 +151,7 @@ function snapshotFromRemote(quote: QuoteResponse): QuoteDetailSnapshot {
     sentAt: quote.sentAt,
     privateNote: quote.privateNote ?? null,
     clientSentence: quote.clientSentence ?? null,
+    rooms: quote.rooms ?? [],
   };
 }
 

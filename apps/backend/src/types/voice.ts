@@ -12,6 +12,8 @@ export interface AILineItem {
   /** Integer cents the contractor said. Omit/null if they did not say a price. */
   spokenUnitPriceCents?: number | null;
   confidence?: number;
+  /** Spoken room/zone for this line. Omit if they did not name a room. */
+  room?: string | null;
 }
 
 export interface VoiceExtractResult {

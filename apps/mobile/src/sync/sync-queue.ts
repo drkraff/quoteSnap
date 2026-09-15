@@ -24,6 +24,7 @@ import { syncQueuedOnboardingProfile, syncQueuedOnboardingSeed } from './offline
 import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
+import { parseRoomsJson } from '../quotes/rooms';
 import {
   FrozenQuoteWriteError,
   QUOTE_MONEY_FROZEN_ERROR,
@@ -205,6 +206,15 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           payload.clientSentence === undefined
             ? undefined
             : (payload.clientSentence as string | null),
+        ...(payload.rooms !== undefined
+          ? {
+              rooms: payload.rooms as {
+                id: string;
+                name: string;
+                privateNote?: string | null;
+              }[],
+            }
+          : {}),
         lineItems: payload.lineItems as {
           name: string;
           quantity: number;
@@ -214,6 +224,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           priceSource?: string | null;
           optionGroupId?: string | null;
           optionRole?: string | null;
+          roomId?: string | null;
         }[] | undefined,
       });
       rememberServerRevision(serverId, updated.updatedAt);
@@ -244,6 +255,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         priceSource?: string | null;
         optionGroupId?: string | null;
         optionRole?: string | null;
+        roomId?: string | null;
       }[];
       const payloadLines = lineItemsFromQueuePayload(payload) ?? [];
       const outcome = await fetchAndResolveDraftFork({
@@ -256,6 +268,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       if (payloadMutatesQuoteMoney(payload) && isFrozenQuoteStatus(quote.status)) {
         throw new FrozenQuoteWriteError();
       }
+      const rooms = parseRoomsJson(quote.roomsJson);
       const updated = await updateQuoteOnServer(quote.serverId, {
         lineItems: items as {
           name: string;
@@ -266,8 +279,10 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           priceSource?: string | null;
           optionGroupId?: string | null;
           optionRole?: string | null;
+          roomId?: string | null;
         }[],
         totalCents: payload.totalCents as number | undefined,
+        ...(quote.roomsJson != null && quote.roomsJson !== '' ? { rooms } : {}),
       });
       rememberServerRevision(quote.serverId, updated.updatedAt);
     }

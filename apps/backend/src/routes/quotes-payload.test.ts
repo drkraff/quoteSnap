@@ -27,6 +27,7 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
     is_archived: false,
     private_note: null,
     client_sentence: null,
+    rooms: [],
     ...overrides,
   };
 }
@@ -46,6 +47,7 @@ function lineItemRow(overrides: Partial<QuoteLineItemRow> = {}): QuoteLineItemRo
     price_source: "catalog",
     option_group_id: null,
     option_role: null,
+    room_id: null,
     ...overrides,
   };
 }
@@ -68,6 +70,7 @@ describe("quoteRowToResponse", () => {
       isArchived: false,
       privateNote: null,
       clientSentence: null,
+      rooms: [],
     });
   });
 
@@ -113,6 +116,7 @@ describe("lineItemRowToResponse", () => {
       priceSource: "catalog",
       optionGroupId: null,
       optionRole: null,
+      roomId: null,
     });
   });
 
@@ -152,6 +156,23 @@ describe("lineItemRowToResponse", () => {
     assert.equal(mapped.optionRole, "alt");
     assert.equal(lineItemRowToResponse(lineItemRow()).optionGroupId, null);
     assert.equal(lineItemRowToResponse(lineItemRow()).optionRole, null);
+  });
+
+  it("maps rooms JSON and line room_id for contractor hydrate", () => {
+    const kitchenId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const quote = quoteRowToResponse(
+      quoteRow({
+        rooms: [{ id: kitchenId, name: "Kitchen", privateNote: "internal only" }],
+      }),
+    );
+    assert.deepEqual(quote.rooms, [
+      { id: kitchenId, name: "Kitchen", privateNote: "internal only" },
+    ]);
+    assert.equal(
+      lineItemRowToResponse(lineItemRow({ room_id: kitchenId })).roomId,
+      kitchenId,
+    );
+    assert.equal(lineItemRowToResponse(lineItemRow()).roomId, null);
   });
 });
 

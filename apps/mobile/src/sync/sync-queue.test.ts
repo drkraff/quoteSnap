@@ -82,6 +82,7 @@ type FakeQuote = {
   updatedAt: Date;
   sentAt: Date | null;
   voiceJobId: string | null;
+  roomsJson?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -1145,6 +1146,79 @@ describe('processQueue', () => {
         },
       ],
       totalCents: 180000,
+    });
+  });
+
+  it('forwards rooms and line roomId on a contractor draft PUT', async () => {
+    const kitchenId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const rooms = [{ id: kitchenId, name: 'Kitchen', privateNote: null }];
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+      roomsJson: JSON.stringify(rooms),
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T12:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        rooms,
+      },
+      lineItems: [
+        {
+          id: 'li-1',
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          roomId: kitchenId,
+        },
+      ],
+    });
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([
+          {
+            name: 'Cabinets',
+            quantity: 14,
+            unitPriceCents: null,
+            roomId: kitchenId,
+          },
+        ]),
+        totalCents: 0,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledWith('srv-q1', {
+      lineItems: [
+        {
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          roomId: kitchenId,
+        },
+      ],
+      totalCents: 0,
+      rooms: [{ id: kitchenId, name: 'Kitchen' }],
     });
   });
 

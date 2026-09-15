@@ -136,7 +136,7 @@ export default function QuotesScreen(): JSX.Element {
               getVoiceStatus,
               fetchQuote,
               getDraftLineItems,
-              async markDraftReady(_quote, lineItemsJson, clientSentence) {
+              async markDraftReady(_quote, lineItemsJson, clientSentence, roomsJson) {
                 const ready = draftReadyLocalFields(lineItemsJson);
                 await database.write(async () => {
                   // Write line items JSON to the draft record BEFORE updating quote status
@@ -154,10 +154,13 @@ export default function QuotesScreen(): JSX.Element {
                     if (clientSentence !== undefined) {
                       r.clientSentence = clientSentence;
                     }
+                    if (roomsJson) {
+                      r.roomsJson = roomsJson;
+                    }
                   });
                 });
               },
-              async markFailed(_quote, lineItemsJson, clientSentence) {
+              async markFailed(_quote, lineItemsJson, clientSentence, roomsJson) {
                 const failed = draftFailedLocalFields(lineItemsJson);
                 await database.write(async () => {
                   const draftCollection = database.get<Draft>('drafts');
@@ -172,6 +175,9 @@ export default function QuotesScreen(): JSX.Element {
                     r.totalCents = failed.totalCents;
                     if (clientSentence !== undefined) {
                       r.clientSentence = clientSentence;
+                    }
+                    if (roomsJson) {
+                      r.roomsJson = roomsJson;
                     }
                   });
                 });

@@ -81,6 +81,23 @@ import {
   OPTION_IN_TOTAL_LABEL,
   OPTION_USE_FOR_TOTAL_LABEL,
 } from '../../../src/quotes/option-groups';
+import {
+  ADD_ROOM_LABEL,
+  ADD_ROOM_PLACEHOLDER,
+  ROOM_ADD_ITEM_LABEL,
+  ROOM_MOVE_LABEL,
+  ROOM_NOTE_ADD,
+  ROOM_UNGROUPED_CHOICE,
+  UNGROUPED_ROOM_LABEL,
+  addRoom,
+  assignLineRoom,
+  draftListRows,
+  parseRoomsJson,
+  rowIndexForLineIndex,
+  serializeRooms,
+  updateRoomPrivateNote,
+  type QuoteRoom,
+} from '../../../src/quotes/rooms';
 import { typedPriceSource } from '../../../src/utils/price-source';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 import { RESUME_KIND_DRAFT } from '../../../src/quotes/resume-checkpoint';
@@ -101,6 +118,11 @@ export default function DraftScreen(): JSX.Element {
   const [phone, setPhone] = useState('');
   const [privateNote, setPrivateNote] = useState('');
   const [clientSentence, setClientSentence] = useState('');
+  const [rooms, setRooms] = useState<QuoteRoom[]>([]);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [addToRoomId, setAddToRoomId] = useState<string | null>(null);
+  const [roomPickerIndex, setRoomPickerIndex] = useState<number | null>(null);
+  const [roomNoteId, setRoomNoteId] = useState<string | null>(null);
   const [priceEditIndex, setPriceEditIndex] = useState<number | null>(null);
   const [lineNoteIndex, setLineNoteIndex] = useState<number | null>(null);
   const [alternateForIndex, setAlternateForIndex] = useState<number | null>(null);
@@ -149,6 +171,16 @@ export default function DraftScreen(): JSX.Element {
       });
     }, PHONE_SYNC_DEBOUNCE_MS),
   ).current;
+  const roomsSync = useRef(
+    createLatestDebouncer(async (value: { quoteId: string; rooms: QuoteRoom[] }) => {
+      await enqueue({
+        entityType: 'quote',
+        entityId: value.quoteId,
+        action: 'update',
+        payload: { rooms: value.rooms },
+      });
+    }, PHONE_SYNC_DEBOUNCE_MS),
+  ).current;
 
   // Load quote + draft on mount. Voice/hydrate usually already wrote a draft;
   // create an empty one if missing so catalog add works on ai_failed quotes.
@@ -178,6 +210,7 @@ export default function DraftScreen(): JSX.Element {
         setPhone(q.customerPhone ?? '');
         setPrivateNote(q.privateNote ?? '');
         setClientSentence(q.clientSentence ?? '');
+        setRooms(parseRoomsJson(q.roomsJson));
         const draftCollection = database.get<Draft>('drafts');
         const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
         if (cancelled) return;
@@ -300,10 +333,12 @@ export default function DraftScreen(): JSX.Element {
         confidenceTier(item.confidence) === 'needs_input',
     );
     if (firstRedIndex > 0) {
+      const rows = draftListRows(rooms, lineItems);
+      const rowIndex = rowIndexForLineIndex(rows, firstRedIndex);
       const timer = setTimeout(() => {
         try {
           flatListRef.current?.scrollToIndex({
-            index: firstRedIndex,
+            index: rowIndex >= 0 ? rowIndex : firstRedIndex,
             animated: true,
             viewPosition: 0.3,
           });
@@ -323,9 +358,10 @@ export default function DraftScreen(): JSX.Element {
         clearTimeout(undoTimerRef.current);
       }
       void phoneSync.flush();
-      void noteSync.flush();
+      void sentenceSync.flush();
+      void roomsSync.flush();
     };
-  }, [phoneSync, noteSync]);
+  }, [phoneSync, noteSync, sentenceSync, roomsSync]);
 
   function rejectFrozenMoneyWrite(): boolean {
     const status = quote?.status ?? quoteStatus;
@@ -532,7 +568,7 @@ export default function DraftScreen(): JSX.Element {
       name: catalogItem.name,
       unitPriceCents: catalogItem.unitPriceCents,
       unit: catalogItems.find((c) => c.id === catalogItem.id)?.unit,
-    });
+    }, addToRoomId);
     const newTotal = recalculateTotal(newItems);
     await database.write(async () => {
       await draft.update((r) => {
@@ -549,6 +585,7 @@ export default function DraftScreen(): JSX.Element {
       payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
     });
     setShowCatalogPicker(false);
+    setAddToRoomId(null);
   }
 
   function handlePrivateNoteChange(text: string): void {
@@ -581,6 +618,45 @@ export default function DraftScreen(): JSX.Element {
         r.clientSentence = normalizeClientSentence(text);
       });
     });
+  }
+
+  async function persistRooms(next: QuoteRoom[]): Promise<void> {
+    if (!quote) return;
+    setRooms(next);
+    await database.write(async () => {
+      await quote.update((r) => {
+        r.roomsJson = serializeRooms(next);
+      });
+    });
+    roomsSync.schedule({ quoteId: quote.id, rooms: next });
+  }
+
+  async function handleAddRoom(): Promise<void> {
+    if (!quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const next = addRoom(rooms, newRoomName);
+    if (next === rooms) return;
+    setNewRoomName('');
+    await persistRooms(next);
+  }
+
+  async function handleAssignRoom(index: number, roomId: string | null): Promise<void> {
+    if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const newItems = assignLineRoom(lineItems, index, roomId);
+    await persistLineItems(newItems);
+    setRoomPickerIndex(null);
+  }
+
+  async function handleRoomNoteSave(raw: string | null): Promise<void> {
+    if (!quote || roomNoteId === null) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const next = updateRoomPrivateNote(rooms, roomNoteId, normalizePrivateNote(raw));
+    await persistRooms(next);
+    setRoomNoteId(null);
   }
 
   async function handleLineNoteSave(raw: string | null): Promise<void> {
@@ -706,6 +782,7 @@ export default function DraftScreen(): JSX.Element {
         // SMS/PDF/approval MUST use toCustomerQuotePayload (allowlist).
         privateNote: normalizePrivateNote(privateNote),
         clientSentence: normalizeClientSentence(clientSentence),
+        rooms,
         lineItems: lineItems.map(toContractorLineItemSync),
       },
     });
@@ -731,6 +808,7 @@ export default function DraftScreen(): JSX.Element {
 
   const sendEnabled = canSend(lineItems.length, phone) && !needsReview;
   const totalDisplay = `$${(recalculateTotal(lineItems) / 100).toFixed(2)}`;
+  const listRows = draftListRows(rooms, lineItems);
 
   return (
     <KeyboardAvoidingView
@@ -739,14 +817,63 @@ export default function DraftScreen(): JSX.Element {
     >
       <FlatList
         ref={flatListRef}
-        data={lineItems}
-        keyExtractor={(_, index) => String(index)}
-        renderItem={({ item, index }) => {
+        data={listRows}
+        keyExtractor={(row, index) =>
+          row.kind === 'line' ? `line-${row.index}` : `${row.kind}-${index}`
+        }
+        renderItem={({ item: row }) => {
+          if (row.kind === 'room') {
+            return (
+              <View style={styles.roomHeader}>
+                <Text style={styles.roomHeaderTitle}>{row.room.name}</Text>
+                <View style={styles.roomHeaderActions}>
+                  <Pressable
+                    onPress={() => {
+                      setAddToRoomId(row.room.id);
+                      setShowCatalogPicker(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${ROOM_ADD_ITEM_LABEL} in ${row.room.name}`}
+                    style={styles.roomHeaderButton}
+                  >
+                    <Text style={styles.roomHeaderButtonText}>{ROOM_ADD_ITEM_LABEL}</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setRoomNoteId(row.room.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      row.room.privateNote
+                        ? `Edit room note. ${PRIVATE_NOTE_INTERNAL_HINT}`
+                        : `${ROOM_NOTE_ADD}. ${PRIVATE_NOTE_INTERNAL_HINT}`
+                    }
+                    style={styles.roomHeaderButton}
+                  >
+                    <Text style={styles.roomHeaderButtonText}>
+                      {row.room.privateNote ? 'Room note' : ROOM_NOTE_ADD}
+                    </Text>
+                  </Pressable>
+                </View>
+                {row.room.privateNote ? (
+                  <Text style={styles.lineNoteHint}>{row.room.privateNote}</Text>
+                ) : null}
+              </View>
+            );
+          }
+          if (row.kind === 'ungrouped') {
+            return (
+              <View style={styles.roomHeader}>
+                <Text style={styles.roomHeaderTitle}>{UNGROUPED_ROOM_LABEL}</Text>
+              </View>
+            );
+          }
+          const item = row.item;
+          const index = row.index;
           const priceUnknown = isUnknownUnitPrice(item.unitPriceCents);
           const tier = priceUnknown ? 'needs_input' : confidenceTier(item.confidence);
           const displayTier = tier === 'clean' ? undefined : tier;
           const paired = Boolean(item.optionGroupId);
           const isAlt = item.optionRole === 'alt';
+          const assignedRoom = rooms.find((room) => room.id === item.roomId);
           return (
             <View style={isAlt ? styles.altBlock : undefined}>
               <LineItemRow
@@ -760,6 +887,45 @@ export default function DraftScreen(): JSX.Element {
                 onPricePress={() => setPriceEditIndex(index)}
                 onDelete={() => { void handleDeleteItem(index); }}
               />
+              {rooms.length > 0 ? (
+                <View style={styles.roomAssign}>
+                  <Pressable
+                    onPress={() =>
+                      setRoomPickerIndex(roomPickerIndex === index ? null : index)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${ROOM_MOVE_LABEL} ${item.name}`}
+                    style={styles.roomAssignButton}
+                  >
+                    <Text style={styles.roomAssignText}>
+                      {`${ROOM_MOVE_LABEL}: ${assignedRoom?.name ?? ROOM_UNGROUPED_CHOICE}`}
+                    </Text>
+                  </Pressable>
+                  {roomPickerIndex === index ? (
+                    <View style={styles.roomPicker}>
+                      <Pressable
+                        onPress={() => { void handleAssignRoom(index, null); }}
+                        accessibilityRole="button"
+                        accessibilityLabel={ROOM_UNGROUPED_CHOICE}
+                        style={styles.roomPickerChoice}
+                      >
+                        <Text style={styles.roomPickerChoiceText}>{ROOM_UNGROUPED_CHOICE}</Text>
+                      </Pressable>
+                      {rooms.map((room) => (
+                        <Pressable
+                          key={room.id}
+                          onPress={() => { void handleAssignRoom(index, room.id); }}
+                          accessibilityRole="button"
+                          accessibilityLabel={room.name}
+                          style={styles.roomPickerChoice}
+                        >
+                          <Text style={styles.roomPickerChoiceText}>{room.name}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
               {paired ? (
                 <View style={styles.optionRow}>
                   <Text style={[styles.optionBadge, isAlt && styles.optionBadgeAlt]}>
@@ -849,6 +1015,27 @@ export default function DraftScreen(): JSX.Element {
               onChangeText={handleClientSentenceChange}
               onBlur={() => { void sentenceSync.flush(); }}
             />
+            <View style={styles.addRoomRow}>
+              <TextInput
+                style={styles.addRoomInput}
+                value={newRoomName}
+                onChangeText={setNewRoomName}
+                placeholder={ADD_ROOM_PLACEHOLDER}
+                placeholderTextColor={colors.mutedText}
+                maxLength={80}
+                returnKeyType="done"
+                onSubmitEditing={() => { void handleAddRoom(); }}
+                accessibilityLabel={ADD_ROOM_PLACEHOLDER}
+              />
+              <Pressable
+                style={styles.addRoomButton}
+                onPress={() => { void handleAddRoom(); }}
+                accessibilityRole="button"
+                accessibilityLabel={ADD_ROOM_LABEL}
+              >
+                <Text style={styles.addRoomButtonText}>{ADD_ROOM_LABEL}</Text>
+              </Pressable>
+            </View>
           </>
         }
         ListEmptyComponent={
@@ -858,7 +1045,10 @@ export default function DraftScreen(): JSX.Element {
           <>
             <Pressable
               style={styles.addItemButton}
-              onPress={() => setShowCatalogPicker(true)}
+              onPress={() => {
+                setAddToRoomId(null);
+                setShowCatalogPicker(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Add item from catalog"
             >
@@ -936,6 +1126,14 @@ export default function DraftScreen(): JSX.Element {
         onDismiss={() => setLineNoteIndex(null)}
       />
 
+      <PrivateNoteSheet
+        visible={roomNoteId !== null}
+        lineName={rooms.find((room) => room.id === roomNoteId)?.name ?? ''}
+        currentNote={rooms.find((room) => room.id === roomNoteId)?.privateNote ?? null}
+        onSave={(note) => { void handleRoomNoteSave(note); }}
+        onDismiss={() => setRoomNoteId(null)}
+      />
+
       <AlternateOptionSheet
         visible={alternateForIndex !== null}
         baseName={alternateForIndex !== null ? lineItems[alternateForIndex]?.name ?? '' : ''}
@@ -947,7 +1145,10 @@ export default function DraftScreen(): JSX.Element {
         visible={showCatalogPicker}
         items={catalogItems.map((c) => ({ id: c.id, name: c.name, unitPriceCents: c.unitPriceCents }))}
         onSelect={(item) => { void handleAddItem(item); }}
-        onDismiss={() => setShowCatalogPicker(false)}
+        onDismiss={() => {
+          setShowCatalogPicker(false);
+          setAddToRoomId(null);
+        }}
       />
 
       <UndoToast
@@ -987,6 +1188,86 @@ const styles = StyleSheet.create({
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
     color: colors.accent,
+  },
+  addRoomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  addRoomInput: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    fontSize: typography.body.fontSize,
+    color: '#000000',
+  },
+  addRoomButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  addRoomButtonText: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  roomHeader: {
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  roomHeaderTitle: {
+    fontSize: typography.body.fontSize,
+    fontWeight: '700',
+    lineHeight: typography.body.lineHeight,
+    color: '#000000',
+  },
+  roomHeaderActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  roomHeaderButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  roomHeaderButtonText: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  roomAssign: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.dominant,
+  },
+  roomAssignButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  roomAssignText: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  roomPicker: {
+    gap: 0,
+  },
+  roomPickerChoice: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  roomPickerChoiceText: {
+    fontSize: typography.label.fontSize,
+    color: '#000000',
   },
   lineNoteButton: {
     paddingHorizontal: spacing.md,

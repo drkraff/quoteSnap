@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 6,
+  version: 7,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -23,6 +23,9 @@ export const schema = appSchema({
         { name: 'private_note', type: 'string', isOptional: true },
         // Customer-facing scope / assumptions (design §8). Include on PDF/SMS.
         { name: 'client_sentence', type: 'string', isOptional: true },
+        // Thin rooms/zones (design §6.1 / §8). JSON: [{id, name, privateNote?}].
+        // Empty/null = single-memo / ungrouped. Line roomId lives in draft JSON.
+        { name: 'rooms_json', type: 'string', isOptional: true },
       ],
     }),
     tableSchema({
@@ -45,7 +48,7 @@ export const schema = appSchema({
       columns: [
         { name: 'quote_id', type: 'string' },
         { name: 'line_items_json', type: 'string' },
-        // JSON: name, qty, unitPriceCents, optional unit/confidence/privateNote/priceSource/optionGroupId/optionRole.
+        // JSON: name, qty, unitPriceCents, optional unit/confidence/privateNote/priceSource/optionGroupId/optionRole/roomId.
         // Leftover unused v1 column. Do not store private notes here —
         // job notes live on quotes.private_note; line notes in line_items_json.
         { name: 'notes', type: 'string', isOptional: true },

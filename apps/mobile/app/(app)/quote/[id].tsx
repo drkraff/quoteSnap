@@ -19,6 +19,7 @@ import {
   remoteLineItemsToDraftJson,
   type QuoteDetailSnapshot,
 } from '../../../src/quotes/load-quote-detail';
+import { serializeRooms } from '../../../src/quotes/rooms';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
@@ -74,6 +75,7 @@ export default function QuoteDetailScreen(): JSX.Element {
               await q.update((record) => {
                 record.privateNote = remoteQuote.privateNote ?? null;
                 record.clientSentence = remoteQuote.clientSentence ?? null;
+                record.roomsJson = serializeRooms(remoteQuote.rooms ?? []);
               });
             });
           } catch {

@@ -12,6 +12,7 @@ export type CustomerLineItemPayload = {
   quantity: number;
   unitPriceCents: number | null;
   unit: string | null;
+  roomName: string | null;
 };
 
 export type CustomerQuotePayload = {
@@ -22,7 +23,7 @@ export type CustomerQuotePayload = {
 };
 
 const CUSTOMER_QUOTE_KEYS = ['customerPhone', 'totalCents', 'clientSentence', 'lineItems'] as const;
-const CUSTOMER_LINE_KEYS = ['name', 'quantity', 'unitPriceCents', 'unit'] as const;
+const CUSTOMER_LINE_KEYS = ['name', 'quantity', 'unitPriceCents', 'unit', 'roomName'] as const;
 
 export type CustomerQuoteSource = {
   customerPhone: string | null;
@@ -39,7 +40,10 @@ export type CustomerQuoteSource = {
     notes?: string | null;
     optionGroupId?: string | null;
     optionRole?: string | null;
+    roomId?: string | null;
+    roomName?: string | null;
   }[];
+  rooms?: { id: string; name: string; privateNote?: string | null }[];
 };
 
 export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuotePayload {
@@ -54,6 +58,10 @@ export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuo
         quantity: item.quantity,
         unitPriceCents: item.unitPriceCents,
         unit: item.unit ?? null,
+        roomName:
+          item.roomName
+          ?? source.rooms?.find((room) => room.id === item.roomId)?.name
+          ?? null,
       })),
   };
 }
@@ -96,6 +104,7 @@ export function toContractorLineItemSync(item: {
   priceSource?: string | null;
   optionGroupId?: string | null;
   optionRole?: string | null;
+  roomId?: string | null;
 }): {
   name: string;
   quantity: number;
@@ -105,6 +114,7 @@ export function toContractorLineItemSync(item: {
   priceSource?: string;
   optionGroupId?: string;
   optionRole?: string;
+  roomId?: string | null;
 } {
   return {
     name: item.name,
@@ -116,5 +126,6 @@ export function toContractorLineItemSync(item: {
     ...(item.optionGroupId && item.optionRole
       ? { optionGroupId: item.optionGroupId, optionRole: item.optionRole }
       : {}),
+    ...(item.roomId ? { roomId: item.roomId } : {}),
   };
 }

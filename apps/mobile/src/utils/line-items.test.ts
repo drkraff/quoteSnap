@@ -300,6 +300,29 @@ describe('adhoc / unknown prices', () => {
       )[0]!.optionRole,
     ).toBeUndefined();
   });
+
+  it('round-trips roomId on draft JSON and keeps ungrouped lines without one', () => {
+    const kitchenId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const json = JSON.stringify([
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        roomId: kitchenId,
+      },
+      { catalogItemId: '', name: 'Labor', quantity: 2, unitPriceCents: 7500 },
+    ]);
+    const parsed = parseLineItems(json);
+    expect(parsed[0]!.roomId).toBe(kitchenId);
+    expect(parsed[1]!.roomId).toBeUndefined();
+    expect(parsed[0]!.unitPriceCents).toBeNull();
+    expect(
+      parseLineItems(
+        JSON.stringify([{ name: 'X', quantity: 1, unitPriceCents: 1, roomId: 'kitchen' }]),
+      )[0]!.roomId,
+    ).toBeUndefined();
+  });
 });
 
 describe('addAlternate / selectOptionForTotal / dissolve', () => {

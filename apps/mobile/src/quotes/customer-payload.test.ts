@@ -39,6 +39,7 @@ describe('toCustomerQuotePayload', () => {
           quantity: 3,
           unitPriceCents: 25000,
           unit: 'each',
+          roomName: null,
         },
       ],
     });
@@ -108,12 +109,44 @@ describe('toCustomerQuotePayload', () => {
         quantity: 1,
         unitPriceCents: 180000,
         unit: 'job',
+        roomName: null,
       },
     ]);
     expect(payload.totalCents).toBe(180000);
     expect(payload.clientSentence).toBeNull();
     expect(JSON.stringify(payload)).not.toContain('Keep the tub');
     expect(JSON.stringify(payload)).not.toContain('optionRole');
+  });
+
+  it('includes a customer-facing room name and drops room private notes', () => {
+    const kitchenId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const payload = toCustomerQuotePayload({
+      customerPhone: '+15555550100',
+      totalCents: 0,
+      rooms: [
+        {
+          id: kitchenId,
+          name: 'Kitchen',
+          privateNote: "don't tell the client about the neighbor pipe",
+        },
+      ],
+      lineItems: [
+        {
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          unit: 'foot',
+          roomId: kitchenId,
+        },
+      ],
+    });
+    expect(payload.lineItems[0]!.roomName).toBe('Kitchen');
+    expect(payload.lineItems[0]!.unitPriceCents).toBeNull();
+    const json = JSON.stringify(payload);
+    expect(json).not.toContain("don't tell the client");
+    expect(json).not.toContain('privateNote');
+    expect(json).not.toContain(kitchenId);
+    expect(json).toContain('Kitchen');
   });
 });
 
@@ -174,6 +207,26 @@ describe('toContractorLineItemSync', () => {
       privateNote: null,
       optionGroupId: groupId,
       optionRole: 'alt',
+    });
+  });
+
+  it('keeps roomId on the contractor PUT so room grouping round-trips', () => {
+    const kitchenId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    expect(
+      toContractorLineItemSync({
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        unit: 'foot',
+        roomId: kitchenId,
+      }),
+    ).toEqual({
+      name: 'Cabinets',
+      quantity: 14,
+      unitPriceCents: 0,
+      unit: 'foot',
+      privateNote: null,
+      roomId: kitchenId,
     });
   });
 });

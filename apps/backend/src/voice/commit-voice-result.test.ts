@@ -47,9 +47,10 @@ describe("replaceVoiceQuoteLines", () => {
       0.9,
       "foot",
       "catalog",
+      null,
     ]);
     assert.equal(calls[2]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
-    assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, null, "quote-1"]);
+    assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, null, null, "quote-1"]);
   });
 
   it("writes ai_failed + mapping stage for a partial FAIL-05 draft and stores 0 cents for blank prices", async () => {
@@ -88,8 +89,9 @@ describe("replaceVoiceQuoteLines", () => {
       0.59,
       "job",
       "unknown",
+      null,
     ]);
-    assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", null, "quote-2"]);
+    assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", null, null, "quote-2"]);
   });
 
   it("writes joined extract assumptions into client_sentence", async () => {
@@ -116,7 +118,59 @@ describe("replaceVoiceQuoteLines", () => {
       0,
       null,
       "appliances not included",
+      null,
       "quote-3",
+    ]);
+  });
+
+  it("writes extracted rooms JSON and line room_id without inventing a price", async () => {
+    const kitchenId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const roomsJson = JSON.stringify([{ id: kitchenId, name: "Kitchen", privateNote: null }]);
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    await replaceVoiceQuoteLines(
+      {
+        query: async (sql, params) => {
+          calls.push({ sql, params });
+        },
+      },
+      {
+        quoteId: "quote-4",
+        status: "draft_local",
+        totalCents: 0,
+        failureStage: null,
+        roomsJson,
+        lineItems: [
+          {
+            catalogItemId: null,
+            name: "Cabinets",
+            quantity: 14,
+            unit: "foot",
+            unitPriceCents: null,
+            confidence: 0.8,
+            priceSource: "unknown",
+            roomId: kitchenId,
+          },
+        ],
+      },
+    );
+    assert.deepEqual(calls[1]!.params, [
+      "quote-4",
+      null,
+      "Cabinets",
+      14,
+      0,
+      0.8,
+      "foot",
+      "unknown",
+      kitchenId,
+    ]);
+    assert.deepEqual(calls[2]!.params, [
+      "draft_local",
+      0,
+      null,
+      null,
+      roomsJson,
+      "quote-4",
     ]);
   });
 });

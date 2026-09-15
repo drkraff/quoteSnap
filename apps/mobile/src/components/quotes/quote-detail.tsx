@@ -13,6 +13,7 @@ import {
   OPTION_ALTERNATE_LABEL,
   OPTION_IN_TOTAL_LABEL,
 } from '../../quotes/option-groups';
+import { draftListRows, UNGROUPED_ROOM_LABEL } from '../../quotes/rooms';
 
 interface LineItemDisplay {
   id: string;
@@ -24,6 +25,7 @@ interface LineItemDisplay {
   priceSource?: string | null;
   optionGroupId?: string | null;
   optionRole?: string | null;
+  roomId?: string | null;
 }
 
 interface QuoteDetailProps {
@@ -35,6 +37,7 @@ interface QuoteDetailProps {
     sentAt: string | null;
     privateNote?: string | null;
     clientSentence?: string | null;
+    rooms?: { id: string; name: string; privateNote?: string | null }[];
   };
   lineItems: LineItemDisplay[];
 }
@@ -43,8 +46,23 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
   const totalDisplay = `$${(quote.totalCents / 100).toFixed(2)}`;
   const createdDate = formatRelativeDate(new Date(quote.createdAt));
   const phone = quote.customerPhone || 'No phone';
+  const groupedRows = draftListRows(
+    quote.rooms ?? [],
+    lineItems.map((item) => ({
+      catalogItemId: '',
+      name: item.name,
+      quantity: item.quantity,
+      unitPriceCents: item.unitPriceCents,
+      unit: item.unit,
+      privateNote: item.privateNote,
+      priceSource: undefined,
+      optionGroupId: item.optionGroupId ?? undefined,
+      optionRole: item.optionRole === 'base' || item.optionRole === 'alt' ? item.optionRole : undefined,
+      roomId: item.roomId ?? undefined,
+    })),
+  );
 
-  function renderLineItem({ item }: { item: LineItemDisplay }): JSX.Element {
+  function renderLineItem(item: LineItemDisplay): JSX.Element {
     const priceUnknown = isUnknownUnitPrice(item.unitPriceCents);
     const flag = draftPriceFlag(item.priceSource, item.unitPriceCents);
     const sourceLabel = draftPriceSourceLabel(flag);
@@ -120,11 +138,33 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
         </View>
       ) : null}
 
-      {/* Line items */}
+      {/* Line items grouped by room when rooms exist; single-memo stays flat. */}
       <FlatList
-        data={lineItems}
-        keyExtractor={(item) => item.id}
-        renderItem={renderLineItem}
+        data={groupedRows}
+        keyExtractor={(row, index) =>
+          row.kind === 'line' ? `line-${row.index}` : `${row.kind}-${index}`
+        }
+        renderItem={({ item: row }) => {
+          if (row.kind === 'room') {
+            return (
+              <View style={styles.roomHeader}>
+                <Text style={styles.roomHeaderText}>{row.room.name}</Text>
+                {row.room.privateNote ? (
+                  <Text style={styles.internalHint}>{row.room.privateNote}</Text>
+                ) : null}
+              </View>
+            );
+          }
+          if (row.kind === 'ungrouped') {
+            return (
+              <View style={styles.roomHeader}>
+                <Text style={styles.roomHeaderText}>{UNGROUPED_ROOM_LABEL}</Text>
+              </View>
+            );
+          }
+          const display = lineItems[row.index];
+          return display ? renderLineItem(display) : <View />;
+        }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           <Text style={styles.emptyText}>No items</Text>
@@ -282,6 +322,18 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     backgroundColor: colors.dominant,
     gap: spacing.xs,
+  },
+  roomHeader: {
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: 2,
+  },
+  roomHeaderText: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    lineHeight: typography.label.lineHeight,
+    color: '#333333',
   },
   lineNote: {
     paddingHorizontal: spacing.md,

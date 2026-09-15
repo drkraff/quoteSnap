@@ -28,6 +28,7 @@ function line(overrides: Partial<BuiltVoiceLine> = {}): BuiltVoiceLine {
     spokenUnitPriceCents: null,
     catalogUnitPriceCents: null,
     confidence: 0.8,
+    roomName: null,
     ...overrides,
   };
 }
