@@ -79,11 +79,15 @@ import {
 import { normalizeClientSentence } from '../../../src/quotes/client-sentence';
 import { toContractorLineItemSync } from '../../../src/quotes/customer-payload';
 import {
+  SHARE_QUOTE_ALERT_CANNOT,
+  SHARE_QUOTE_ALERT_FAILED,
   SHARE_QUOTE_EMPTY,
+  SHARE_QUOTE_FAILED,
   SHARE_QUOTE_LABEL,
-  shareCustomerQuote,
+  alertForFailedShare,
+  hasCustomerFacingLines,
 } from '../../../src/quotes/share-customer-quote';
-import { markQuoteSentAfterShare } from '../../../src/quotes/mark-quote-sent';
+import { shareCustomerQuoteAndMarkSent } from '../../../src/quotes/share-and-mark-sent';
 import {
   ADD_ALTERNATE_LABEL,
   OPTION_ALTERNATE_LABEL,
@@ -906,9 +910,8 @@ export default function DraftScreen(): JSX.Element {
 
   async function handleSharePress(): Promise<void> {
     if (sharing) return;
-    const selectedCount = lineItems.filter((item) => item.optionRole !== 'alt').length;
-    if (selectedCount < 1) {
-      Alert.alert('Cannot share', SHARE_QUOTE_EMPTY);
+    if (!hasCustomerFacingLines(lineItems)) {
+      Alert.alert(SHARE_QUOTE_ALERT_CANNOT, SHARE_QUOTE_EMPTY);
       return;
     }
     setSharing(true);
@@ -918,7 +921,7 @@ export default function DraftScreen(): JSX.Element {
       await sentenceSync.flush();
       await roomsSync.flush();
       const contractor = useAuthStore.getState().contractor;
-      const result = await shareCustomerQuote(
+      const { share } = await shareCustomerQuoteAndMarkSent(
         {
           customerPhone: phone || null,
           totalCents: recalculateTotal(lineItems),
@@ -928,18 +931,18 @@ export default function DraftScreen(): JSX.Element {
           photos,
           lineItems,
         },
+        quote,
         {
           displayName: contractor?.displayName,
           trade: contractor?.trade,
         },
       );
-      if (!result.ok) {
-        Alert.alert('Cannot share', result.message);
-        return;
+      if (!share.ok) {
+        const alert = alertForFailedShare(share);
+        Alert.alert(alert.title, alert.message);
       }
-      if (quote) {
-        await markQuoteSentAfterShare(quote);
-      }
+    } catch {
+      Alert.alert(SHARE_QUOTE_ALERT_FAILED, SHARE_QUOTE_FAILED);
     } finally {
       setSharing(false);
     }
