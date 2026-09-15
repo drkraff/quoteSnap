@@ -1,4 +1,5 @@
 import {
+  CUSTOMER_ASSUMPTIONS_HEADING,
   customerQuoteToDocument,
   escapeHtml,
   formatCustomerDisplayName,
@@ -6,6 +7,7 @@ import {
   formatCustomerTrade,
   groupCustomerLines,
 } from './customer-document';
+import { CLIENT_SENTENCE_PLACEHOLDER } from './client-sentence';
 import {
   customerPayloadHasPrivateNoteKey,
   toCustomerQuotePayload,
@@ -40,11 +42,43 @@ describe('customerQuoteToDocument', () => {
     expect(doc.clientSentence).toBe('Appliances and decorative lighting not included.');
     expect(doc.html).toContain('Ada');
     expect(doc.html).toContain('Plumbing');
+    expect(doc.html).toContain(CUSTOMER_ASSUMPTIONS_HEADING);
     expect(doc.html).toContain('Appliances and decorative lighting not included.');
     expect(doc.text).toContain('Ada');
     expect(doc.text).toContain('Plumbing');
+    expect(doc.text).toContain(CUSTOMER_ASSUMPTIONS_HEADING);
     expect(doc.text).toContain('Appliances and decorative lighting not included.');
     expect(doc.filename).toBe('QuoteSnap-quote.pdf');
+  });
+
+  it('omits an empty client sentence and does not invent job-scope copy', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 25000,
+      clientSentence: '   ',
+      privateNote: SECRET_JOB,
+      lineItems: [
+        {
+          name: 'Replace outlet',
+          quantity: 1,
+          unitPriceCents: 25000,
+          unit: 'each',
+          privateNote: SECRET_LINE,
+        },
+      ],
+    });
+    expect(payload.clientSentence).toBeNull();
+    const doc = customerQuoteToDocument(payload);
+    expect(doc.clientSentence).toBeNull();
+    const haystack = `${doc.html}\n${doc.text}`;
+    expect(haystack).toContain('Replace outlet');
+    expect(haystack.toLowerCase()).not.toContain('assumptions');
+    expect(haystack).not.toContain('class="sentence"');
+    expect(haystack).not.toContain(CLIENT_SENTENCE_PLACEHOLDER);
+    expect(haystack).not.toContain('Appliances and decorative lighting not included.');
+    expect(haystack).not.toContain(SECRET_JOB);
+    expect(haystack).not.toContain(SECRET_LINE);
+    expect(haystack).not.toContain('privateNote');
   });
 
   it('never copies private notes, leftover notes, photos, or alts into html/text', () => {
@@ -96,6 +130,7 @@ describe('customerQuoteToDocument', () => {
     const doc = customerQuoteToDocument(payload, { displayName: 'Ada', trade: 'hvac' });
     const haystack = `${doc.html}\n${doc.text}`;
     expect(haystack).toContain('Appliances not included.');
+    expect(haystack).toContain(CUSTOMER_ASSUMPTIONS_HEADING);
     expect(haystack).toContain('Walk-in shower');
     expect(haystack).toContain('Kitchen');
     expect(haystack).toContain('$1800.00');

@@ -3,9 +3,12 @@
  * Do not spread QuoteResponse / QuoteRow — those include privateNote for
  * the authenticated contractor API (hydrate + draft sync).
  *
- * Client-facing scope (clientSentence) is on the allowlist. Private notes
+ * Client-facing scope (clientSentence) is on the allowlist. Empty / whitespace
+ * becomes null — never a placeholder that invents job scope. Private notes
  * are a different object (design #9) and must never be copied here.
  */
+
+import { normalizeClientSentence } from "./client-sentence.js";
 
 export type CustomerLineItemPayload = {
   name: string;
@@ -60,7 +63,7 @@ export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuo
   return {
     customerPhone: source.customerPhone,
     totalCents: source.totalCents,
-    clientSentence: source.clientSentence ?? null,
+    clientSentence: normalizeClientSentence(source.clientSentence),
     lineItems: source.lineItems
       .filter((item) => item.optionRole !== "alt")
       .map((item) => ({

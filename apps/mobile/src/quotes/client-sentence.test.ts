@@ -28,6 +28,9 @@ describe('client sentence copy', () => {
     expect(CLIENT_SENTENCE_HINT.toLowerCase()).toContain('customer');
     expect(CLIENT_SENTENCE_HINT.toLowerCase()).toContain('pdf');
     expect(CLIENT_SENTENCE_HINT.toLowerCase()).not.toContain('internal');
-    expect(CLIENT_SENTENCE_PLACEHOLDER.toLowerCase()).toContain('not included');
+    expect(CLIENT_SENTENCE_PLACEHOLDER.toLowerCase()).toContain('blank');
+    expect(CLIENT_SENTENCE_PLACEHOLDER.toLowerCase()).not.toContain('appliances');
+    expect(CLIENT_SENTENCE_PLACEHOLDER.toLowerCase()).not.toContain('not included');
+    expect(CLIENT_SENTENCE_PLACEHOLDER.toLowerCase()).not.toContain('lighting');
   });
 });

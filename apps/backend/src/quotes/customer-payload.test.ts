@@ -86,6 +86,39 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(JSON.stringify(payload).includes(SECRET_JOB), false);
   });
 
+  it("maps empty / whitespace clientSentence to null (does not invent job scope)", () => {
+    const empty = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 25000,
+      clientSentence: "   ",
+      privateNote: SECRET_JOB,
+      lineItems: [
+        {
+          name: "Replace outlet",
+          quantity: 1,
+          unitPriceCents: 25000,
+          unit: "each",
+          privateNote: SECRET_LINE,
+        },
+      ],
+    });
+    assert.equal(empty.clientSentence, null);
+    const json = JSON.stringify(empty);
+    assert.equal(json.includes(SECRET_JOB), false);
+    assert.equal(json.includes(SECRET_LINE), false);
+    assert.equal(json.includes("Appliances"), false);
+    assert.equal(json.includes("not included"), false);
+
+    const omitted = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 25000,
+      lineItems: [
+        { name: "Replace outlet", quantity: 1, unitPriceCents: 25000, unit: "each" },
+      ],
+    });
+    assert.equal(omitted.clientSentence, null);
+  });
+
   it("omits the unselected alt from the customer payload (totals stay selected-only)", () => {
     const groupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const payload = toCustomerQuotePayload({
