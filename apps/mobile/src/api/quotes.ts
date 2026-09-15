@@ -26,6 +26,10 @@ export interface QuoteLineItemResponse {
   privateNote?: string | null;
   /** Snapshot provenance from attach or contractor edit. */
   priceSource?: string | null;
+  /** Shared UUID for a thin base+alternate pair. */
+  optionGroupId?: string | null;
+  /** base = in the quote total; alt = visible, excluded from total. */
+  optionRole?: string | null;
 }
 
 export interface QuoteListItem extends QuoteResponse {
@@ -83,6 +87,8 @@ export async function updateQuoteOnServer(
       unit?: string | null;
       privateNote?: string | null;
       priceSource?: string | null;
+      optionGroupId?: string | null;
+      optionRole?: string | null;
     }[];
   },
 ): Promise<QuoteResponse> {

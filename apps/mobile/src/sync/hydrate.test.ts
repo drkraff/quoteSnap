@@ -159,6 +159,43 @@ describe('toDraftLineItems', () => {
       },
     ]);
   });
+
+  it('keeps optionGroupId + optionRole on hydrate draft JSON', () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const items = toDraftLineItems(
+      [
+        {
+          id: 'li-1',
+          name: 'Walk-in shower',
+          quantity: 1,
+          unitPriceCents: 180000,
+          catalogItemId: null,
+          optionGroupId: groupId,
+          optionRole: 'base',
+        },
+        {
+          id: 'li-2',
+          name: 'Keep the tub',
+          quantity: 1,
+          unitPriceCents: 45000,
+          catalogItemId: null,
+          optionGroupId: groupId,
+          optionRole: 'alt',
+        },
+      ],
+      new Map(),
+    );
+    expect(items[0]).toMatchObject({
+      name: 'Walk-in shower',
+      optionGroupId: groupId,
+      optionRole: 'base',
+    });
+    expect(items[1]).toMatchObject({
+      name: 'Keep the tub',
+      optionGroupId: groupId,
+      optionRole: 'alt',
+    });
+  });
 });
 
 describe('upsertCatalogItems / upsertQuotes', () => {

@@ -1,4 +1,5 @@
 import type { QuoteLineItemResponse } from '../api/quotes';
+import { parseOptionGroupId, parseOptionRole } from '../quotes/option-groups';
 import type { LineItem } from '../utils/line-items';
 import { parsePriceSource } from '../utils/price-source';
 
@@ -29,6 +30,12 @@ export function toDraftLineItems(
     const priceSource = parsePriceSource(item.priceSource);
     if (priceSource) {
       line.priceSource = priceSource;
+    }
+    const optionGroupId = parseOptionGroupId(item.optionGroupId);
+    const optionRole = parseOptionRole(item.optionRole);
+    if (optionGroupId && optionRole) {
+      line.optionGroupId = optionGroupId;
+      line.optionRole = optionRole;
     }
     return line;
   });

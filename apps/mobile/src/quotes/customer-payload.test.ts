@@ -73,6 +73,43 @@ describe('toCustomerQuotePayload', () => {
     expect(payload.totalCents).toBe(0);
     expect(JSON.stringify(payload)).not.toContain(SECRET_JOB);
   });
+
+  it('omits the unselected alt from the customer payload', () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const payload = toCustomerQuotePayload({
+      customerPhone: '+15555550100',
+      totalCents: 180000,
+      lineItems: [
+        {
+          name: 'Walk-in shower',
+          quantity: 1,
+          unitPriceCents: 180000,
+          unit: 'job',
+          optionGroupId: groupId,
+          optionRole: 'base',
+        },
+        {
+          name: 'Keep the tub',
+          quantity: 1,
+          unitPriceCents: 45000,
+          unit: 'job',
+          optionGroupId: groupId,
+          optionRole: 'alt',
+        },
+      ],
+    });
+    expect(payload.lineItems).toEqual([
+      {
+        name: 'Walk-in shower',
+        quantity: 1,
+        unitPriceCents: 180000,
+        unit: 'job',
+      },
+    ]);
+    expect(payload.totalCents).toBe(180000);
+    expect(JSON.stringify(payload)).not.toContain('Keep the tub');
+    expect(JSON.stringify(payload)).not.toContain('optionRole');
+  });
 });
 
 describe('toContractorLineItemSync', () => {
@@ -110,6 +147,28 @@ describe('toContractorLineItemSync', () => {
       unit: 'hour',
       privateNote: null,
       priceSource: 'computed',
+    });
+  });
+
+  it('keeps optionGroupId + optionRole on the contractor PUT so the pair round-trips', () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    expect(
+      toContractorLineItemSync({
+        name: 'Keep the tub',
+        quantity: 1,
+        unitPriceCents: 45000,
+        unit: 'job',
+        optionGroupId: groupId,
+        optionRole: 'alt',
+      }),
+    ).toEqual({
+      name: 'Keep the tub',
+      quantity: 1,
+      unitPriceCents: 45000,
+      unit: 'job',
+      privateNote: null,
+      optionGroupId: groupId,
+      optionRole: 'alt',
     });
   });
 });

@@ -1,4 +1,11 @@
 import { parseCatalogUnit } from '../catalog/units';
+import {
+  lineContributesToTotal,
+  newOptionGroupId,
+  parseOptionGroupId,
+  parseOptionRole,
+  type OptionRole,
+} from '../quotes/option-groups';
 import { parsePriceSource, typedPriceSource, type PriceSource } from './price-source';
 
 export interface LineItem {
@@ -12,6 +19,10 @@ export interface LineItem {
   privateNote?: string | null;
   /** Snapshot provenance: spoken | catalog | learned | computed | unknown | known. */
   priceSource?: PriceSource;
+  /** Shared UUID for a thin base+alternate pair. */
+  optionGroupId?: string;
+  /** base = in the quote total; alt = visible, excluded from total. */
+  optionRole?: OptionRole;
 }
 
 const UNIT_SHORT: Record<string, string> = {
@@ -73,6 +84,12 @@ function coerceLineItem(value: unknown): LineItem {
   if (priceSource) {
     line.priceSource = priceSource;
   }
+  const optionGroupId = parseOptionGroupId(raw.optionGroupId);
+  const optionRole = parseOptionRole(raw.optionRole);
+  if (optionGroupId && optionRole) {
+    line.optionGroupId = optionGroupId;
+    line.optionRole = optionRole;
+  }
   return line;
 }
 
@@ -103,7 +120,90 @@ export function addItem(
 }
 
 export function removeItem(items: LineItem[], index: number): LineItem[] {
-  return items.filter((_, i) => i !== index);
+  const removed = items[index];
+  const next = items.filter((_, i) => i !== index);
+  if (!removed?.optionGroupId) {
+    return next;
+  }
+  return next.map((item) => {
+    if (item.optionGroupId !== removed.optionGroupId) {
+      return item;
+    }
+    const cleared = { ...item };
+    delete cleared.optionGroupId;
+    delete cleared.optionRole;
+    return cleared;
+  });
+}
+
+/**
+ * Add one alternate for an unpaired line. Existing pair is a no-op.
+ * Alternate price is whatever the contractor typed or picked — never invented.
+ */
+export function addAlternate(
+  items: LineItem[],
+  baseIndex: number,
+  alternate: {
+    name: string;
+    unitPriceCents: number | null;
+    catalogItemId?: string;
+    unit?: string | null;
+    priceSource?: PriceSource;
+  },
+  groupId: string = newOptionGroupId(),
+): LineItem[] {
+  const base = items[baseIndex];
+  if (!base) {
+    return items;
+  }
+  if (base.optionGroupId) {
+    return items;
+  }
+  const name = alternate.name.trim();
+  if (name === '') {
+    return items;
+  }
+  const altLine: LineItem = {
+    catalogItemId: alternate.catalogItemId ?? '',
+    name,
+    quantity: base.quantity,
+    unitPriceCents: alternate.unitPriceCents,
+    optionGroupId: groupId,
+    optionRole: 'alt',
+  };
+  if (alternate.unit) {
+    altLine.unit = alternate.unit;
+  } else if (base.unit) {
+    altLine.unit = base.unit;
+  }
+  if (alternate.priceSource) {
+    altLine.priceSource = alternate.priceSource;
+  }
+  const next = items.map((item, i) =>
+    i === baseIndex
+      ? { ...item, optionGroupId: groupId, optionRole: 'base' as const }
+      : item,
+  );
+  next.splice(baseIndex + 1, 0, altLine);
+  return next;
+}
+
+/** Make this line the selected (base) option; its partner becomes alt. */
+export function selectOptionForTotal(items: LineItem[], index: number): LineItem[] {
+  const chosen = items[index];
+  if (!chosen?.optionGroupId || chosen.optionRole === 'base') {
+    return items;
+  }
+  const groupId = chosen.optionGroupId;
+  return items.map((item, i) => {
+    if (item.optionGroupId !== groupId) {
+      return item;
+    }
+    return {
+      ...item,
+      optionRole: i === index ? 'base' : 'alt',
+    };
+  });
 }
 
 export function updateQuantity(
@@ -153,10 +253,12 @@ export function updatePrivateNote(
 }
 
 export function recalculateTotal(items: LineItem[]): number {
-  return items.reduce(
-    (sum, item) => sum + item.quantity * (item.unitPriceCents ?? 0),
-    0,
-  );
+  return items.reduce((sum, item) => {
+    if (!lineContributesToTotal(item)) {
+      return sum;
+    }
+    return sum + item.quantity * (item.unitPriceCents ?? 0);
+  }, 0);
 }
 
 export function serializeLineItems(items: LineItem[]): string {

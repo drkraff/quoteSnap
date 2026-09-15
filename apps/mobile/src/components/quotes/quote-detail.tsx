@@ -5,6 +5,10 @@ import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '.
 import { draftPriceFlag, draftPriceSourceLabel } from '../../utils/price-source';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { PRIVATE_NOTE_INTERNAL_HINT, PRIVATE_NOTE_LABEL } from '../../quotes/private-notes';
+import {
+  OPTION_ALTERNATE_LABEL,
+  OPTION_IN_TOTAL_LABEL,
+} from '../../quotes/option-groups';
 
 interface LineItemDisplay {
   id: string;
@@ -14,6 +18,8 @@ interface LineItemDisplay {
   unit?: string | null;
   privateNote?: string | null;
   priceSource?: string | null;
+  optionGroupId?: string | null;
+  optionRole?: string | null;
 }
 
 interface QuoteDetailProps {
@@ -40,12 +46,25 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
     const itemTotal = priceUnknown
       ? formatUnitPriceLabel(item.unitPriceCents)
       : `$${(((item.unitPriceCents ?? 0) * item.quantity) / 100).toFixed(2)}`;
+    const optionLabel =
+      item.optionRole === 'alt'
+        ? OPTION_ALTERNATE_LABEL
+        : item.optionRole === 'base'
+          ? OPTION_IN_TOTAL_LABEL
+          : null;
     return (
       <View>
-        <View style={[styles.lineItemRow, priceUnknown && styles.lineItemUnknown]}>
-          <Text style={styles.lineItemName} numberOfLines={2}>
-            {item.name}
-          </Text>
+        <View style={[styles.lineItemRow, priceUnknown && styles.lineItemUnknown, item.optionRole === 'alt' && styles.lineItemAlt]}>
+          <View style={styles.lineItemNameColumn}>
+            <Text style={styles.lineItemName} numberOfLines={2}>
+              {item.name}
+            </Text>
+            {optionLabel ? (
+              <Text style={[styles.optionLabel, item.optionRole === 'alt' && styles.optionLabelAlt]}>
+                {optionLabel}
+              </Text>
+            ) : null}
+          </View>
           <Text style={styles.lineItemQty}>{`x${formatQuantityLabel(item.quantity, item.unit)}`}</Text>
           <View style={styles.lineItemPriceColumn}>
             <Text style={[styles.lineItemPrice, priceUnknown && styles.lineItemPriceUnknown]}>
@@ -140,13 +159,28 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     backgroundColor: colors.dominant,
   },
-  lineItemName: {
+  lineItemNameColumn: {
     flex: 1,
+    marginRight: spacing.sm,
+  },
+  lineItemName: {
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
     color: '#000000',
-    marginRight: spacing.sm,
+  },
+  optionLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    lineHeight: typography.label.lineHeight,
+    color: colors.accent,
+    marginTop: 2,
+  },
+  optionLabelAlt: {
+    color: colors.mutedText,
+  },
+  lineItemAlt: {
+    backgroundColor: colors.secondary,
   },
   lineItemQty: {
     fontSize: typography.label.fontSize,

@@ -43,6 +43,8 @@ function lineItemRow(overrides: Partial<QuoteLineItemRow> = {}): QuoteLineItemRo
     unit: "foot",
     private_note: null,
     price_source: "catalog",
+    option_group_id: null,
+    option_role: null,
     ...overrides,
   };
 }
@@ -97,6 +99,8 @@ describe("lineItemRowToResponse", () => {
       catalogItemId: "33333333-3333-4333-8333-333333333333",
       privateNote: null,
       priceSource: "catalog",
+      optionGroupId: null,
+      optionRole: null,
     });
   });
 
@@ -125,6 +129,17 @@ describe("lineItemRowToResponse", () => {
       lineItemRowToResponse(lineItemRow({ price_source: null, unit_price_cents: 0 })).priceSource,
       "unknown",
     );
+  });
+
+  it("maps option_group_id and option_role for a thin base+alt pair", () => {
+    const groupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const mapped = lineItemRowToResponse(
+      lineItemRow({ option_group_id: groupId, option_role: "alt" }),
+    );
+    assert.equal(mapped.optionGroupId, groupId);
+    assert.equal(mapped.optionRole, "alt");
+    assert.equal(lineItemRowToResponse(lineItemRow()).optionGroupId, null);
+    assert.equal(lineItemRowToResponse(lineItemRow()).optionRole, null);
   });
 });
 

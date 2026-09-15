@@ -27,6 +27,8 @@ export type QuoteLineItemRow = {
   unit: string | null;
   private_note: string | null;
   price_source: string | null;
+  option_group_id: string | null;
+  option_role: string | null;
 };
 
 export const QUOTE_COLUMNS =
@@ -50,7 +52,7 @@ export function parseQuotesListArchivedQuery(archived: unknown): boolean {
 }
 
 export const LINE_ITEM_COLUMNS =
-  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source";
+  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role";
 
 export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
   return {
@@ -78,6 +80,8 @@ export function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemRespo
     catalogItemId: row.catalog_item_id,
     privateNote: row.private_note,
     priceSource: snapshotPriceSourceFromRow(row.price_source, row.unit_price_cents),
+    optionGroupId: row.option_group_id,
+    optionRole: row.option_role,
   };
 }
 

@@ -1,5 +1,6 @@
 import type { QuoteLineItemResponse, QuoteResponse } from '../api/quotes';
 import { parseLineItems, serializeLineItems, type LineItem } from '../utils/line-items';
+import { parseOptionGroupId, parseOptionRole } from './option-groups';
 import { parsePriceSource } from '../utils/price-source';
 
 export const QUOTE_DETAIL_OFFLINE_ERROR =
@@ -73,6 +74,10 @@ export function lineItemsFromDraftJson(json: string): QuoteLineItemResponse[] {
     if (item.priceSource) {
       row.priceSource = item.priceSource;
     }
+    if (item.optionGroupId && item.optionRole) {
+      row.optionGroupId = item.optionGroupId;
+      row.optionRole = item.optionRole;
+    }
     return row;
   });
 }
@@ -100,6 +105,12 @@ export function remoteLineItemsToDraftJson(
     const priceSource = parsePriceSource(item.priceSource);
     if (priceSource) {
       line.priceSource = priceSource;
+    }
+    const optionGroupId = parseOptionGroupId(item.optionGroupId);
+    const optionRole = parseOptionRole(item.optionRole);
+    if (optionGroupId && optionRole) {
+      line.optionGroupId = optionGroupId;
+      line.optionRole = optionRole;
     }
     return line;
   });

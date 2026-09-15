@@ -125,6 +125,35 @@ describe('remoteLineItemsToDraftJson', () => {
     expect(JSON.parse(json)[0].priceSource).toBe('computed');
     expect(lineItemsFromDraftJson(json)[0]!.priceSource).toBe('computed');
   });
+
+  it('keeps optionGroupId + optionRole on draft JSON and detail rows', () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const json = remoteLineItemsToDraftJson([
+      {
+        id: 'li-1',
+        name: 'Walk-in shower',
+        quantity: 1,
+        unitPriceCents: 180000,
+        optionGroupId: groupId,
+        optionRole: 'base',
+      },
+      {
+        id: 'li-2',
+        name: 'Keep the tub',
+        quantity: 1,
+        unitPriceCents: 45000,
+        optionGroupId: groupId,
+        optionRole: 'alt',
+      },
+    ]);
+    const parsed = JSON.parse(json);
+    expect(parsed[0].optionGroupId).toBe(groupId);
+    expect(parsed[0].optionRole).toBe('base');
+    expect(parsed[1].optionRole).toBe('alt');
+    const rows = lineItemsFromDraftJson(json);
+    expect(rows[0]!.optionGroupId).toBe(groupId);
+    expect(rows[1]!.optionRole).toBe('alt');
+  });
 });
 
 describe('resolveQuoteDetailView', () => {

@@ -975,6 +975,92 @@ describe('processQueue', () => {
     });
   });
 
+  it('forwards optionGroupId + optionRole on a contractor draft PUT', async () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 180000,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T12:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+      },
+      lineItems: [
+        {
+          id: 'li-1',
+          name: 'Walk-in shower',
+          quantity: 1,
+          unitPriceCents: 180000,
+          optionGroupId: groupId,
+          optionRole: 'base',
+        },
+      ],
+    });
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([
+          {
+            name: 'Walk-in shower',
+            quantity: 1,
+            unitPriceCents: 180000,
+            optionGroupId: groupId,
+            optionRole: 'base',
+          },
+          {
+            name: 'Keep the tub',
+            quantity: 1,
+            unitPriceCents: 45000,
+            optionGroupId: groupId,
+            optionRole: 'alt',
+          },
+        ]),
+        totalCents: 180000,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledWith('srv-q1', {
+      lineItems: [
+        {
+          name: 'Walk-in shower',
+          quantity: 1,
+          unitPriceCents: 180000,
+          optionGroupId: groupId,
+          optionRole: 'base',
+        },
+        {
+          name: 'Keep the tub',
+          quantity: 1,
+          unitPriceCents: 45000,
+          optionGroupId: groupId,
+          optionRole: 'alt',
+        },
+      ],
+      totalCents: 180000,
+    });
+  });
+
   it('still PUTs a draft when the conflict GET fails', async () => {
     const quote = makeQuote({
       id: 'q1',

@@ -25,6 +25,10 @@ export interface QuoteLineItemResponse {
   privateNote: string | null;
   /** Snapshot provenance from attach or contractor edit. */
   priceSource?: string | null;
+  /** Shared UUID for a thin base+alternate pair. Null = ungrouped. */
+  optionGroupId?: string | null;
+  /** base = in the quote total; alt = visible, excluded from total. */
+  optionRole?: string | null;
 }
 
 export interface QuoteListItemResponse extends QuoteResponse {
@@ -51,6 +55,10 @@ export interface UpdateQuoteLineItemBody {
   privateNote?: string | null;
   /** Omit to preserve existing price_source. */
   priceSource?: string | null;
+  /** Omit to preserve; null clears the pair. */
+  optionGroupId?: string | null;
+  /** Omit to preserve; null clears the pair. base | alt. */
+  optionRole?: string | null;
 }
 
 export interface UpdateQuoteBody {
