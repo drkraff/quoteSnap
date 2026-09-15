@@ -11,11 +11,13 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import type { RateCardEntryResponse } from '../../src/api/rate-card';
 import { listRateCardEntries } from '../../src/api/rate-card';
+import type { CatalogUnit } from '../../src/catalog/units';
 import { EditRatePriceSheet } from '../../src/components/rate-card/edit-price-sheet';
 import { RateRow } from '../../src/components/rate-card/rate-row';
 import { RatesEmptyState } from '../../src/components/rate-card/rates-empty-state';
 import { RatesLoadError } from '../../src/components/rate-card/rates-load-error';
 import { RatesSearchField } from '../../src/components/rate-card/rates-search-field';
+import { RatesUnitFilter } from '../../src/components/rate-card/rates-unit-filter';
 import { buildRateCardEditPayload, rateCardEditQueueEntityId } from '../../src/rate-card/edit-payload';
 import {
   DELETE_RATE_CONFIRM_ACTION,
@@ -26,9 +28,14 @@ import {
   MY_RATES_SAVE_ERROR,
 } from '../../src/rate-card/list-copy';
 import {
+  mergeRateCardListPage,
+  myRatesEmptyKind,
   nextRateCardListOffset,
   RATE_CARD_LIST_PAGE_SIZE,
+  rateCardDeleteEnqueuePayload,
   rateCardListSearchParam,
+  rateCardListUnitParam,
+  removeRateCardListEntry,
 } from '../../src/rate-card/list-query';
 import { enqueue } from '../../src/sync/sync-queue';
 import { colors, spacing, typography } from '../../src/theme/tokens';
@@ -39,6 +46,7 @@ export default function MyRatesScreen(): JSX.Element {
   const router = useRouter();
   const [searchText, setSearchText] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
+  const [unitFilter, setUnitFilter] = useState<CatalogUnit | ''>('');
   const [entries, setEntries] = useState<RateCardEntryResponse[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -47,6 +55,11 @@ export default function MyRatesScreen(): JSX.Element {
   const [editing, setEditing] = useState<RateCardEntryResponse | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
   const requestSeq = useRef(0);
+  const pendingDeleteIds = useRef(new Set<string>());
+  const entriesRef = useRef<RateCardEntryResponse[]>([]);
+  entriesRef.current = entries;
+
+  const appliedUnit = rateCardListUnitParam(unitFilter) ?? '';
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -70,12 +83,21 @@ export default function MyRatesScreen(): JSX.Element {
           limit: RATE_CARD_LIST_PAGE_SIZE,
           offset,
           q: appliedQuery || undefined,
+          unit: appliedUnit || undefined,
         });
         if (seq !== requestSeq.current) {
           return;
         }
-        setTotal(page.total);
-        setEntries((current) => (appending ? [...current, ...page.entries] : page.entries));
+        const merged = mergeRateCardListPage({
+          appending,
+          current: entriesRef.current,
+          pageEntries: page.entries,
+          pageTotal: page.total,
+          hiddenIds: pendingDeleteIds.current,
+        });
+        pendingDeleteIds.current = merged.hiddenIds;
+        setTotal(merged.total);
+        setEntries(merged.entries);
       } catch {
         if (seq !== requestSeq.current) {
           return;
@@ -92,7 +114,7 @@ export default function MyRatesScreen(): JSX.Element {
         }
       }
     },
-    [appliedQuery],
+    [appliedQuery, appliedUnit],
   );
 
   useFocusEffect(
@@ -153,14 +175,11 @@ export default function MyRatesScreen(): JSX.Element {
         onPress: () => {
           void (async () => {
             try {
-              await enqueue({
-                entityType: 'rate_card',
-                entityId: entry.id,
-                action: 'delete',
-                payload: { id: entry.id, name: entry.displayName },
-              });
-              setEntries((current) => current.filter((row) => row.id !== entry.id));
+              await enqueue(rateCardDeleteEnqueuePayload(entry));
+              pendingDeleteIds.current.add(entry.id);
+              setEntries((current) => removeRateCardListEntry(current, entry.id));
               setTotal((current) => Math.max(0, current - 1));
+              void loadPage(0);
             } catch {
               Alert.alert('Could not remove', MY_RATES_SAVE_ERROR);
             }
@@ -170,9 +189,15 @@ export default function MyRatesScreen(): JSX.Element {
     ]);
   }
 
-  const hasQuery = appliedQuery.length > 0;
-  const showNoRatesEmpty = !loading && !error && entries.length === 0 && !hasQuery;
-  const showNoMatches = !loading && !error && entries.length === 0 && hasQuery;
+  const emptyKind = myRatesEmptyKind({
+    loading,
+    error,
+    entryCount: entries.length,
+    q: appliedQuery,
+    unit: appliedUnit,
+  });
+  const showNoRatesEmpty = emptyKind === 'no-rates';
+  const showNoMatches = emptyKind === 'no-matches';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -204,6 +229,7 @@ export default function MyRatesScreen(): JSX.Element {
                 onChangeText={setSearchText}
                 onSubmit={applySearchNow}
               />
+              <RatesUnitFilter value={unitFilter} onChange={setUnitFilter} />
               {showNoRatesEmpty ? null : (
                 <Text style={styles.intro}>{MY_RATES_INTRO}</Text>
               )}
