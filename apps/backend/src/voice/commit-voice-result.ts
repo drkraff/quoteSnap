@@ -32,7 +32,7 @@ function commitPriceSource(item: VoiceCommitLine): SnapshotPriceSource {
   return inferSnapshotPriceSource(cents);
 }
 
-export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3 WHERE id = $4`;
+export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3, client_sentence = COALESCE($4, client_sentence) WHERE id = $5`;
 
 /**
  * Replace line items and set quote status in the caller's transaction.
@@ -46,6 +46,8 @@ export async function replaceVoiceQuoteLines(
     status: "draft_local" | "ai_failed";
     totalCents: number;
     failureStage: AiFailureStage | null;
+    /** Joined extract assumptions. Null leaves the existing column. */
+    clientSentence?: string | null;
   },
 ): Promise<void> {
   await client.query(DELETE_VOICE_LINE_ITEMS_SQL, [args.quoteId]);
@@ -65,6 +67,7 @@ export async function replaceVoiceQuoteLines(
     args.status,
     args.totalCents,
     args.status === "ai_failed" ? args.failureStage : null,
+    args.clientSentence ?? null,
     args.quoteId,
   ]);
 }

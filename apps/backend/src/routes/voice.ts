@@ -176,7 +176,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
 
     // Verify quote exists and belongs to contractor
     const quoteResult = await query(
-      `SELECT id, status, total_cents FROM quotes WHERE id = $1 AND contractor_id = $2`,
+      `SELECT id, status, total_cents, client_sentence FROM quotes WHERE id = $1 AND contractor_id = $2`,
       [quoteId, contractorId]
     );
 
@@ -185,7 +185,12 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       return;
     }
 
-    const quoteRow = quoteResult.rows[0] as { id: string; status: string; total_cents: number };
+    const quoteRow = quoteResult.rows[0] as {
+      id: string;
+      status: string;
+      total_cents: number;
+      client_sentence: string | null;
+    };
 
     if (!isVoiceDraftReadable(quoteRow.status)) {
       res.status(404).json({ error: 'Draft not ready' });
@@ -230,6 +235,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
     res.json({
       quoteId,
       totalCents: quoteRow.total_cents,
+      clientSentence: quoteRow.client_sentence ?? null,
       lineItems,
     });
   } catch (err) {

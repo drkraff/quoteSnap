@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 4,
+  version: 5,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -21,6 +21,8 @@ export const schema = appSchema({
         { name: 'is_archived', type: 'boolean', isOptional: true },
         // Contractor-only (design #9). Never copy into a customer PDF/SMS payload.
         { name: 'private_note', type: 'string', isOptional: true },
+        // Customer-facing scope / assumptions (design §8). Include on PDF/SMS.
+        { name: 'client_sentence', type: 'string', isOptional: true },
       ],
     }),
     tableSchema({

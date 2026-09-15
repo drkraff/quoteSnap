@@ -12,6 +12,8 @@ export interface QuoteResponse {
   isArchived?: boolean;
   /** Contractor-only. Never copy into a customer PDF/SMS payload. */
   privateNote?: string | null;
+  /** Customer-facing scope / assumptions. Include on PDF/SMS. */
+  clientSentence?: string | null;
 }
 
 export interface QuoteLineItemResponse {
@@ -68,6 +70,7 @@ export async function createQuoteOnServer(body: {
   customerPhone?: string;
   totalCents?: number;
   privateNote?: string | null;
+  clientSentence?: string | null;
 }): Promise<QuoteResponse> {
   const data = await apiClient.post<QuoteSingleResponse>('/quotes', body);
   return data.quote;
@@ -80,6 +83,7 @@ export async function updateQuoteOnServer(
     customerPhone?: string;
     totalCents?: number;
     privateNote?: string | null;
+    clientSentence?: string | null;
     lineItems?: {
       name: string;
       quantity: number;

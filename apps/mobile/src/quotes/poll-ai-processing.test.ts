@@ -152,6 +152,7 @@ describe('pollOneAiProcessingQuote', () => {
           confidence: 0.9,
         },
       ]),
+      null,
     );
   });
 
@@ -205,6 +206,25 @@ describe('pollOneAiProcessingQuote', () => {
     expect(api.getDraftLineItems).toHaveBeenCalledWith('srv-1');
     expect(api.markDraftReady).toHaveBeenCalled();
     expect(api.getVoiceStatus).not.toHaveBeenCalled();
+  });
+
+  it('prefills clientSentence from voice draft assumptions', async () => {
+    const api = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'complete' as const,
+        draftId: 'srv-1',
+      })),
+      getDraftLineItems: jest.fn(async () => ({
+        quoteId: 'srv-1',
+        totalCents: 0,
+        clientSentence: 'appliances not included',
+        lineItems: [],
+      })),
+    });
+    const row = quote({ voiceJobId: 'job-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('draft_ready');
+    expect(api.markDraftReady).toHaveBeenCalledWith(row, '[]', 'appliances not included');
   });
 
   it('with serverId and no voiceJobId stays processing when the server has no job yet', async () => {
@@ -315,7 +335,7 @@ describe('pollOneAiProcessingQuote', () => {
 
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
     expect(api.getDraftLineItems).toHaveBeenCalledWith('srv-1');
-    expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial));
+    expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial), null);
     expect(api.markDraftReady).not.toHaveBeenCalled();
   });
 

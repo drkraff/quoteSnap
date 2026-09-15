@@ -6,6 +6,10 @@ import { draftPriceFlag, draftPriceSourceLabel } from '../../utils/price-source'
 import { colors, spacing, typography } from '../../theme/tokens';
 import { PRIVATE_NOTE_INTERNAL_HINT, PRIVATE_NOTE_LABEL } from '../../quotes/private-notes';
 import {
+  CLIENT_SENTENCE_HINT,
+  CLIENT_SENTENCE_LABEL,
+} from '../../quotes/client-sentence';
+import {
   OPTION_ALTERNATE_LABEL,
   OPTION_IN_TOTAL_LABEL,
 } from '../../quotes/option-groups';
@@ -30,6 +34,7 @@ interface QuoteDetailProps {
     createdAt: string;
     sentAt: string | null;
     privateNote?: string | null;
+    clientSentence?: string | null;
   };
   lineItems: LineItemDisplay[];
 }
@@ -98,6 +103,14 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
           </Text>
         )}
       </View>
+
+      {quote.clientSentence ? (
+        <View style={styles.clientSentence}>
+          <Text style={styles.noteLabel}>{CLIENT_SENTENCE_LABEL}</Text>
+          <Text style={styles.clientHint}>{CLIENT_SENTENCE_HINT}</Text>
+          <Text style={styles.noteBody}>{quote.clientSentence}</Text>
+        </View>
+      ) : null}
 
       {quote.privateNote ? (
         <View style={styles.jobNote}>
@@ -262,6 +275,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.secondary,
     gap: spacing.xs,
   },
+  clientSentence: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.dominant,
+    gap: spacing.xs,
+  },
   lineNote: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
@@ -275,6 +296,12 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   internalHint: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
+  },
+  clientHint: {
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
     lineHeight: typography.label.lineHeight,

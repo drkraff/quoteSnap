@@ -975,6 +975,42 @@ describe('processQueue', () => {
     });
   });
 
+  it('forwards quote-level clientSentence on a contractor PUT (customer-facing)', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    quotes = [quote];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        clientSentence: 'Appliances and decorative lighting not included.',
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledWith('srv-q1', {
+      status: undefined,
+      customerPhone: undefined,
+      totalCents: undefined,
+      privateNote: undefined,
+      clientSentence: 'Appliances and decorative lighting not included.',
+      lineItems: undefined,
+    });
+    expect(item.status).toBe('destroyed');
+  });
+
   it('forwards optionGroupId + optionRole on a contractor draft PUT', async () => {
     const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const quote = makeQuote({

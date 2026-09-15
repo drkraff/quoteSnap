@@ -16,6 +16,7 @@ import {
   type ClientQuoteStatus,
 } from "./statuses.js";
 import { parseOptionalPrivateNote } from "./private-note.js";
+import { parseOptionalClientSentence } from "./client-sentence.js";
 import {
   inferSnapshotPriceSource,
   isSnapshotPriceSource,
@@ -91,6 +92,7 @@ export type ParsedQuotePutBody =
       customerPhone?: string | null;
       totalCents?: number;
       privateNote?: string | null;
+      clientSentence?: string | null;
       lineItems?: ParsedLineItemInput[];
     };
 
@@ -102,6 +104,7 @@ export type ParsedQuoteCreateBody =
       customerPhone: string | null;
       totalCents: number;
       privateNote: string | null;
+      clientSentence: string | null;
     };
 
 export type QuotePutOutcome =
@@ -482,7 +485,16 @@ export function parseQuoteCreateBody(body: unknown): ParsedQuoteCreateBody {
     privateNote = parsed.note;
   }
 
-  return { ok: true, status, customerPhone, totalCents, privateNote };
+  let clientSentence: string | null = null;
+  if (hasOwn(raw, "clientSentence")) {
+    const parsed = parseOptionalClientSentence(raw.clientSentence);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    clientSentence = parsed.sentence;
+  }
+
+  return { ok: true, status, customerPhone, totalCents, privateNote, clientSentence };
 }
 
 export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
@@ -507,6 +519,14 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
       return note;
     }
     parsed.privateNote = note.note;
+  }
+
+  if (hasOwn(raw, "clientSentence")) {
+    const sentence = parseOptionalClientSentence(raw.clientSentence);
+    if (!sentence.ok) {
+      return sentence;
+    }
+    parsed.clientSentence = sentence.sentence;
   }
 
   if (hasOwn(raw, "totalCents") && raw.totalCents !== undefined) {
@@ -537,6 +557,7 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
     parsed.customerPhone === undefined &&
     parsed.totalCents === undefined &&
     parsed.privateNote === undefined &&
+    parsed.clientSentence === undefined &&
     parsed.lineItems === undefined
   ) {
     return { ok: false, error: "At least one field required" };
@@ -625,6 +646,10 @@ export async function applyQuotePut(
   if (parsed.privateNote !== undefined) {
     params.push(parsed.privateNote);
     setClauses.push(`private_note = $${params.length}`);
+  }
+  if (parsed.clientSentence !== undefined) {
+    params.push(parsed.clientSentence);
+    setClauses.push(`client_sentence = $${params.length}`);
   }
   if (totalCents !== undefined) {
     params.push(totalCents);

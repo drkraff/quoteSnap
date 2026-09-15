@@ -61,6 +61,7 @@ type FakeQuote = {
   voiceJobId: string | null;
   isArchived: boolean;
   privateNote?: string | null;
+  clientSentence?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -257,6 +258,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
             voiceJobId: null,
             isArchived: false,
             privateNote: null,
+            clientSentence: null,
           });
           writer(record);
           quotes.push(record);
@@ -325,6 +327,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
         sentAt: null,
         voiceJobId: null,
         privateNote: 'subcontractor check',
+        clientSentence: 'Appliances not included.',
         lineItems: [
           {
             id: 'li-1',
@@ -353,6 +356,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       totalCents: 3000,
       voiceJobId: null,
       privateNote: 'subcontractor check',
+      clientSentence: 'Appliances not included.',
     });
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.quoteId).toBe(quotes[0]!.id);

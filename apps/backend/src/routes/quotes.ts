@@ -59,10 +59,17 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
     }
 
     const result = await query(
-      `INSERT INTO quotes (contractor_id, status, customer_phone, total_cents, private_note)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO quotes (contractor_id, status, customer_phone, total_cents, private_note, client_sentence)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${QUOTE_COLUMNS}`,
-      [contractorId, parsed.status, parsed.customerPhone, parsed.totalCents, parsed.privateNote]
+      [
+        contractorId,
+        parsed.status,
+        parsed.customerPhone,
+        parsed.totalCents,
+        parsed.privateNote,
+        parsed.clientSentence,
+      ]
     );
 
     const quote = quoteRowToResponse(result.rows[0] as QuoteRow);

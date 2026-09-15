@@ -49,7 +49,7 @@ describe("replaceVoiceQuoteLines", () => {
       "catalog",
     ]);
     assert.equal(calls[2]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
-    assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, "quote-1"]);
+    assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, null, "quote-1"]);
   });
 
   it("writes ai_failed + mapping stage for a partial FAIL-05 draft and stores 0 cents for blank prices", async () => {
@@ -89,6 +89,34 @@ describe("replaceVoiceQuoteLines", () => {
       "job",
       "unknown",
     ]);
-    assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", "quote-2"]);
+    assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", null, "quote-2"]);
+  });
+
+  it("writes joined extract assumptions into client_sentence", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    await replaceVoiceQuoteLines(
+      {
+        query: async (sql, params) => {
+          calls.push({ sql, params });
+        },
+      },
+      {
+        quoteId: "quote-3",
+        status: "draft_local",
+        totalCents: 0,
+        failureStage: null,
+        clientSentence: "appliances not included",
+        lineItems: [],
+      },
+    );
+    assert.equal(calls[0]!.sql, DELETE_VOICE_LINE_ITEMS_SQL);
+    assert.equal(calls[1]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
+    assert.deepEqual(calls[1]!.params, [
+      "draft_local",
+      0,
+      null,
+      "appliances not included",
+      "quote-3",
+    ]);
   });
 });

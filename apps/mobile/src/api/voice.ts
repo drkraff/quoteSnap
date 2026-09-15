@@ -33,6 +33,7 @@ export async function uploadAudio(filePath: string, quoteServerId?: string): Pro
 export interface DraftLineItemsResponse {
   quoteId: string;
   totalCents: number;
+  clientSentence?: string | null;
   lineItems: Array<{
     catalogItemId: string | null;
     name: string;

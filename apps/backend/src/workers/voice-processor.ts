@@ -16,6 +16,7 @@ import {
   type AiFailureStage,
 } from '../voice/ai-failure.js';
 import { replaceVoiceQuoteLines } from '../voice/commit-voice-result.js';
+import { joinAssumptionsToClientSentence } from '../voice/assumptions.js';
 
 export const boss = new PgBoss(process.env['DATABASE_URL']!);
 
@@ -43,6 +44,7 @@ async function commitVoiceQuote(args: {
   status: 'draft_local' | 'ai_failed';
   totalCents: number;
   failureStage: AiFailureStage | null;
+  clientSentence?: string | null;
 }): Promise<void> {
   const client = await pool.connect();
   try {
@@ -62,6 +64,7 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
   let stage: AiFailureStage = 'asr';
   let builtLineItems: ValidatedLineItem[] | null = null;
   let builtTotalCents = 0;
+  let clientSentence: string | null = null;
 
   try {
     // a) Fetch audio from R2
@@ -130,6 +133,7 @@ Rules:
 - unit must be one of: each, hour, foot, sqft, job.
 - spokenUnitPriceCents is integer cents ONLY if the contractor stated a dollar amount (example: "eight fifty a foot" → 850). If they did not say a price, omit it or null.
 - spokenHours is integer hours for the job ONLY if they stated labor time (example: "call it two hours" → 2). Omit or null if they did not say hours. Do not guess duration.
+- assumptions: client-facing scope sentences they said (what is not included). Example: "appliances not included". Empty array if they said none. Do not invent exclusions, private notes, or prices.
 - NEVER invent a price, SKU, catalog ID, or typical trade rate. Never copy a price from the catalog; prices are attached later.
 - Do not add catalog items they did not mention.`,
         },
@@ -188,6 +192,12 @@ Rules:
                   description:
                     'Integer hours the contractor said for the job. Null/omit if they did not say hours. NEVER guess.',
                 },
+                assumptions: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    'Client-facing exclusions or assumptions the contractor said. Empty if none. Never invent. Never private notes or prices.',
+                },
               },
               required: ['items'],
             },
@@ -208,6 +218,7 @@ Rules:
     const parsed = JSON.parse(toolCall.function.arguments) as VoiceExtractResult;
     const aiItems: AILineItem[] = Array.isArray(parsed.items) ? parsed.items : [];
     const spokenHours = parseSpokenHours(parsed.spokenHours);
+    clientSentence = joinAssumptionsToClientSentence(parsed.assumptions);
 
     // g) Validate catalog IDs — only UUID-shaped values may hit the uuid column.
     const aiItemIds = filterUuidCatalogIds(
@@ -252,6 +263,7 @@ Rules:
       status: 'draft_local',
       totalCents,
       failureStage: null,
+      clientSentence,
     });
 
     // PII: delete audio only after a durable success so retries still have the object.
@@ -274,6 +286,7 @@ Rules:
             status: 'ai_failed',
             totalCents: builtTotalCents,
             failureStage: 'mapping',
+            clientSentence,
           });
         } catch (partialErr) {
           console.error('Failed to persist partial mapping draft:', partialErr);
