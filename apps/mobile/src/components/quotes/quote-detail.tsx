@@ -9,10 +9,7 @@ import {
   CLIENT_SENTENCE_HINT,
   CLIENT_SENTENCE_LABEL,
 } from '../../quotes/client-sentence';
-import {
-  OPTION_ALTERNATE_LABEL,
-  OPTION_IN_TOTAL_LABEL,
-} from '../../quotes/option-groups';
+import { optionBadgeLabel } from '../../quotes/option-groups';
 import { draftListRows, UNGROUPED_ROOM_LABEL } from '../../quotes/rooms';
 import { PhotoStrip } from './photo-strip';
 import type { QuotePhoto } from '../../quotes/photos';
@@ -75,12 +72,7 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
     const itemTotal = priceUnknown
       ? formatUnitPriceLabel(item.unitPriceCents)
       : `$${(((item.unitPriceCents ?? 0) * item.quantity) / 100).toFixed(2)}`;
-    const optionLabel =
-      item.optionRole === 'alt'
-        ? OPTION_ALTERNATE_LABEL
-        : item.optionRole === 'base'
-          ? OPTION_IN_TOTAL_LABEL
-          : null;
+    const optionLabel = optionBadgeLabel(item.optionRole);
     return (
       <View>
         <View style={[styles.lineItemRow, priceUnknown && styles.lineItemUnknown, item.optionRole === 'alt' && styles.lineItemAlt]}>

@@ -89,10 +89,7 @@ import {
 } from '../../../src/quotes/share-customer-quote';
 import { shareCustomerQuoteAndMarkSent } from '../../../src/quotes/share-and-mark-sent';
 import {
-  ADD_ALTERNATE_LABEL,
-  OPTION_ALTERNATE_LABEL,
-  OPTION_IN_TOTAL_LABEL,
-  OPTION_USE_FOR_TOTAL_LABEL,
+  optionLineChrome,
 } from '../../../src/quotes/option-groups';
 import {
   ADD_ROOM_LABEL,
@@ -892,6 +889,7 @@ export default function DraftScreen(): JSX.Element {
     if (rejectFrozenMoneyWrite()) return;
     await recoverFromAiFailed();
     const newItems = selectOptionForTotal(lineItems, index);
+    if (newItems === lineItems) return;
     await persistLineItems(newItems);
   }
 
@@ -1109,8 +1107,8 @@ export default function DraftScreen(): JSX.Element {
           const priceUnknown = isUnknownUnitPrice(item.unitPriceCents);
           const tier = priceUnknown ? 'needs_input' : confidenceTier(item.confidence);
           const displayTier = tier === 'clean' ? undefined : tier;
-          const paired = Boolean(item.optionGroupId);
-          const isAlt = item.optionRole === 'alt';
+          const chrome = optionLineChrome(lineItems, index);
+          const isAlt = chrome.badgeIsAlt;
           const assignedRoom = rooms.find((room) => room.id === item.roomId);
           return (
             <View style={isAlt ? styles.altBlock : undefined}>
@@ -1164,32 +1162,36 @@ export default function DraftScreen(): JSX.Element {
                   ) : null}
                 </View>
               ) : null}
-              {paired ? (
+              {chrome.kind === 'pair' ? (
                 <View style={styles.optionRow}>
-                  <Text style={[styles.optionBadge, isAlt && styles.optionBadgeAlt]}>
-                    {isAlt ? OPTION_ALTERNATE_LABEL : OPTION_IN_TOTAL_LABEL}
+                  <Text style={[styles.optionBadge, chrome.badgeIsAlt && styles.optionBadgeAlt]}>
+                    {chrome.badge}
                   </Text>
-                  {isAlt ? (
+                  {chrome.showSelect ? (
                     <Pressable
                       onPress={() => { void handleSelectOption(index); }}
                       accessibilityRole="button"
-                      accessibilityLabel={`${OPTION_USE_FOR_TOTAL_LABEL}. ${item.name}`}
+                      accessibilityLabel={chrome.accessibilityLabel}
                       style={styles.optionSelectButton}
                     >
-                      <Text style={styles.optionSelectText}>{OPTION_USE_FOR_TOTAL_LABEL}</Text>
+                      <Text style={styles.optionSelectText}>{chrome.selectLabel}</Text>
                     </Pressable>
+                  ) : chrome.selectedHint ? (
+                    <Text style={styles.optionSelectedHint} accessibilityLabel={chrome.accessibilityLabel}>
+                      {chrome.selectedHint}
+                    </Text>
                   ) : null}
                 </View>
-              ) : (
+              ) : chrome.kind === 'add' ? (
                 <Pressable
                   style={styles.optionAddButton}
                   onPress={() => setAlternateForIndex(index)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${ADD_ALTERNATE_LABEL} for ${item.name}`}
+                  accessibilityLabel={chrome.accessibilityLabel}
                 >
-                  <Text style={styles.optionAddText}>{ADD_ALTERNATE_LABEL}</Text>
+                  <Text style={styles.optionAddText}>{chrome.addLabel}</Text>
                 </Pressable>
-              )}
+              ) : null}
               <Pressable
                 style={styles.lineNoteButton}
                 onPress={() => setLineNoteIndex(index)}
@@ -1594,6 +1596,12 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: '700',
     color: colors.accent,
+  },
+  optionSelectedHint: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
   },
   optionAddButton: {
     minHeight: 44,

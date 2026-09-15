@@ -1,9 +1,11 @@
 import { parseCatalogUnit } from '../catalog/units';
 import {
-  lineContributesToTotal,
   newOptionGroupId,
   parseOptionGroupId,
   parseOptionRole,
+  sanitizeOptionGroups,
+  selectOptionForTotal as selectOptionRoleForTotal,
+  selectedOptionTotalCents,
   type OptionRole,
 } from '../quotes/option-groups';
 import { parseRoomId } from '../quotes/rooms';
@@ -115,7 +117,8 @@ function coerceLineItem(value: unknown): LineItem {
 export function parseLineItems(json: string): LineItem[] {
   try {
     const parsed: unknown = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed.map(coerceLineItem) : [];
+    const items = Array.isArray(parsed) ? parsed.map(coerceLineItem) : [];
+    return sanitizeOptionGroups(items);
   } catch {
     return [];
   }
@@ -174,16 +177,17 @@ export function addAlternate(
   },
   groupId: string = newOptionGroupId(),
 ): LineItem[] {
-  const base = items[baseIndex];
+  const cleaned = sanitizeOptionGroups(items);
+  const base = cleaned[baseIndex];
   if (!base) {
     return items;
   }
   if (base.optionGroupId) {
-    return items;
+    return cleaned === items ? items : cleaned;
   }
   const name = alternate.name.trim();
   if (name === '') {
-    return items;
+    return cleaned === items ? items : cleaned;
   }
   const altLine: LineItem = {
     catalogItemId: alternate.catalogItemId ?? '',
@@ -204,7 +208,7 @@ export function addAlternate(
   if (base.roomId) {
     altLine.roomId = base.roomId;
   }
-  const next = items.map((item, i) =>
+  const next = cleaned.map((item, i) =>
     i === baseIndex
       ? { ...item, optionGroupId: groupId, optionRole: 'base' as const }
       : item,
@@ -215,20 +219,7 @@ export function addAlternate(
 
 /** Make this line the selected (base) option; its partner becomes alt. */
 export function selectOptionForTotal(items: LineItem[], index: number): LineItem[] {
-  const chosen = items[index];
-  if (!chosen?.optionGroupId || chosen.optionRole === 'base') {
-    return items;
-  }
-  const groupId = chosen.optionGroupId;
-  return items.map((item, i) => {
-    if (item.optionGroupId !== groupId) {
-      return item;
-    }
-    return {
-      ...item,
-      optionRole: i === index ? 'base' : 'alt',
-    };
-  });
+  return selectOptionRoleForTotal(items, index);
 }
 
 export function updateQuantity(
@@ -291,12 +282,7 @@ export function updatePrivateNote(
 }
 
 export function recalculateTotal(items: LineItem[]): number {
-  return items.reduce((sum, item) => {
-    if (!lineContributesToTotal(item)) {
-      return sum;
-    }
-    return sum + item.quantity * (item.unitPriceCents ?? 0);
-  }, 0);
+  return selectedOptionTotalCents(items);
 }
 
 export function serializeLineItems(items: LineItem[]): string {
