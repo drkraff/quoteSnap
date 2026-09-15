@@ -3,8 +3,22 @@ import assert from "node:assert/strict";
 import {
   CLIENT_SENTENCE_FIELD_ERROR,
   CLIENT_SENTENCE_MAX_LENGTH,
+  normalizeClientSentence,
   parseOptionalClientSentence,
 } from "./client-sentence.js";
+
+describe("normalizeClientSentence", () => {
+  it("trims and clears whitespace without inventing copy", () => {
+    assert.equal(
+      normalizeClientSentence("  Appliances not included.  "),
+      "Appliances not included.",
+    );
+    assert.equal(normalizeClientSentence(""), null);
+    assert.equal(normalizeClientSentence("   "), null);
+    assert.equal(normalizeClientSentence(null), null);
+    assert.equal(normalizeClientSentence(undefined), null);
+  });
+});
 
 describe("parseOptionalClientSentence", () => {
   it("trims and accepts a customer-facing sentence", () => {

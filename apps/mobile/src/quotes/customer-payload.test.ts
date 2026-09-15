@@ -84,6 +84,39 @@ describe('toCustomerQuotePayload', () => {
     expect(JSON.stringify(payload)).not.toContain(SECRET_JOB);
   });
 
+  it('maps empty / whitespace clientSentence to null (does not invent job scope)', () => {
+    const empty = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 25000,
+      clientSentence: '   ',
+      privateNote: SECRET_JOB,
+      lineItems: [
+        {
+          name: 'Replace outlet',
+          quantity: 1,
+          unitPriceCents: 25000,
+          unit: 'each',
+          privateNote: SECRET_LINE,
+        },
+      ],
+    });
+    expect(empty.clientSentence).toBeNull();
+    const json = JSON.stringify(empty);
+    expect(json).not.toContain(SECRET_JOB);
+    expect(json).not.toContain(SECRET_LINE);
+    expect(json).not.toContain('Appliances');
+    expect(json).not.toContain('not included');
+
+    const omitted = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 25000,
+      lineItems: [
+        { name: 'Replace outlet', quantity: 1, unitPriceCents: 25000, unit: 'each' },
+      ],
+    });
+    expect(omitted.clientSentence).toBeNull();
+  });
+
   it('omits the unselected alt from the customer payload', () => {
     const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const payload = toCustomerQuotePayload({

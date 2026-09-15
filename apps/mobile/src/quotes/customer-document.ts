@@ -4,9 +4,13 @@
  * fields must already be stripped by toCustomerQuotePayload.
  */
 
+import { normalizeClientSentence } from './client-sentence';
 import type { CustomerLineItemPayload, CustomerQuotePayload } from './customer-payload';
 import { UNGROUPED_ROOM_LABEL } from './rooms';
 import { formatQuantityLabel } from '../utils/line-items';
+
+/** Shown above the client sentence on the PDF/HTML. Omitted when empty. */
+export const CUSTOMER_ASSUMPTIONS_HEADING = 'Assumptions';
 
 export type CustomerDocumentBrand = {
   displayName?: string | null;
@@ -149,9 +153,7 @@ export function customerQuoteToDocument(
 ): CustomerDocument {
   const contractorName = formatCustomerDisplayName(brand.displayName);
   const trade = formatCustomerTrade(brand.trade);
-  const clientSentence = payload.clientSentence?.trim()
-    ? payload.clientSentence.trim()
-    : null;
+  const clientSentence = normalizeClientSentence(payload.clientSentence);
   const sections = groupCustomerLines(payload.lineItems);
   const totalLabel = formatDollarAmount(payload.totalCents);
   const filename = CUSTOMER_QUOTE_FILENAME_PDF;
@@ -195,6 +197,7 @@ function renderCustomerQuoteText(doc: {
   }
   lines.push('');
   if (doc.clientSentence) {
+    lines.push(CUSTOMER_ASSUMPTIONS_HEADING);
     lines.push(doc.clientSentence);
     lines.push('');
   }
@@ -224,7 +227,16 @@ function renderCustomerQuoteHtml(doc: {
   const title = escapeHtml(doc.contractorName ?? 'Quote');
   const trade = doc.trade ? `<p class="trade">${escapeHtml(doc.trade)}</p>` : '';
   const sentence = doc.clientSentence
-    ? `<p class="sentence">${escapeHtml(doc.clientSentence)}</p>`
+    ? `<section class="assumptions">
+  <h2>${escapeHtml(CUSTOMER_ASSUMPTIONS_HEADING)}</h2>
+  <p class="sentence">${escapeHtml(doc.clientSentence)}</p>
+</section>`
+    : '';
+  const assumptionsCss = doc.clientSentence
+    ? `  .assumptions { margin: 0 0 20px; }
+  .assumptions h2 { font-size: 13px; font-weight: 700; margin: 0 0 6px; color: #555; }
+  .sentence { white-space: pre-wrap; font-size: 16px; margin: 0; }
+`
     : '';
   const bodyRows = doc.sections
     .map((section) => {
@@ -254,8 +266,7 @@ function renderCustomerQuoteHtml(doc: {
   body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #111; margin: 24px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .trade { color: #666; margin: 0 0 16px; font-size: 14px; }
-  .sentence { white-space: pre-wrap; font-size: 16px; margin: 0 0 20px; }
-  table { width: 100%; border-collapse: collapse; }
+${assumptionsCss}  table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid #ccc; vertical-align: top; }
   th.num, td.num { text-align: right; white-space: nowrap; }
   tr.room td { background: #f5f5f5; font-weight: 700; border-bottom: 1px solid #ccc; }

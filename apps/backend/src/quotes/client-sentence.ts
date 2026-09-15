@@ -4,6 +4,17 @@ export const CLIENT_SENTENCE_FIELD_ERROR =
   `clientSentence must be a string or null (max ${CLIENT_SENTENCE_MAX_LENGTH} characters)`;
 
 /**
+ * Empty / whitespace → null. Does not invent job-scope copy for PDF/share.
+ */
+export function normalizeClientSentence(
+  value: string | null | undefined,
+): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
  * Empty / whitespace → null. Explicit null clears. Rejects non-strings and
  * over-length values so a client cannot dump a transcript into the column.
  */

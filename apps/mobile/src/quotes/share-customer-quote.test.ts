@@ -72,6 +72,7 @@ describe('shareCustomerQuote', () => {
     expect(result).toEqual({ ok: true, kind: 'pdf' });
     expect(deps.printToPdf).toHaveBeenCalledTimes(1);
     const html = (deps.printToPdf as jest.Mock).mock.calls[0]![0] as string;
+    expect(html).toContain('Assumptions');
     expect(html).toContain('Appliances not included.');
     expect(html).toContain('Replace outlet');
     expect(html).toContain('Ada');
@@ -86,6 +87,26 @@ describe('shareCustomerQuote', () => {
       'file:///cache/QuoteSnap-quote.pdf',
       expect.objectContaining({ mimeType: 'application/pdf' }),
     );
+  });
+
+  it('does not invent assumptions copy when the client sentence is empty', async () => {
+    const deps = fakeDeps();
+    const result = await shareCustomerQuote(
+      {
+        ...source,
+        clientSentence: '   ',
+      },
+      {},
+      deps,
+    );
+    expect(result).toEqual({ ok: true, kind: 'pdf' });
+    const html = (deps.printToPdf as jest.Mock).mock.calls[0]![0] as string;
+    expect(html).toContain('Replace outlet');
+    expect(html.toLowerCase()).not.toContain('assumptions');
+    expect(html).not.toContain('Appliances not included.');
+    expect(html).not.toContain('Leave blank if none');
+    expect(html).not.toContain(SECRET_JOB);
+    expect(html).not.toContain(SECRET_LINE);
   });
 
   it('returns empty when there are no customer-facing lines', async () => {
@@ -148,8 +169,11 @@ describe('shareCustomerQuote', () => {
     expect(result).toEqual({ ok: true, kind: 'html' });
     expect(deps.writeTextFile).toHaveBeenCalled();
     const html = (deps.writeTextFile as jest.Mock).mock.calls[0]![1] as string;
+    expect(html).toContain('Assumptions');
+    expect(html).toContain('Appliances not included.');
     expect(html).toContain('Replace outlet');
     expect(html).not.toContain(SECRET_JOB);
+    expect(html).not.toContain(SECRET_LINE);
     expect(deps.shareFile).toHaveBeenCalledWith(
       'file:///cache/QuoteSnap-quote.html',
       expect.objectContaining({ mimeType: 'text/html' }),

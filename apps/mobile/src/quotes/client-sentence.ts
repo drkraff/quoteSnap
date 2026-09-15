@@ -4,8 +4,8 @@ export const CLIENT_SENTENCE_LABEL = 'Client sentence';
 
 export const CLIENT_SENTENCE_HINT = 'Shown at the top of the customer PDF';
 
-export const CLIENT_SENTENCE_PLACEHOLDER =
-  'e.g. Appliances and decorative lighting not included.';
+/** Input hint only — never persist or print this as job scope. */
+export const CLIENT_SENTENCE_PLACEHOLDER = 'Leave blank if none';
 
 export function normalizeClientSentence(
   value: string | null | undefined,
