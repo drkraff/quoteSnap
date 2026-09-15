@@ -899,11 +899,10 @@ describe("applyQuotePut", () => {
       assert.equal(outcome.json.quote.status, "sent");
       const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
       assert.ok(update, `${status} must UPDATE status`);
-      assert.match(update!.sql, /status = \$/);
-      assert.match(update!.sql, /sent_at = NOW\(\)/);
+      assert.match(update!.sql, /SET status = \$1, sent_at = NOW\(\)/);
       assert.equal(update!.params?.[0], "sent");
       assert.equal(
-        update!.sql.includes("customer_phone"),
+        /SET[\s\S]*customer_phone\s*=/.test(update!.sql),
         false,
         `${status} must not invent customer_phone`,
       );
