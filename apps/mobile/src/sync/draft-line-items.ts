@@ -1,5 +1,6 @@
 import type { QuoteLineItemResponse } from '../api/quotes';
 import type { LineItem } from '../utils/line-items';
+import { parsePriceSource } from '../utils/price-source';
 
 export function toDraftLineItems(
   lineItems: QuoteLineItemResponse[],
@@ -24,6 +25,10 @@ export function toDraftLineItems(
     }
     if (item.privateNote) {
       line.privateNote = item.privateNote;
+    }
+    const priceSource = parsePriceSource(item.priceSource);
+    if (priceSource) {
+      line.priceSource = priceSource;
     }
     return line;
   });

@@ -16,6 +16,12 @@ import {
   type ClientQuoteStatus,
 } from "./statuses.js";
 import { parseOptionalPrivateNote } from "./private-note.js";
+import {
+  inferSnapshotPriceSource,
+  isSnapshotPriceSource,
+  parseOptionalPriceSource,
+  type SnapshotPriceSource,
+} from "./price-source.js";
 
 export {
   CLIENT_QUOTE_STATUSES,
@@ -48,6 +54,8 @@ export type ParsedLineItemInput = {
   unit?: string | null;
   /** undefined = omitted (preserve); null = explicit clear. Contractor-only. */
   privateNote?: string | null;
+  /** undefined = omitted (preserve). */
+  priceSource?: SnapshotPriceSource;
 };
 
 export type ResolvedLineItem = {
@@ -58,6 +66,7 @@ export type ResolvedLineItem = {
   catalogItemId: string | null;
   unit: string | null;
   privateNote: string | null;
+  priceSource: SnapshotPriceSource;
 };
 
 export type ParsedQuotePutBody =
@@ -245,6 +254,15 @@ export function parseLineItemInput(
     privateNote = parsed.note;
   }
 
+  let priceSource: SnapshotPriceSource | undefined;
+  if (hasOwn(raw, "priceSource")) {
+    const parsed = parseOptionalPriceSource(raw.priceSource);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    priceSource = parsed.source;
+  }
+
   return {
     ok: true,
     item: {
@@ -255,6 +273,7 @@ export function parseLineItemInput(
       catalogItemId,
       unit,
       privateNote,
+      priceSource,
     },
   };
 }
@@ -272,7 +291,7 @@ export function totalCentsFromLineItems(items: Array<{ quantity: number; unitPri
  */
 export function resolveReplacementLineItems(
   incoming: ParsedLineItemInput[],
-  existing: Array<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note">>,
+  existing: Array<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source">>,
 ): ResolvedLineItem[] {
   const unused = existing.map((row) => ({ ...row }));
 
@@ -316,6 +335,15 @@ export function resolveReplacementLineItems(
       privateNote = match?.private_note ?? null;
     }
 
+    let priceSource: SnapshotPriceSource;
+    if (item.priceSource !== undefined) {
+      priceSource = item.priceSource;
+    } else if (isSnapshotPriceSource(match?.price_source)) {
+      priceSource = match.price_source;
+    } else {
+      priceSource = inferSnapshotPriceSource(item.unitPriceCents);
+    }
+
     return {
       name: item.name,
       quantity: item.quantity,
@@ -324,6 +352,7 @@ export function resolveReplacementLineItems(
       catalogItemId,
       unit,
       privateNote,
+      priceSource,
     };
   });
 }
@@ -443,8 +472,8 @@ export const SELECT_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
 
 export const DELETE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`;
+export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note, price_source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`;
 
 /**
  * Quote metadata + line-item replace on one query function so the caller can
@@ -546,6 +575,7 @@ export async function applyQuotePut(
         item.catalogItemId,
         item.unit,
         item.privateNote,
+        item.priceSource,
       ]);
     }
   }

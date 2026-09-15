@@ -110,6 +110,21 @@ describe('remoteLineItemsToDraftJson', () => {
     expect(JSON.parse(json)[0].privateNote).toBe('moisture from neighbor');
     expect(lineItemsFromDraftJson(json)[0]!.privateNote).toBe('moisture from neighbor');
   });
+
+  it('keeps priceSource on draft JSON and detail rows', () => {
+    const json = remoteLineItemsToDraftJson([
+      {
+        id: 'li-1',
+        name: 'Labor',
+        quantity: 2,
+        unitPriceCents: 7500,
+        unit: 'hour',
+        priceSource: 'computed',
+      },
+    ]);
+    expect(JSON.parse(json)[0].priceSource).toBe('computed');
+    expect(lineItemsFromDraftJson(json)[0]!.priceSource).toBe('computed');
+  });
 });
 
 describe('resolveQuoteDetailView', () => {

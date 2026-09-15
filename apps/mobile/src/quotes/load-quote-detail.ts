@@ -1,5 +1,6 @@
 import type { QuoteLineItemResponse, QuoteResponse } from '../api/quotes';
 import { parseLineItems, serializeLineItems, type LineItem } from '../utils/line-items';
+import { parsePriceSource } from '../utils/price-source';
 
 export const QUOTE_DETAIL_OFFLINE_ERROR =
   'Connect to the internet to view full details';
@@ -69,6 +70,9 @@ export function lineItemsFromDraftJson(json: string): QuoteLineItemResponse[] {
     if (item.privateNote) {
       row.privateNote = item.privateNote;
     }
+    if (item.priceSource) {
+      row.priceSource = item.priceSource;
+    }
     return row;
   });
 }
@@ -92,6 +96,10 @@ export function remoteLineItemsToDraftJson(
     }
     if (item.privateNote) {
       line.privateNote = item.privateNote;
+    }
+    const priceSource = parsePriceSource(item.priceSource);
+    if (priceSource) {
+      line.priceSource = priceSource;
     }
     return line;
   });

@@ -636,6 +636,7 @@ export default function DraftScreen(): JSX.Element {
                 unit={item.unit}
                 unitPriceCents={item.unitPriceCents}
                 confidence={displayTier}
+                priceSource={item.priceSource}
                 onQuantityChange={(delta) => { void handleQuantityChange(index, delta); }}
                 onPricePress={() => setPriceEditIndex(index)}
                 onDelete={() => { void handleDeleteItem(index); }}

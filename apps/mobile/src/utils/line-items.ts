@@ -1,4 +1,5 @@
 import { parseCatalogUnit } from '../catalog/units';
+import { parsePriceSource, typedPriceSource, type PriceSource } from './price-source';
 
 export interface LineItem {
   catalogItemId: string;
@@ -9,6 +10,8 @@ export interface LineItem {
   confidence?: number; // 0-1 from AI pipeline; undefined for manual items
   /** Contractor-only. Never copy into a customer PDF/SMS payload. */
   privateNote?: string | null;
+  /** Snapshot provenance: spoken | catalog | learned | computed | unknown | known. */
+  priceSource?: PriceSource;
 }
 
 const UNIT_SHORT: Record<string, string> = {
@@ -66,6 +69,10 @@ function coerceLineItem(value: unknown): LineItem {
   if (typeof raw.privateNote === 'string' && raw.privateNote.trim() !== '') {
     line.privateNote = raw.privateNote.trim();
   }
+  const priceSource = parsePriceSource(raw.priceSource);
+  if (priceSource) {
+    line.priceSource = priceSource;
+  }
   return line;
 }
 
@@ -89,6 +96,7 @@ export function addItem(
       name: catalogItem.name,
       quantity: 1,
       unitPriceCents: catalogItem.unitPriceCents,
+      priceSource: 'catalog',
       ...(catalogItem.unit ? { unit: catalogItem.unit } : {}),
     },
   ];
@@ -116,7 +124,14 @@ export function updatePrice(
   newPriceCents: number,
 ): LineItem[] {
   return items.map((item, i) =>
-    i === index ? { ...item, unitPriceCents: newPriceCents, confidence: undefined } : item,
+    i === index
+      ? {
+          ...item,
+          unitPriceCents: newPriceCents,
+          confidence: undefined,
+          priceSource: typedPriceSource(newPriceCents),
+        }
+      : item,
   );
 }
 

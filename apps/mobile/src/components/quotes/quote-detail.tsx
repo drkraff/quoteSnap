@@ -2,6 +2,7 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
+import { draftPriceFlag, draftPriceSourceLabel } from '../../utils/price-source';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { PRIVATE_NOTE_INTERNAL_HINT, PRIVATE_NOTE_LABEL } from '../../quotes/private-notes';
 
@@ -12,6 +13,7 @@ interface LineItemDisplay {
   unitPriceCents: number | null;
   unit?: string | null;
   privateNote?: string | null;
+  priceSource?: string | null;
 }
 
 interface QuoteDetailProps {
@@ -33,17 +35,26 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
 
   function renderLineItem({ item }: { item: LineItemDisplay }): JSX.Element {
     const priceUnknown = isUnknownUnitPrice(item.unitPriceCents);
+    const flag = draftPriceFlag(item.priceSource, item.unitPriceCents);
+    const sourceLabel = draftPriceSourceLabel(flag);
     const itemTotal = priceUnknown
       ? formatUnitPriceLabel(item.unitPriceCents)
       : `$${(((item.unitPriceCents ?? 0) * item.quantity) / 100).toFixed(2)}`;
     return (
       <View>
-        <View style={styles.lineItemRow}>
+        <View style={[styles.lineItemRow, priceUnknown && styles.lineItemUnknown]}>
           <Text style={styles.lineItemName} numberOfLines={2}>
             {item.name}
           </Text>
           <Text style={styles.lineItemQty}>{`x${formatQuantityLabel(item.quantity, item.unit)}`}</Text>
-          <Text style={styles.lineItemPrice}>{itemTotal}</Text>
+          <View style={styles.lineItemPriceColumn}>
+            <Text style={[styles.lineItemPrice, priceUnknown && styles.lineItemPriceUnknown]}>
+              {itemTotal}
+            </Text>
+            {sourceLabel ? (
+              <Text style={styles.priceSourceLabel}>{sourceLabel}</Text>
+            ) : null}
+          </View>
         </View>
         {item.privateNote ? (
           <View style={styles.lineNote}>
@@ -153,6 +164,27 @@ const styles = StyleSheet.create({
     color: '#000000',
     minWidth: 72,
     textAlign: 'right',
+  },
+  lineItemPriceColumn: {
+    alignItems: 'flex-end',
+    minWidth: 72,
+  },
+  lineItemPriceUnknown: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    lineHeight: 18,
+    color: colors.destructive,
+  },
+  lineItemUnknown: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.destructive,
+  },
+  priceSourceLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '400',
+    lineHeight: 18,
+    color: colors.mutedText,
+    marginTop: 2,
   },
   separator: {
     height: 1,

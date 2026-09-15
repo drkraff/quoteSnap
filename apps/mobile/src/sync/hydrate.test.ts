@@ -127,6 +127,7 @@ describe('toDraftLineItems', () => {
           unitPriceCents: 1500,
           confidence: 0.7,
           catalogItemId: 'server-cat-1',
+          priceSource: 'catalog',
         },
         {
           id: 'li-2',
@@ -147,6 +148,7 @@ describe('toDraftLineItems', () => {
         quantity: 2,
         unitPriceCents: 1500,
         confidence: 0.7,
+        priceSource: 'catalog',
       },
       {
         catalogItemId: '',

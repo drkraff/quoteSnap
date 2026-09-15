@@ -21,6 +21,7 @@ export type RemoteQuoteLineItem = {
   unitPriceCents: number | null;
   unit?: string | null;
   confidence?: number | null;
+  priceSource?: string | null;
 };
 
 export type RemoteQuoteForPoll = {

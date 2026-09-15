@@ -24,6 +24,8 @@ export interface QuoteLineItemResponse {
   catalogItemId?: string | null;
   /** Contractor-only. Never copy into a customer PDF/SMS payload. */
   privateNote?: string | null;
+  /** Snapshot provenance from attach or contractor edit. */
+  priceSource?: string | null;
 }
 
 export interface QuoteListItem extends QuoteResponse {
@@ -80,6 +82,7 @@ export async function updateQuoteOnServer(
       unitPriceCents: number | null;
       unit?: string | null;
       privateNote?: string | null;
+      priceSource?: string | null;
     }[];
   },
 ): Promise<QuoteResponse> {

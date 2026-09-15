@@ -29,6 +29,7 @@ describe("replaceVoiceQuoteLines", () => {
             unit: "foot",
             unitPriceCents: 750,
             confidence: 0.9,
+            priceSource: "catalog",
           },
         ],
       },
@@ -45,6 +46,7 @@ describe("replaceVoiceQuoteLines", () => {
       750,
       0.9,
       "foot",
+      "catalog",
     ]);
     assert.equal(calls[2]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
     assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, "quote-1"]);
@@ -71,6 +73,7 @@ describe("replaceVoiceQuoteLines", () => {
             unit: "job",
             unitPriceCents: null,
             confidence: 0.59,
+            priceSource: "unknown",
           },
         ],
       },
@@ -84,6 +87,7 @@ describe("replaceVoiceQuoteLines", () => {
       0,
       0.59,
       "job",
+      "unknown",
     ]);
     assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", "quote-2"]);
   });

@@ -1,3 +1,4 @@
+import { snapshotPriceSourceFromRow } from "../quotes/price-source.js";
 import type { QuoteLineItemResponse, QuoteListItemResponse, QuoteResponse } from "../types/quotes.js";
 
 export type QuoteRow = {
@@ -25,6 +26,7 @@ export type QuoteLineItemRow = {
   catalog_item_id: string | null;
   unit: string | null;
   private_note: string | null;
+  price_source: string | null;
 };
 
 export const QUOTE_COLUMNS =
@@ -48,7 +50,7 @@ export function parseQuotesListArchivedQuery(archived: unknown): boolean {
 }
 
 export const LINE_ITEM_COLUMNS =
-  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note";
+  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source";
 
 export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
   return {
@@ -75,6 +77,7 @@ export function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemRespo
     confidence: row.confidence,
     catalogItemId: row.catalog_item_id,
     privateNote: row.private_note,
+    priceSource: snapshotPriceSourceFromRow(row.price_source, row.unit_price_cents),
   };
 }
 

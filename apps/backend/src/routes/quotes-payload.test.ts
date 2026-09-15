@@ -42,6 +42,7 @@ function lineItemRow(overrides: Partial<QuoteLineItemRow> = {}): QuoteLineItemRo
     catalog_item_id: "33333333-3333-4333-8333-333333333333",
     unit: "foot",
     private_note: null,
+    price_source: "catalog",
     ...overrides,
   };
 }
@@ -95,6 +96,7 @@ describe("lineItemRowToResponse", () => {
       confidence: 0.91,
       catalogItemId: "33333333-3333-4333-8333-333333333333",
       privateNote: null,
+      priceSource: "catalog",
     });
   });
 
@@ -102,6 +104,26 @@ describe("lineItemRowToResponse", () => {
     assert.equal(
       lineItemRowToResponse(lineItemRow({ private_note: "moisture from neighbor" })).privateNote,
       "moisture from neighbor",
+    );
+  });
+
+  it("maps stored price_source and infers known/unknown on pre-migration null", () => {
+    assert.equal(lineItemRowToResponse(lineItemRow()).priceSource, "catalog");
+    assert.equal(
+      lineItemRowToResponse(lineItemRow({ price_source: "spoken", unit_price_cents: 850 })).priceSource,
+      "spoken",
+    );
+    assert.equal(
+      lineItemRowToResponse(lineItemRow({ price_source: "computed", unit_price_cents: 7500 })).priceSource,
+      "computed",
+    );
+    assert.equal(
+      lineItemRowToResponse(lineItemRow({ price_source: null, unit_price_cents: 1500 })).priceSource,
+      "known",
+    );
+    assert.equal(
+      lineItemRowToResponse(lineItemRow({ price_source: null, unit_price_cents: 0 })).priceSource,
+      "unknown",
     );
   });
 });

@@ -42,14 +42,15 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
 }
 
 function existingLine(
-  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note">> = {},
-): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note"> {
+  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source">> = {},
+): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source"> {
   return {
     name: "Copper pipe",
     confidence: 0.91,
     catalog_item_id: CATALOG_ID,
     unit: "foot",
     private_note: null,
+    price_source: "catalog",
     ...overrides,
   };
 }
@@ -244,6 +245,38 @@ describe("parseLineItemInput", () => {
     assert.equal(parsed.item.catalogItemId, undefined);
   });
 
+  it("accepts attach priceSource values and rejects a guessed label", () => {
+    const spoken = parseLineItemInput({
+      name: "Tear-out",
+      quantity: 1,
+      unitPriceCents: 180000,
+      priceSource: "spoken",
+    });
+    assert.equal(spoken.ok, true);
+    if (!spoken.ok) return;
+    assert.equal(spoken.item.priceSource, "spoken");
+
+    const computed = parseLineItemInput({
+      name: "Labor",
+      quantity: 2,
+      unitPriceCents: 7500,
+      priceSource: "computed",
+    });
+    assert.equal(computed.ok, true);
+    if (!computed.ok) return;
+    assert.equal(computed.item.priceSource, "computed");
+
+    assert.equal(
+      parseLineItemInput({
+        name: "Cabinets",
+        quantity: 1,
+        unitPriceCents: 100,
+        priceSource: "guessed",
+      }).ok,
+      false,
+    );
+  });
+
   it("rejects float unitPriceCents", () => {
     const parsed = parseLineItemInput({
       name: "Elbow",
@@ -301,6 +334,7 @@ describe("resolveReplacementLineItems", () => {
         catalogItemId: CATALOG_ID,
         unit: "foot",
         privateNote: null,
+        priceSource: "catalog",
       },
     ]);
   });
@@ -405,6 +439,7 @@ describe("resolveReplacementLineItems", () => {
       catalogItemId: null,
       unit: null,
       privateNote: null,
+      priceSource: "known",
     });
   });
 
@@ -429,6 +464,55 @@ describe("resolveReplacementLineItems", () => {
       [],
     );
     assert.equal(totalCentsFromLineItems(resolved), 3400);
+  });
+
+  it("preserves spoken price_source when the client omits it", () => {
+    const resolved = resolveReplacementLineItems(
+      [
+        {
+          name: "Copper pipe",
+          quantity: 3,
+          unitPriceCents: 1600,
+          confidence: undefined,
+          catalogItemId: undefined,
+        },
+      ],
+      [existingLine({ price_source: "spoken" })],
+    );
+    assert.equal(resolved[0]!.priceSource, "spoken");
+  });
+
+  it("writes an explicit known source when the contractor types a price", () => {
+    const resolved = resolveReplacementLineItems(
+      [
+        {
+          name: "Laminate cabinets",
+          quantity: 14,
+          unitPriceCents: 180000,
+          confidence: undefined,
+          catalogItemId: undefined,
+          priceSource: "known",
+        },
+      ],
+      [],
+    );
+    assert.equal(resolved[0]!.priceSource, "known");
+  });
+
+  it("infers unknown on a blank unmatched line without inventing a source", () => {
+    const resolved = resolveReplacementLineItems(
+      [
+        {
+          name: "Quartz countertop",
+          quantity: 12,
+          unitPriceCents: 0,
+          confidence: undefined,
+          catalogItemId: undefined,
+        },
+      ],
+      [],
+    );
+    assert.equal(resolved[0]!.priceSource, "unknown");
   });
 });
 
@@ -547,6 +631,7 @@ describe("applyQuotePut", () => {
         catalog_item_id: CATALOG_ID,
         unit: "foot",
         private_note: null,
+        price_source: "catalog",
       },
     ];
     for (const status of ["sent", "approved", "declined", "expired", "failed_send"]) {
@@ -666,6 +751,7 @@ describe("applyQuotePut", () => {
         catalog_item_id: CATALOG_ID,
         unit: "foot",
         private_note: null,
+        price_source: "catalog",
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -696,7 +782,7 @@ describe("applyQuotePut", () => {
     assert.equal(update!.params?.[0], 4500);
 
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot", null]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot", null, "catalog"]);
   });
 
   it("issues DELETE before INSERT on the same queryFn so a mid-loop failure can roll back", async () => {
@@ -734,6 +820,7 @@ describe("applyQuotePut", () => {
         catalog_item_id: CATALOG_ID,
         unit: "foot",
         private_note: null,
+        price_source: "catalog",
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -753,7 +840,7 @@ describe("applyQuotePut", () => {
       },
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot", null]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot", null, "catalog"]);
   });
 
   it("writes a quote-level privateNote without replacing line items", async () => {
@@ -785,6 +872,7 @@ describe("applyQuotePut", () => {
         catalog_item_id: CATALOG_ID,
         unit: "foot",
         private_note: "moisture from neighbor",
+        price_source: "catalog",
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -812,6 +900,7 @@ describe("applyQuotePut", () => {
         catalog_item_id: CATALOG_ID,
         unit: "foot",
         private_note: "moisture from neighbor",
+        price_source: "catalog",
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
