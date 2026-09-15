@@ -35,3 +35,10 @@ describe("rateCardTradeKey", () => {
     assert.equal(rateCardTradeKey("plumbing"), "plumbing");
   });
 });
+
+describe("list uses the same exact-match normalize (no fuzzy)", () => {
+  it("keeps copper-pipe variants as one English key", () => {
+    assert.equal(normalizeRateCardName("Copper Pipe"), normalizeRateCardName("  COPPER   PIPE "));
+    assert.notEqual(normalizeRateCardName("Copper Pipe"), normalizeRateCardName("Copper Pipes"));
+  });
+});

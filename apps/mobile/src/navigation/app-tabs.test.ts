@@ -47,5 +47,6 @@ describe('tabBarHref', () => {
     expect(tabBarHref('draft/[id]')).toBeNull();
     expect(tabBarHref('sync-issues')).toBeNull();
     expect(tabBarHref('import-quotes')).toBeNull();
+    expect(tabBarHref('my-rates')).toBeNull();
   });
 });

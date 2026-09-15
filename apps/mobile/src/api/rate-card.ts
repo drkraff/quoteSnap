@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { rateCardListPath } from '../rate-card/list-query';
 
 export type RateCardSource = 'typed' | 'confirmed' | 'imported';
 
@@ -37,6 +38,13 @@ interface RateCardLookupResponse {
   entry: RateCardEntryResponse | null;
 }
 
+export type RateCardListResponse = {
+  entries: RateCardEntryResponse[];
+  limit: number;
+  offset: number;
+  total: number;
+};
+
 export async function upsertRateCardEntry(body: {
   name: string;
   unit: string;
@@ -67,4 +75,16 @@ export async function importRateCardFromText(body: {
   documents?: { filename: string; mime: string; text?: string }[];
 }): Promise<ImportRateCardResponse> {
   return apiClient.post<ImportRateCardResponse>('/rate-card/import', body);
+}
+
+/** Omit `name` so GET /rate-card stays a list, not exact lookup. */
+export async function listRateCardEntries(query?: {
+  limit?: number;
+  offset?: number;
+}): Promise<RateCardListResponse> {
+  return apiClient.get<RateCardListResponse>(rateCardListPath(query));
+}
+
+export async function deleteRateCardEntry(id: string): Promise<{ deleted: true }> {
+  return apiClient.delete<{ deleted: true }>(`/rate-card/${id}`);
 }

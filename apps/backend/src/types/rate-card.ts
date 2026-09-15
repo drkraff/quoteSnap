@@ -26,3 +26,10 @@ export type UpsertRateCardBody = {
   trade?: string | null;
   source?: RateCardSource;
 };
+
+export type RateCardListResponse = {
+  entries: RateCardEntryResponse[];
+  limit: number;
+  offset: number;
+  total: number;
+};

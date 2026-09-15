@@ -14,7 +14,7 @@ import { uploadAudio } from '../api/voice';
 import type { Trade } from '../api/onboarding';
 import { CatalogItem } from '../db/models/catalog-item';
 import { archiveQuote, createQuoteOnServer, unarchiveQuote, updateQuoteOnServer, uploadQuotePhoto } from '../api/quotes';
-import { upsertRateCardEntry } from '../api/rate-card';
+import { upsertRateCardEntry, deleteRateCardEntry } from '../api/rate-card';
 import { Quote } from '../db/models/quote';
 import { Draft } from '../db/models/draft';
 import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
@@ -369,6 +369,11 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
   }
 
   if (item.entityType === 'rate_card') {
+    if (item.action === 'delete') {
+      const id = typeof payload.id === 'string' ? payload.id : item.entityId;
+      await deleteRateCardEntry(id);
+      return;
+    }
     const unit = parseCatalogUnit(payload.unit) ?? (payload.unit as string);
     await upsertRateCardEntry({
       name: payload.name as string,
