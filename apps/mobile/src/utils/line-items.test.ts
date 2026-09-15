@@ -4,10 +4,12 @@ import {
   removeItem,
   updateQuantity,
   updatePrice,
+  updatePrivateNote,
   recalculateTotal,
   formatQuantityLabel,
   formatUnitPriceLabel,
   isUnknownUnitPrice,
+  serializeLineItems,
   type LineItem,
 } from './line-items';
 
@@ -119,6 +121,20 @@ describe('updatePrice', () => {
   });
 });
 
+describe('updatePrivateNote', () => {
+  it('sets and clears a line private note without changing price', () => {
+    const items: LineItem[] = [
+      { catalogItemId: 'a', name: 'Item', quantity: 1, unitPriceCents: 1000 },
+    ];
+    const withNote = updatePrivateNote(items, 0, '  subcontractor check  ');
+    expect(withNote[0]!.privateNote).toBe('subcontractor check');
+    expect(withNote[0]!.unitPriceCents).toBe(1000);
+    const cleared = updatePrivateNote(withNote, 0, '  ');
+    expect(cleared[0]!.privateNote).toBeUndefined();
+    expect(cleared[0]!.unitPriceCents).toBe(1000);
+  });
+});
+
 describe('recalculateTotal', () => {
   it('returns 0 for empty array', () => {
     expect(recalculateTotal([])).toBe(0);
@@ -174,5 +190,23 @@ describe('adhoc / unknown prices', () => {
     expect(isUnknownUnitPrice(result[0]!.unitPriceCents)).toBe(true);
     expect(formatUnitPriceLabel(result[0]!.unitPriceCents)).toBe('Price needed');
     expect(formatQuantityLabel(14, 'foot')).toBe('14 ft');
+  });
+
+  it('round-trips a contractor privateNote on a line', () => {
+    const json = JSON.stringify([
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        unit: 'foot',
+        privateNote: 'moisture from neighbor',
+      },
+    ]);
+    const parsed = parseLineItems(json);
+    expect(parsed[0]!.privateNote).toBe('moisture from neighbor');
+    expect(JSON.parse(serializeLineItems(parsed))[0].privateNote).toBe(
+      'moisture from neighbor',
+    );
   });
 });

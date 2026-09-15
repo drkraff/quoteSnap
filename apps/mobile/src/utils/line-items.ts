@@ -7,6 +7,8 @@ export interface LineItem {
   unitPriceCents: number | null;
   unit?: string | null;
   confidence?: number; // 0-1 from AI pipeline; undefined for manual items
+  /** Contractor-only. Never copy into a customer PDF/SMS payload. */
+  privateNote?: string | null;
 }
 
 const UNIT_SHORT: Record<string, string> = {
@@ -61,6 +63,9 @@ function coerceLineItem(value: unknown): LineItem {
   if (typeof raw.confidence === 'number') {
     line.confidence = raw.confidence;
   }
+  if (typeof raw.privateNote === 'string' && raw.privateNote.trim() !== '') {
+    line.privateNote = raw.privateNote.trim();
+  }
   return line;
 }
 
@@ -113,6 +118,23 @@ export function updatePrice(
   return items.map((item, i) =>
     i === index ? { ...item, unitPriceCents: newPriceCents, confidence: undefined } : item,
   );
+}
+
+export function updatePrivateNote(
+  items: LineItem[],
+  index: number,
+  privateNote: string | null,
+): LineItem[] {
+  return items.map((item, i) => {
+    if (i !== index) return item;
+    const next = { ...item };
+    if (privateNote == null || privateNote.trim() === '') {
+      delete next.privateNote;
+    } else {
+      next.privateNote = privateNote.trim();
+    }
+    return next;
+  });
 }
 
 export function recalculateTotal(items: LineItem[]): number {

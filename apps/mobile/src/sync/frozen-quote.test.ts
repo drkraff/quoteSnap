@@ -43,6 +43,7 @@ describe('frozen quote statuses (SYNC-06)', () => {
     expect(payloadMutatesQuoteMoney({ isArchived: false })).toBe(false);
     expect(payloadMutatesQuoteMoney({ customerPhone: '+15555550100' })).toBe(false);
     expect(payloadMutatesQuoteMoney({ status: 'draft_queued' })).toBe(false);
+    expect(payloadMutatesQuoteMoney({ privateNote: 'subcontractor check' })).toBe(false);
   });
 
   it('recognizes the server freeze 409 and the contractor-facing copy', () => {

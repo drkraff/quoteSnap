@@ -14,4 +14,5 @@ export class Quote extends Model {
   @date('sent_at') sentAt!: Date | null;
   @text('voice_job_id') voiceJobId!: string | null;
   @field('is_archived') isArchived!: boolean | null;
+  @text('private_note') privateNote!: string | null;
 }

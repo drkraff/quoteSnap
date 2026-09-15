@@ -11,6 +11,7 @@ export type QuoteRow = {
   sent_at: Date | null;
   voice_job_id: string | null;
   is_archived: boolean;
+  private_note: string | null;
 };
 
 export type QuoteLineItemRow = {
@@ -23,10 +24,11 @@ export type QuoteLineItemRow = {
   confidence: number | null;
   catalog_item_id: string | null;
   unit: string | null;
+  private_note: string | null;
 };
 
 export const QUOTE_COLUMNS =
-  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived";
+  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note";
 
 /** Active Quotes list (catalog GET analog). Default GET /quotes. */
 export function listQuotesSql(archived: boolean): string {
@@ -46,7 +48,7 @@ export function parseQuotesListArchivedQuery(archived: unknown): boolean {
 }
 
 export const LINE_ITEM_COLUMNS =
-  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit";
+  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note";
 
 export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
   return {
@@ -59,6 +61,7 @@ export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
     sentAt: row.sent_at ? row.sent_at.toISOString() : null,
     voiceJobId: row.voice_job_id,
     isArchived: row.is_archived,
+    privateNote: row.private_note,
   };
 }
 
@@ -71,6 +74,7 @@ export function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemRespo
     unit: row.unit,
     confidence: row.confidence,
     catalogItemId: row.catalog_item_id,
+    privateNote: row.private_note,
   };
 }
 

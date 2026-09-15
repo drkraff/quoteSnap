@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 3,
+  version: 4,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -19,6 +19,8 @@ export const schema = appSchema({
         // Soft-archive (HIST-05). Optional so v2→v3 SQLite ADD COLUMN can be null
         // on existing rows; treat null as active (not archived).
         { name: 'is_archived', type: 'boolean', isOptional: true },
+        // Contractor-only (design #9). Never copy into a customer PDF/SMS payload.
+        { name: 'private_note', type: 'string', isOptional: true },
       ],
     }),
     tableSchema({
@@ -41,7 +43,8 @@ export const schema = appSchema({
       columns: [
         { name: 'quote_id', type: 'string' },
         { name: 'line_items_json', type: 'string' },
-        // JSON string: Array<{ catalogItemId?: string, name: string, quantity: number, unitPriceCents: number | null, unit?: string }>
+        // Leftover unused v1 column. Do not store private notes here —
+        // job notes live on quotes.private_note; line notes in line_items_json.
         { name: 'notes', type: 'string', isOptional: true },
         { name: 'updated_at', type: 'number' },
       ],

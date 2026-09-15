@@ -232,6 +232,7 @@ export async function upsertQuotes(
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
           record.isArchived = quote.isArchived === true;
+          record.privateNote = quote.privateNote ?? null;
         });
         quoteByServerId.set(quote.id, local);
       }
@@ -269,6 +270,7 @@ export async function upsertQuotes(
           record.totalCents = quote.totalCents;
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
+          record.privateNote = quote.privateNote ?? null;
           const serverArchived = quote.isArchived === true;
           const nextArchived = unarchiveHeldIds.has(localQuote.id)
             ? false

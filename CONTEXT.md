@@ -18,7 +18,7 @@ Core loop on `master`: register/login → trade + hourly (markup optional; catal
 
 ## Status on `master` (2026-09-14)
 
-Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#47** (thin SYNC-06 freeze) plus **FAIL-04/05** voice retry in this branch.
+Re-check GitHub before treating anything else as landed. This briefing includes merged PRs through **#48** (FAIL-04/05 voice retry) plus private notes (design #9) in this tree.
 
 | Phase | In code? | Honest status |
 |-------|----------|----------------|
@@ -51,6 +51,7 @@ Recent **merged** work to reflect if you mention status:
 - **PR #44** — Per-contractor rate card learn on draft price confirm (`POST /rate-card`, `GET /rate-card` exact lookup).
 - **P0-B** — Adhoc voice lines (non-catalog UUID) persist name/qty/unit; price attach is spoken → catalog SKU → exact rate-card → blank.
 - **P0-C** — Skippable catalog seed. Signup persists hourly labor rate (integer cents) + optional markup %. Labor unit price = hours × hourly (`computed`); unknown non-labor stays blank. Never invent SKU prices.
+- **Private notes (design #9)** — Contractor-only job + line notes. Persist on `quotes.private_note` / `quote_line_items.private_note` (Watermelon `quotes.private_note` + draft JSON `privateNote`). Draft/detail UI labeled internal-only. `toCustomerQuotePayload` allowlist omits them (tests guard Phase 6 PDF/SMS). Unused `drafts.notes` is not this feature.
 
 **Still open (docs, not these fixes):**
 
@@ -68,8 +69,8 @@ npm workspaces, two apps:
 ```
 apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
-apps/backend/src/db/migrations/   001_foundation … 013_ai_failure_stage
-apps/mobile/src/db/               schema v3, models, SQLiteAdapter
+apps/backend/src/db/migrations/   001_foundation … 014_private_notes
+apps/mobile/src/db/               schema v4, models, SQLiteAdapter
 apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate (server-as-truth; SYNC-05 draft forks → needs_review; thin SYNC-06 skips money PUTs on frozen quotes)
 .github/workflows/ci.yml
 ```
@@ -111,6 +112,7 @@ Workers: `voice-processor.ts` (pg-boss queue `voice-process`) and `ai-processing
 10. **`failed_send` ≠ `ai_failed`.** `ai_failed` is the voice pipeline; `failed_send` is reserved for SMS (Phase 6).
 11. **Audio PII:** delete from R2 **after** Whisper + GPT + DB commit succeed, not immediately after transcription. Delete failures after success are logged; they must not fail the job (avoids duplicate line items on retry).
 12. **Rate card does not invent prices.** `rate_card_entries` stores last typed/confirmed unit prices keyed by exact normalized name + unit + optional trade. Voice attach uses exact `GET /rate-card` only after spoken/catalog miss. Catalog SKU edits and quote snapshots stay independent. GPT must not read the rate card to guess prices.
+13. **Private notes never hit the customer PDF / SMS / approval page.** Job notes are `quotes.private_note`; line notes are `quote_line_items.private_note` (and `privateNote` in draft JSON). Contractor GET/PUT/hydrate may include them. Phase 6 send/PDF **must** use `toCustomerQuotePayload` (allowlist). Do not spread a quote row into a customer payload. Unused Watermelon `drafts.notes` is a leftover — do not store private notes there.
 
 ---
 
@@ -154,13 +156,13 @@ npm run test --workspace=apps/backend
 npm run test --workspace=apps/mobile
 ```
 
-Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (catalog SKUs + adhoc name/qty/unit, UUID filter, spoken vs rate-card vs computed labor vs blank attach), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive` both directions, active vs `?archived=true` list SQL), production start chaining SQL migrate before listen, rate-card upsert/exact lookup (`010_rate_card_entries`), quote snapshot `unit` (`011_quote_line_item_unit`), skippable onboarding profile (`012_contractor_hourly`, no catalog insert), labor hours × hourly compute, and thin SYNC-06 freeze of line-item/total PUT on sent and sibling statuses. Mobile tests cover confidence, line-items (including null catalog/price adhoc parse), quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive/unarchive PATCH, skipping POST when a local quote was hard-deleted, rate-card upsert, onboarding profile without seed, and skipping money PUTs on frozen quotes), auth 401 handling, login/restore catalog+quote hydrate (active + archived pulls; Unarchive is not overwritten; frozen quotes take the server snapshot even when a draft PUT is queued), offline onboarding seed enqueue / 409 de-dupe, skippable seed (trade + hourly, itemCount 0), voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), quote archive/unarchive copy, hard-delete of never-synced empty local drafts (`!serverId`), and draft price-edit rate-card learn payload (exact name+unit, no invented unit).
+Root `package.json` has no `test` script; CI invokes workspaces. On current `master`, backend tests cover login-lookup, voice-validation (catalog SKUs + adhoc name/qty/unit, UUID filter, spoken vs rate-card vs computed labor vs blank attach), whisper-language, the ai-processing reaper, quotes list payload nesting (`voiceJobId` + line items), voice upload quote reuse vs create, quote soft-archive (`PATCH /quotes/:id/archive` both directions, active vs `?archived=true` list SQL), production start chaining SQL migrate before listen, rate-card upsert/exact lookup (`010_rate_card_entries`), quote snapshot `unit` (`011_quote_line_item_unit`), skippable onboarding profile (`012_contractor_hourly`, no catalog insert), labor hours × hourly compute, thin SYNC-06 freeze of line-item/total PUT on sent and sibling statuses, private notes persist (`014_private_notes`) plus `toCustomerQuotePayload` omission. Mobile tests cover confidence, line-items (including null catalog/price adhoc parse and line `privateNote`), quote-validation, sync retry/backoff, single-flight, audio parent, NetInfo, `processQueue` (including quote archive/unarchive PATCH, skipping POST when a local quote was hard-deleted, rate-card upsert, onboarding profile without seed, skipping money PUTs on frozen quotes, and forwarding line `privateNote` on contractor draft PUT), auth 401 handling, login/restore catalog+quote hydrate (active + archived pulls; Unarchive is not overwritten; frozen quotes take the server snapshot even when a draft PUT is queued; private notes round-trip), offline onboarding seed enqueue / 409 de-dupe, skippable seed (trade + hourly, itemCount 0), voice-upload retry passing `quoteServerId`, quotes-list `ai_processing` poll recovery (`serverId` without `voiceJobId`), SYNC-05 draft forks (hydrate + queue GET-before-PUT + `needs_review`), quote archive/unarchive copy, hard-delete of never-synced empty local drafts (`!serverId`), draft price-edit rate-card learn payload (exact name+unit, no invented unit), and customer-payload allowlist (private notes never in the JSON).
 
 ---
 
 ## Known gaps (still true in tree — verify before “fixing”)
 
-These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, #38, #39, #44, #45, #46, and #47**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, thin SYNC-06 post-send money freeze, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, hard-delete of never-synced empty local drafts, rate-card learn (P0-A), adhoc voice lines + exact price attach (P0-B), or skippable seed + hourly labor (P0-C).
+These are **on `master` after PRs #8, #9, #12, #13, #31, #32, #33, #35, #36, #37, #38, #39, #44, #45, #46, #47, and #48**. Do not re-implement retry/single-flight, the reaper, the auth 401 interceptor, login/restore hydrate, dead-letter UI, SYNC-05 draft-conflict handling, thin SYNC-06 post-send money freeze, quotes-list live observe, quote soft-archive / Archived+Unarchive, Railway migrate-on-boot, hard-delete of never-synced empty local drafts, rate-card learn (P0-A), adhoc voice lines + exact price attach (P0-B), skippable seed + hourly labor (P0-C), FAIL-04/05 voice retry, or private notes.
 
 - **Phase 5 UAT** not signed off on a physical Android device.
 - **Send Quote** sets `draft_queued` and enqueues a sync payload; no SMS (`SMS-01`).

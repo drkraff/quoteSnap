@@ -146,6 +146,10 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         status: payload.status as string | undefined,
         customerPhone: payload.customerPhone as string | undefined,
         totalCents: payload.totalCents as number | undefined,
+        privateNote:
+          payload.privateNote === undefined
+            ? undefined
+            : (payload.privateNote as string | null),
       });
       await database.write(async () => {
         await localQuote.update((r) => {
@@ -189,7 +193,17 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         status: payload.status as string | undefined,
         customerPhone: payload.customerPhone as string | undefined,
         totalCents: payload.totalCents as number | undefined,
-        lineItems: payload.lineItems as Array<{ name: string; quantity: number; unitPriceCents: number }> | undefined,
+        privateNote:
+          payload.privateNote === undefined
+            ? undefined
+            : (payload.privateNote as string | null),
+        lineItems: payload.lineItems as {
+          name: string;
+          quantity: number;
+          unitPriceCents: number;
+          unit?: string | null;
+          privateNote?: string | null;
+        }[] | undefined,
       });
       rememberServerRevision(serverId, updated.updatedAt);
     }
@@ -210,7 +224,13 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     }
     const lineItemsRaw = payload.lineItemsJson as string | undefined;
     if (lineItemsRaw) {
-      const items = JSON.parse(lineItemsRaw) as Array<{ name: string; quantity: number; unitPriceCents: number }>;
+      const items = JSON.parse(lineItemsRaw) as {
+        name: string;
+        quantity: number;
+        unitPriceCents: number;
+        unit?: string | null;
+        privateNote?: string | null;
+      }[];
       const payloadLines = lineItemsFromQueuePayload(payload) ?? [];
       const outcome = await fetchAndResolveDraftFork({
         quote,
@@ -222,7 +242,16 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       if (payloadMutatesQuoteMoney(payload) && isFrozenQuoteStatus(quote.status)) {
         throw new FrozenQuoteWriteError();
       }
-      const updated = await updateQuoteOnServer(quote.serverId, { lineItems: items, totalCents: payload.totalCents as number | undefined });
+      const updated = await updateQuoteOnServer(quote.serverId, {
+        lineItems: items as {
+          name: string;
+          quantity: number;
+          unitPriceCents: number;
+          unit?: string | null;
+          privateNote?: string | null;
+        }[],
+        totalCents: payload.totalCents as number | undefined,
+      });
       rememberServerRevision(quote.serverId, updated.updatedAt);
     }
     return;
