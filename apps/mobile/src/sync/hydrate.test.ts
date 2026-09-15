@@ -521,6 +521,122 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(catalogItems[0]!.tradeCategory).toBe('plumbing');
   });
 
+  it('soft-archives a local server-backed SKU omitted from GET /catalog without inventing a replacement', async () => {
+    const leftover = attachUpdate<FakeCatalogItem>({
+      id: 'local-old-sku',
+      serverId: 'srv-old-sku',
+      contractorId,
+      name: 'Copper pipe',
+      unit: 'foot',
+      unitPriceCents: 1800,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    const keep = attachUpdate<FakeCatalogItem>({
+      id: 'local-keep-sku',
+      serverId: 'srv-keep-sku',
+      contractorId,
+      name: 'Labor',
+      unit: 'hour',
+      unitPriceCents: 12500,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    const localOnly = attachUpdate<FakeCatalogItem>({
+      id: 'local-only-sku',
+      serverId: null,
+      contractorId,
+      name: 'Custom valve',
+      unit: 'each',
+      unitPriceCents: 9900,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    catalogItems = [leftover, keep, localOnly];
+
+    await upsertCatalogItems(contractorId, [
+      {
+        id: 'srv-keep-sku',
+        name: 'Labor',
+        unit: 'hour',
+        unitPriceCents: 12500,
+        tradeCategory: 'plumbing',
+        isArchived: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+
+    expect(catalogItems).toHaveLength(3);
+    expect(leftover.isArchived).toBe(true);
+    expect(leftover.unitPriceCents).toBe(1800);
+    expect(leftover.name).toBe('Copper pipe');
+    expect(keep.isArchived).toBe(false);
+    expect(keep.unitPriceCents).toBe(12500);
+    expect(localOnly.isArchived).toBe(false);
+    expect(localOnly.unitPriceCents).toBe(9900);
+  });
+
+  it('does not invent SKUs when GET /catalog is empty and leftover actives are archived', async () => {
+    const last = attachUpdate<FakeCatalogItem>({
+      id: 'local-last-sku',
+      serverId: 'srv-last-sku',
+      contractorId,
+      name: 'Copper pipe',
+      unit: 'foot',
+      unitPriceCents: 1800,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    catalogItems = [last];
+
+    await upsertCatalogItems(contractorId, []);
+
+    expect(catalogItems).toHaveLength(1);
+    expect(catalogItems[0]).toBe(last);
+    expect(last.isArchived).toBe(true);
+    expect(last.unitPriceCents).toBe(1800);
+  });
+
+  it('does not hide a catalog undo still in the dead-letter queue', async () => {
+    const restored = attachUpdate<FakeCatalogItem>({
+      id: 'local-undo-sku',
+      serverId: 'srv-undo-sku',
+      contractorId,
+      name: 'Copper pipe',
+      unit: 'foot',
+      unitPriceCents: 1800,
+      tradeCategory: 'plumbing',
+      isArchived: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    catalogItems = [restored];
+    queueItems = [
+      {
+        entityType: 'catalog_item',
+        entityId: 'local-undo-sku',
+        action: 'update',
+        status: 'dead_letter',
+        payloadJson: JSON.stringify({ isArchived: false }),
+      },
+    ];
+
+    await upsertCatalogItems(contractorId, []);
+
+    expect(restored.isArchived).toBe(false);
+    expect(restored.unitPriceCents).toBe(1800);
+    expect(catalogItems).toHaveLength(1);
+  });
+
   it('does not overwrite a local row that still has a pending write-queue item', async () => {
     const existing = attachUpdate<FakeCatalogItem>({
       id: 'local-cat-keep',

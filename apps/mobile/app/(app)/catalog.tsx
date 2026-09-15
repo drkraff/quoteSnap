@@ -11,6 +11,12 @@ import { Q } from '@nozbe/watermelondb';
 import { useRouter } from 'expo-router';
 import { database } from '../../src/db';
 import { CatalogItem } from '../../src/db/models/catalog-item';
+import {
+  catalogArchiveEnqueue,
+  catalogUnarchiveEnqueue,
+  groupCatalogByCategory,
+  type CatalogSection,
+} from '../../src/catalog/archive-item';
 import { catalogCreateSyncPayload } from '../../src/catalog/create-sync-payload';
 import { enqueue, getPendingCount } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
@@ -24,34 +30,11 @@ import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
 import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
 import { colors } from '../../src/theme/tokens';
 
-interface CatalogSection {
-  title: string;
-  data: CatalogItem[];
-}
-
-function groupByCategory(items: CatalogItem[]): CatalogSection[] {
-  const map = new Map<string, CatalogItem[]>();
-
-  for (const item of items) {
-    const key = item.tradeCategory ?? 'Other';
-    const existing = map.get(key);
-    if (existing) {
-      existing.push(item);
-    } else {
-      map.set(key, [item]);
-    }
-  }
-
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([title, data]) => ({ title, data }));
-}
-
 // Screen title: "My Catalog" — set via _layout.tsx Tabs.Screen headerTitle
 export default function CatalogScreen(): JSX.Element {
   const router = useRouter();
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [sections, setSections] = useState<CatalogSection[]>([]);
+  const [sections, setSections] = useState<CatalogSection<CatalogItem>[]>([]);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -70,7 +53,7 @@ export default function CatalogScreen(): JSX.Element {
 
     const subscription = query.observe().subscribe((results) => {
       setItems(results);
-      setSections(groupByCategory(results));
+      setSections(groupCatalogByCategory(results));
     });
 
     return () => subscription.unsubscribe();
@@ -167,12 +150,7 @@ export default function CatalogScreen(): JSX.Element {
         });
       });
       setUndoVisible(true);
-      await enqueue({
-        entityType: 'catalog_item',
-        entityId: item.id,
-        action: 'update',
-        payload: { isArchived: true },
-      });
+      await enqueue(catalogArchiveEnqueue(item));
       void refreshPendingCount();
     } catch {
       // Revert optimistic state on failure
@@ -189,12 +167,7 @@ export default function CatalogScreen(): JSX.Element {
           record.isArchived = false;
         });
       });
-      await enqueue({
-        entityType: 'catalog_item',
-        entityId: archivedItem.id,
-        action: 'update',
-        payload: { isArchived: false },
-      });
+      await enqueue(catalogUnarchiveEnqueue(archivedItem));
       void refreshPendingCount();
     } catch {
       // Undo failed — item remains archived; no crash
