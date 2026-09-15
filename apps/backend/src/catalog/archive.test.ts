@@ -57,6 +57,7 @@ describe("catalogArchiveUpdateSql", () => {
     assert.match(sql, /SET is_archived = TRUE/);
     assert.match(sql, /contractor_id = \$2/);
     assert.match(sql, /is_archived = FALSE/);
+    assert.doesNotMatch(sql, /DELETE /);
   });
 
   it("unarchives by tenant without requiring the row to still be archived", () => {
@@ -163,5 +164,47 @@ describe("applyCatalogArchivePatch", () => {
       { itemId: ITEM_ID, contractorId: CONTRACTOR_ID, body: undefined },
     );
     assert.deepEqual(outcome, { status: 200, json: { archived: true } });
+  });
+
+  it("soft-archives the last item in place — UPDATE, never DELETE or INSERT a replacement SKU", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    const outcome = await applyCatalogArchivePatch(
+      async (sql, params) => {
+        calls.push({ sql, params });
+        assert.match(sql, /UPDATE catalog_items/);
+        assert.match(sql, /SET is_archived = TRUE/);
+        assert.doesNotMatch(sql, /DELETE /);
+        assert.doesNotMatch(sql, /INSERT /);
+        return { rows: [{ id: ITEM_ID }] };
+      },
+      { itemId: ITEM_ID, contractorId: CONTRACTOR_ID, body: { archived: true } },
+    );
+    assert.deepEqual(outcome, { status: 200, json: { archived: true } });
+    assert.deepEqual(calls[0]?.params, [ITEM_ID, CONTRACTOR_ID]);
+  });
+
+  it("undo unarchives the same tenant-owned id without inventing a row", async () => {
+    const outcome = await applyCatalogArchivePatch(
+      async (sql, params) => {
+        assert.match(sql, /SET is_archived = FALSE/);
+        assert.doesNotMatch(sql, /DELETE /);
+        assert.doesNotMatch(sql, /INSERT /);
+        assert.deepEqual(params, [ITEM_ID, CONTRACTOR_ID]);
+        return { rows: [{ id: ITEM_ID }] };
+      },
+      { itemId: ITEM_ID, contractorId: CONTRACTOR_ID, body: { archived: false } },
+    );
+    assert.deepEqual(outcome, { status: 200, json: { archived: false } });
+  });
+
+  it("returns 404 for another tenant even when this was their last item", async () => {
+    const outcome = await applyCatalogArchivePatch(
+      async (_sql, params) => {
+        assert.deepEqual(params, [ITEM_ID, OTHER_CONTRACTOR_ID]);
+        return { rows: [] };
+      },
+      { itemId: ITEM_ID, contractorId: OTHER_CONTRACTOR_ID, body: { archived: true } },
+    );
+    assert.deepEqual(outcome, { status: 404, json: { error: "Item not found" } });
   });
 });

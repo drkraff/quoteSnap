@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
 import { applyCatalogArchivePatch } from "../catalog/archive.js";
+import { LIST_ACTIVE_CATALOG_SQL } from "../catalog/list.js";
 import {
   INSERT_CATALOG_ITEM_SQL,
   catalogCreateInsertParams,
@@ -47,13 +48,7 @@ function rowToResponse(row: CatalogRow): CatalogItemResponse {
 router.get("/", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
-    const result = await query(
-      `SELECT id, name, unit, unit_price_cents, trade_category, is_archived, created_at, updated_at
-       FROM catalog_items
-       WHERE contractor_id = $1 AND is_archived = FALSE
-       ORDER BY trade_category ASC NULLS LAST, name ASC`,
-      [contractorId]
-    );
+    const result = await query(LIST_ACTIVE_CATALOG_SQL, [contractorId]);
     const items = (result.rows as CatalogRow[]).map(rowToResponse);
     res.json({ items });
   } catch (err) {

@@ -1,6 +1,10 @@
 import { Q } from '@nozbe/watermelondb';
 import { fetchCatalogItems, type CatalogItemResponse } from '../api/catalog';
 import { parseCatalogUnit } from '../catalog/units';
+import {
+  isCatalogUnarchiveQueueItem,
+  shouldArchiveLocalCatalogItemOnHydrate,
+} from '../catalog/archive-item';
 import { fetchQuotes, type QuoteListItem } from '../api/quotes';
 import { database } from '../db';
 import type { CatalogItem } from '../db/models/catalog-item';
@@ -72,21 +76,20 @@ function catalogLocalIdByServerId(items: CatalogItem[]): Map<string, string> {
   return map;
 }
 
-async function blockingEntityIds(entityType: string): Promise<Set<string>> {
-  const items = await database.get<SyncQueueItem>('sync_queue_items').query().fetch();
-  return new Set(
-    items
-      .filter((item) => item.entityType === entityType && isBlockingStatus(item.status))
-      .map((item) => item.entityId),
-  );
-}
-
 export async function upsertCatalogItems(
   contractorId: string,
   items: CatalogItemResponse[],
 ): Promise<void> {
   const collection = database.get<CatalogItem>('catalog_items');
-  const blockedIds = await blockingEntityIds('catalog_item');
+  const queueItems = await database.get<SyncQueueItem>('sync_queue_items').query().fetch();
+  const blockedIds = new Set(
+    queueItems
+      .filter((item) => item.entityType === 'catalog_item' && isBlockingStatus(item.status))
+      .map((item) => item.entityId),
+  );
+  const unarchiveHeldIds = new Set(
+    queueItems.filter(isCatalogUnarchiveQueueItem).map((item) => item.entityId),
+  );
 
   await database.write(async () => {
     const existing = await collection.query(Q.where('contractor_id', contractorId)).fetch();
@@ -163,6 +166,22 @@ export async function upsertCatalogItems(
         record.createdAt = parseMs(item.createdAt);
         record.updatedAt = parseMs(item.updatedAt);
       });
+    }
+
+    const pulledServerIds = new Set(items.map((item) => item.id));
+    for (const local of existing) {
+      if (
+        shouldArchiveLocalCatalogItemOnHydrate({
+          serverId: local.serverId,
+          isArchived: local.isArchived === true,
+          blocked: blockedIds.has(local.id) || unarchiveHeldIds.has(local.id),
+          pulledServerIds,
+        })
+      ) {
+        await local.update((record) => {
+          record.isArchived = true;
+        });
+      }
     }
   });
 }
@@ -351,7 +370,10 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * Idempotent: rows are keyed by server_id and re-running does not duplicate.
  * Local-only rows (server_id null) are left alone unless a pulled item shares
  * a name — then the local row is adopted (A-03 offline seed de-dupe).
- * Catalog and unblocked quotes are server-as-truth. A dirty pre-send draft whose
+ * Catalog and unblocked quotes are server-as-truth. GET /catalog is actives
+ * only: server-backed SKUs missing from that list are soft-archived locally
+ * so an archived-only catalog does not show phantom actives. A queued catalog
+ * Unarchive (including dead_letter) is not overwritten. A dirty pre-send draft whose
  * line items disagree with the server is applied from the server and parked as
  * `needs_review` (SYNC-05) instead of a silent queue overwrite. Frozen post-send
  * quotes (SYNC-06) always take the server snapshot, even if a draft PUT is queued.

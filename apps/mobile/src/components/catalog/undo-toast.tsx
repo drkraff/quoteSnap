@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { CATALOG_ARCHIVED_TOAST, CATALOG_UNDO_ARCHIVE_LABEL } from '../../catalog/list-copy';
 import { colors, spacing, typography } from '../../theme/tokens';
 
 interface UndoToastProps {
@@ -41,11 +42,11 @@ export function UndoToast({ visible, onUndo, onDismiss }: UndoToastProps): JSX.E
       style={styles.container}
       accessibilityLiveRegion="polite"
     >
-      <Text style={styles.message}>Item archived. </Text>
+      <Text style={styles.message}>{CATALOG_ARCHIVED_TOAST} </Text>
       <Pressable
         onPress={handleUndo}
         accessibilityRole="button"
-        accessibilityLabel="Undo archive"
+        accessibilityLabel={CATALOG_UNDO_ARCHIVE_LABEL}
       >
         <Text style={styles.undoText}>Undo</Text>
       </Pressable>
