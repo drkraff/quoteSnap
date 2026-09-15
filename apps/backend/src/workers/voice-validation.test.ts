@@ -225,7 +225,7 @@ describe('validateAndBuildLineItems', () => {
         { name: 'Quartz countertop', quantity: 12, unit: 'foot', confidence: 0.7 },
       ],
       [],
-      { hourlyRateCents: 7500 },
+      { hourlyRateCents: 7500, markupPercent: 20 },
     );
 
     assert.equal(lineItems.length, 2);
@@ -280,6 +280,57 @@ describe('validateAndBuildLineItems', () => {
     assert.equal(totalCents, 0);
   });
 
+  it('computes material sell from spoken cost × markup and leaves labor on the hourly path', () => {
+    const { lineItems, totalCents } = validateAndBuildLineItems(
+      [
+        { name: 'Labor', quantity: 2, unit: 'hour', confidence: 0.8 },
+        {
+          name: 'Copper pipe',
+          quantity: 1,
+          unit: 'each',
+          spokenMaterialCostCents: 4000,
+          confidence: 0.7,
+        },
+      ],
+      [],
+      { hourlyRateCents: 7500, markupPercent: 20 },
+    );
+    assert.equal(lineItems[0]!.unitPriceCents, 7500);
+    assert.equal(lineItems[0]!.priceSource, 'computed');
+    assert.equal(lineItems[1]!.unitPriceCents, 4800);
+    assert.equal(lineItems[1]!.priceSource, 'computed');
+    assert.equal(totalCents, 19800);
+  });
+
+  it('lets a spoken sell price win over cost × markup', () => {
+    const { lineItems } = validateAndBuildLineItems(
+      [
+        {
+          name: 'Copper pipe',
+          quantity: 1,
+          unit: 'each',
+          spokenUnitPriceCents: 9900,
+          spokenMaterialCostCents: 4000,
+          confidence: 0.9,
+        },
+      ],
+      [],
+      { markupPercent: 20 },
+    );
+    assert.equal(lineItems[0]!.unitPriceCents, 9900);
+    assert.equal(lineItems[0]!.priceSource, 'spoken');
+  });
+
+  it('does not invent a material price from markup without a cost', () => {
+    const { lineItems } = validateAndBuildLineItems(
+      [{ name: 'Copper pipe', quantity: 1, unit: 'each', confidence: 0.7 }],
+      [],
+      { markupPercent: 20 },
+    );
+    assert.equal(lineItems[0]!.unitPriceCents, null);
+    assert.equal(lineItems[0]!.priceSource, 'unknown');
+  });
+
   it('still maps catalog SKUs when mixed with adhoc lines', () => {
     const { lineItems } = validateAndBuildLineItems(
       [
@@ -307,6 +358,24 @@ describe('buildVoiceLineItems', () => {
     );
     assert.equal(built[0]!.catalogItemId, null);
     assert.equal(built[0]!.name, 'Haul-away');
+    assert.equal(built[0]!.spokenUnitPriceCents, null);
+    assert.equal(built[0]!.spokenMaterialCostCents, null);
+  });
+
+  it('copies a spoken material cost without treating it as a sell price', () => {
+    const built = buildVoiceLineItems(
+      [
+        {
+          name: 'Copper pipe',
+          quantity: 1,
+          unit: 'each',
+          spokenMaterialCostCents: 4000,
+          confidence: 0.7,
+        },
+      ],
+      catalog,
+    );
+    assert.equal(built[0]!.spokenMaterialCostCents, 4000);
     assert.equal(built[0]!.spokenUnitPriceCents, null);
   });
 });

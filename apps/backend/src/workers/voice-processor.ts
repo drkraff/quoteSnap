@@ -5,7 +5,11 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/cha
 import pool, { query } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
 import type { VoiceJobData, AILineItem, VoiceExtractResult } from '../types/voice.js';
-import { lookupExactRateCardCents, parseSpokenHours } from './voice-price-attach.js';
+import {
+  lookupExactRateCardCents,
+  parseSignupMarkupPercent,
+  parseSpokenHours,
+} from './voice-price-attach.js';
 import { filterUuidCatalogIds, validateAndBuildLineItemsAsync } from './voice-validation.js';
 import type { CatalogItemRow, ValidatedLineItem } from './voice-validation.js';
 import { resolveWhisperLanguage } from './whisper-language.js';
@@ -107,11 +111,15 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const catalogItems = catalogResult.rows as Array<{ id: string; name: string; unit: string }>;
 
     const tradeResult = await query(
-      `SELECT trade, hourly_rate_cents FROM contractors WHERE id = $1`,
+      `SELECT trade, hourly_rate_cents, markup_percent FROM contractors WHERE id = $1`,
       [contractorId]
     );
     const contractorRow = tradeResult.rows[0] as
-      | { trade?: string | null; hourly_rate_cents?: number | null }
+      | {
+          trade?: string | null;
+          hourly_rate_cents?: number | null;
+          markup_percent?: number | null;
+        }
       | undefined;
     const contractorTrade =
       typeof contractorRow?.trade === 'string' ? contractorRow.trade : null;
@@ -121,6 +129,7 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
       contractorRow.hourly_rate_cents > 0
         ? contractorRow.hourly_rate_cents
         : null;
+    const markupPercent = parseSignupMarkupPercent(contractorRow?.markup_percent);
 
     // e) GPT-4o function calling — extract lines; never ask the model for a guessed price
     const completion = await openai.chat.completions.create({
@@ -135,7 +144,8 @@ Rules:
 - When it does not match, omit catalogItemId. Still return name, quantity, and unit from speech.
 - quantity is an integer >= 1. "14 linear feet" → quantity 14, unit foot.
 - unit must be one of: each, hour, foot, sqft, job.
-- spokenUnitPriceCents is integer cents ONLY if the contractor stated a dollar amount (example: "eight fifty a foot" → 850). If they did not say a price, omit it or null.
+- spokenUnitPriceCents is integer cents ONLY if the contractor stated a sell/charge price (example: "eight fifty a foot" → 850, "I'll charge 250 each" → 25000). If they did not say a sell price, omit it or null. Do not put a supplier cost here.
+- spokenMaterialCostCents is integer cents ONLY if the contractor stated (or typed in notes) a supplier/material cost, not the sell price (example: "pipe cost me forty bucks" → 4000, "fittings were 85 at the supplier" → 8500). Omit or null if they did not name a cost. NEVER guess. NEVER copy catalog. NEVER treat a sell/charge price as cost.
 - spokenHours is integer hours for the job ONLY if they stated labor time (example: "call it two hours" → 2). Omit or null if they did not say hours. Do not guess duration.
 - assumptions: client-facing scope sentences they said (what is not included). Example: "appliances not included". Empty array if they said none. Do not invent exclusions, private notes, or prices.
 - room: the room or zone they named for that line (kitchen, bath, living room). Omit or null if they did not name a room. Never invent a room.
@@ -179,7 +189,13 @@ Rules:
                         type: ['integer', 'null'],
                         minimum: 1,
                         description:
-                          'Integer cents the contractor said. Null/omit if they did not say a dollar amount. NEVER guess.',
+                          'Integer cents the contractor said as a sell/charge price. Null/omit if they did not say a sell price. NEVER guess. NEVER put supplier cost here.',
+                      },
+                      spokenMaterialCostCents: {
+                        type: ['integer', 'null'],
+                        minimum: 1,
+                        description:
+                          'Integer cents the contractor said or typed as a supplier/material cost, not the sell price. Null/omit if they did not name a cost. NEVER guess.',
                       },
                       confidence: {
                         type: 'number',
@@ -246,13 +262,15 @@ Rules:
     }
 
     // h-i) Build catalog + adhoc lines, then attach prices
-    // (spoken → catalog SKU → exact rate-card → computed labor → blank)
+    // (spoken sell → catalog SKU → exact rate-card → computed labor →
+    //  computed material cost×markup → blank)
     const { lineItems, totalCents } = await validateAndBuildLineItemsAsync(
       aiItems,
       validCatalogItems,
       {
         trade: contractorTrade,
         hourlyRateCents,
+        markupPercent,
         spokenHours,
         lookupRateCard: ({ name, unit, trade }) =>
           lookupExactRateCardCents(query, {
