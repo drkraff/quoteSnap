@@ -305,7 +305,7 @@ describe('shouldUploadQueuedPhoto / missing local URI', () => {
     };
     expect(photoDisplayUri(onServer)).toBeNull();
     expect(photoStatusLabel(onServer)).toBe(PHOTO_MISSING_LOCAL_LABEL);
-    expect(photoDisplayUri(onServer)).not.toMatch(/^https?:\/\//);
+    expect(JSON.stringify(onServer)).not.toMatch(/https?:\/\//);
     expect(JSON.stringify(onServer)).not.toContain('unitPrice');
   });
 });
