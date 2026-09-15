@@ -77,10 +77,12 @@ export async function importRateCardFromText(body: {
   return apiClient.post<ImportRateCardResponse>('/rate-card/import', body);
 }
 
-/** Omit `name` so GET /rate-card stays a list, not exact lookup. */
+/** Omit `name` so GET /rate-card stays a list, not exact lookup. Optional `q` is substring filter. */
 export async function listRateCardEntries(query?: {
   limit?: number;
   offset?: number;
+  q?: string;
+  unit?: string;
 }): Promise<RateCardListResponse> {
   return apiClient.get<RateCardListResponse>(rateCardListPath(query));
 }

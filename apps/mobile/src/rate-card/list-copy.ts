@@ -3,6 +3,10 @@ export const MY_RATES_TITLE = 'My rates';
 export const MY_RATES_INTRO =
   'Prices you confirm on a quote land here. Editing does not change old quotes.';
 
+export const MY_RATES_SEARCH_PLACEHOLDER = 'Search rates';
+
+export const MY_RATES_NO_MATCHES = 'No rates match that name.';
+
 export const MY_RATES_EMPTY_HEADING = 'No rates yet';
 
 export const MY_RATES_EMPTY_BODY =

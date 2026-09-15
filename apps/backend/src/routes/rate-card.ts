@@ -42,7 +42,8 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
   }
 });
 
-// GET / — omit name for the contractor list (paginated). name+unit is exact lookup.
+// GET / — omit name for the contractor list (paginated; optional q/search + unit).
+// name+unit is exact lookup (voice attach). q never switches to lookup.
 router.get("/", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
@@ -63,6 +64,9 @@ router.get("/", authenticateToken, async (req: Request, res: Response): Promise<
       query: {
         limit: req.query["limit"],
         offset: req.query["offset"],
+        q: req.query["q"],
+        search: req.query["search"],
+        unit: req.query["unit"],
       },
     });
     res.status(outcome.status).json(outcome.json);
