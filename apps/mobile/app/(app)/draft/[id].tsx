@@ -79,6 +79,11 @@ import {
 import { normalizeClientSentence } from '../../../src/quotes/client-sentence';
 import { toContractorLineItemSync } from '../../../src/quotes/customer-payload';
 import {
+  SHARE_QUOTE_EMPTY,
+  SHARE_QUOTE_LABEL,
+  shareCustomerQuote,
+} from '../../../src/quotes/share-customer-quote';
+import {
   ADD_ALTERNATE_LABEL,
   OPTION_ALTERNATE_LABEL,
   OPTION_IN_TOTAL_LABEL,
@@ -155,6 +160,7 @@ export default function DraftScreen(): JSX.Element {
   const [needsReview, setNeedsReview] = useState(false);
   const [audioExists, setAudioExists] = useState(false);
   const [retryingVoice, setRetryingVoice] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -852,6 +858,39 @@ export default function DraftScreen(): JSX.Element {
     phoneSync.schedule({ quoteId: q.id, customerPhone: text });
   }
 
+  async function handleSharePress(): Promise<void> {
+    if (sharing) return;
+    const selectedCount = lineItems.filter((item) => item.optionRole !== 'alt').length;
+    if (selectedCount < 1) {
+      Alert.alert('Cannot share', SHARE_QUOTE_EMPTY);
+      return;
+    }
+    setSharing(true);
+    try {
+      const contractor = useAuthStore.getState().contractor;
+      const result = await shareCustomerQuote(
+        {
+          customerPhone: phone || null,
+          totalCents: recalculateTotal(lineItems),
+          clientSentence: normalizeClientSentence(clientSentence),
+          privateNote: normalizePrivateNote(privateNote),
+          rooms,
+          photos,
+          lineItems,
+        },
+        {
+          displayName: contractor?.displayName,
+          trade: contractor?.trade,
+        },
+      );
+      if (!result.ok) {
+        Alert.alert('Cannot share', result.message);
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
+
   async function handleSendPress(): Promise<void> {
     await phoneSync.flush();
     await noteSync.flush();
@@ -1198,7 +1237,7 @@ export default function DraftScreen(): JSX.Element {
             />
           </>
         }
-        contentContainerStyle={{ paddingBottom: 200 }}
+        contentContainerStyle={{ paddingBottom: 260 }}
       />
 
       {/* Sticky footer */}
@@ -1225,6 +1264,15 @@ export default function DraftScreen(): JSX.Element {
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalAmount}>{totalDisplay}</Text>
         </View>
+        <Pressable
+          style={[styles.shareButton, sharing && styles.shareButtonBusy]}
+          onPress={() => { void handleSharePress(); }}
+          accessibilityRole="button"
+          accessibilityLabel={SHARE_QUOTE_LABEL}
+          accessibilityState={{ disabled: sharing }}
+        >
+          <Text style={styles.shareButtonText}>{SHARE_QUOTE_LABEL}</Text>
+        </Pressable>
         <Pressable
           style={[
             styles.sendButton,
@@ -1531,5 +1579,22 @@ const styles = StyleSheet.create({
   sendButtonText: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  shareButton: {
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.dominant,
+  },
+  shareButtonBusy: {
+    opacity: 0.6,
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.accent,
   },
 });

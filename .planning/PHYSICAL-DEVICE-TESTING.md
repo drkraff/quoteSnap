@@ -257,6 +257,33 @@ These are the three tests from `.planning/phases/05-voice-to-quote-pipeline/05-H
 
 **Result**:
 
+#### Test 5.5 — Thin customer PDF + Share quote
+
+**Setup**: Logged in. Native rebuild that includes `expo-print` + `expo-sharing` (not an APK built before those deps). Manual Quote draft. Contractor has a display name and trade if you set them at signup.
+
+**Steps**:
+1. Open a draft. Add a priced line (e.g. catalog outlet). Add a second line and leave the price blank. Add an alternate option on one line. Add a room (Kitchen) and put a line in it. Type a **Client sentence**. Type a **private note** on the job and on a line (internal-only).
+2. Tap **Share quote**. The OS share sheet opens with a PDF (or HTML if print-to-PDF fails). Open the file in Drive / Files / a PDF viewer — do not send it to a real customer yet.
+3. Confirm the file shows the client sentence, contractor name/trade if set, room grouping, and the selected (base) line. Blank price stays blank (not `$0.00` on that line). Total excludes the unselected alternate.
+4. Confirm the file does **not** contain the private notes, the alternate line, or any photo URI.
+5. Open the same quote from history. **Share quote** still works. Send Quote still only queues `draft_queued` (no SMS).
+
+**Expected**:
+- Share does not require a customer phone (Send still does)
+- Private notes never appear in the shared file
+- Unselected alt is omitted; selected-only total
+- Unknown prices stay blank; no invented SKU price
+- Photos stay on the contractor UI only
+
+**Fail signals**:
+- ❌ Share button missing on draft or detail → screen wiring regression
+- ❌ Share sheet never opens → native `expo-print` / `expo-sharing` not in this binary (needs rebuild)
+- ❌ Private note text visible in the PDF/HTML → allowlist / mapper regression
+- ❌ Alternate price added into Total → option-group regression
+- ❌ Blank line shows `$0.00` or a guessed amount → price-invent regression
+
+**Result**:
+
 ---
 
 ### Regression — prior-phase features
