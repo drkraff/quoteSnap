@@ -28,7 +28,7 @@ import {
 } from "./price-source.js";
 import {
   isOptionRole,
-  lineContributesToTotal,
+  selectedOptionTotalCents,
   parseOptionalOptionGroupId,
   parseOptionalOptionRole,
   parseOptionGroupFields,
@@ -391,14 +391,14 @@ export function parseLineItemInput(
 }
 
 export function totalCentsFromLineItems(
-  items: Array<{ quantity: number; unitPriceCents: number; optionRole?: string | null }>,
+  items: Array<{
+    quantity: number;
+    unitPriceCents: number;
+    optionRole?: string | null;
+    optionGroupId?: string | null;
+  }>,
 ): number {
-  return items.reduce((sum, item) => {
-    if (!lineContributesToTotal(item)) {
-      return sum;
-    }
-    return sum + item.quantity * item.unitPriceCents;
-  }, 0);
+  return selectedOptionTotalCents(items);
 }
 
 /**
