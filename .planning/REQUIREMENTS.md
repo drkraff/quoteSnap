@@ -21,7 +21,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 ### Onboarding
 
 - [x] **ONBD-01**: Contractor selects their trade (plumbing, electrical, HVAC) during first-launch onboarding
-- [x] **ONBD-02**: Contractor receives a pre-seeded service catalog for their trade on account creation
+- [x] **ONBD-02**: Contractor can receive a pre-seeded service catalog for their trade (`POST /onboarding/seed`); catalog seed is skippable and never blocks the first quote
 - [ ] **ONBD-03**: Onboarding completes end-to-end within 90 seconds on a 1-bar LTE connection on a low-end Android device
 - [ ] **ONBD-04**: Onboarding is completable with partial offline connectivity (account creation requires signal; catalog seeding falls back to bundled offline template)
 
@@ -41,7 +41,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [x] **VOICE-03**: Recorded audio is uploaded to the backend via a local offline queue (works without signal)
 - [x] **VOICE-04**: Backend transcribes audio via Whisper and maps transcript to catalog items via GPT-4o function calling
 - [x] **VOICE-05**: GPT-4o maps catalog IDs when the spoken work matches; otherwise it returns adhoc name/qty/unit. It never invents prices (spoken integer cents only if the contractor said a dollar amount)
-- [x] **VOICE-06**: Backend validates catalog IDs against the contractor's active catalog. Unknown IDs become adhoc lines (name/qty/unit kept, `catalog_item_id` null) with blank price unless spoken or an exact rate-card hit — never a guessed SKU/price
+- [x] **VOICE-06**: Backend validates catalog IDs against the contractor's active catalog. Unknown IDs become adhoc lines (name/qty/unit kept, `catalog_item_id` null) with blank price unless spoken, an exact rate-card hit, or computed labor/material from signup hourly/markup — never a guessed SKU/price
 - [x] **VOICE-07**: AI draft is returned to client via polling at 1.5s intervals
 - [x] **VOICE-08**: Confidence tiers are applied to each line item: ≥0.85 = clean (no badge), 0.60–0.84 = "Review" (amber), <0.60 = "Needs Input" (red, auto-scrolls to item)
 - [x] **VOICE-09**: No raw confidence percentages are shown to contractors — plain language labels only
@@ -53,9 +53,11 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [x] **REVIEW-03**: Contractor can remove a line item from the draft
 - [x] **REVIEW-04**: Contractor can add a catalog item manually to the draft
 - [x] **REVIEW-05**: Draft auto-saves locally on every edit (no data loss on crash or background kill)
-- [x] **REVIEW-06**: Pre-send validation checks that the draft has at least one line item and a valid customer phone number before allowing Send
+- [x] **REVIEW-06**: Pre-send validation checks that the draft has at least one line item and a valid customer phone number before allowing in-app Send (Share quote does not require a phone and is not SMS-01)
 
 ### SMS Delivery and Customer Approval
+
+These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and marking eligible drafts `sent` without a phone) is a separate contractor-device path — see [CONTEXT.md](../CONTEXT.md). Do not check `SMS-*` for that.
 
 - [ ] **SMS-01**: Contractor can enter a customer phone number and send the quote draft via SMS (Twilio)
 - [ ] **SMS-02**: Quote is saved as a write-once snapshot at send time (catalog/price edits after send cannot alter the approval page)
@@ -209,4 +211,4 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-15 — FAIL-07 resume after crash from local SQLite; status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-15 — overnight ships through PR #61 (P0 rate card / adhoc / skippable seed, thin SYNC-06, FAIL-03/04/05/07, MVP adjuncts). SMS-01…10 and remaining FAIL-* stay pending. Status narrative lives in CONTEXT.md*
