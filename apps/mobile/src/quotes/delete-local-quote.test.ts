@@ -177,11 +177,11 @@ type StoreQueue = {
   destroyPermanently: () => Promise<void>;
 };
 
-function attachDestroy<T extends { destroyed?: boolean }>(
-  row: Omit<T, 'destroyPermanently' | 'destroyed'>,
+function attachDestroy<T extends object>(
+  row: T,
   onDestroy: () => void,
-): T {
-  const wrapped = row as T;
+): T & { destroyed?: boolean; destroyPermanently: () => Promise<void> } {
+  const wrapped = row as T & { destroyed?: boolean; destroyPermanently: () => Promise<void> };
   wrapped.destroyPermanently = async () => {
     wrapped.destroyed = true;
     onDestroy();
