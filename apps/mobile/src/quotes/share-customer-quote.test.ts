@@ -46,6 +46,7 @@ const source = {
       unitPriceCents: 25000,
       unit: 'each',
       privateNote: SECRET_LINE,
+      priceSource: 'spoken' as const,
     },
     {
       name: 'Keep the tub',
@@ -72,6 +73,8 @@ describe('shareCustomerQuote', () => {
     expect(html).not.toContain(SECRET_LINE);
     expect(html).not.toContain('Keep the tub');
     expect(html).not.toContain('privateNote');
+    expect(html).not.toContain('priceSource');
+    expect(html).not.toContain('price_source');
     expect(deps.shareFile).toHaveBeenCalledWith(
       'file:///cache/QuoteSnap-quote.pdf',
       expect.objectContaining({ mimeType: 'application/pdf' }),

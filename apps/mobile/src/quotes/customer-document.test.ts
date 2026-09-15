@@ -75,6 +75,7 @@ describe('customerQuoteToDocument', () => {
           unitPriceCents: 180000,
           unit: 'job',
           privateNote: SECRET_LINE,
+          priceSource: 'spoken' as const,
           optionGroupId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           optionRole: 'base' as const,
           roomId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -104,6 +105,8 @@ describe('customerQuoteToDocument', () => {
     expect(haystack).not.toContain(SECRET_PHOTO);
     expect(haystack).not.toContain('privateNote');
     expect(haystack).not.toContain('private_note');
+    expect(haystack).not.toContain('priceSource');
+    expect(haystack).not.toContain('price_source');
     expect(haystack).not.toContain('Keep the tub');
     expect(haystack).not.toContain('$450.00');
     expect(haystack).not.toContain('$2250.00');

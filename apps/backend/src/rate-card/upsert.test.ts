@@ -284,6 +284,37 @@ describe("upsertRateCardEntry", () => {
     assert.equal(calls[1]?.params?.[5], CONTRACTOR_ID);
   });
 
+  it("does not match a similar name on the same unit+trade (no stemming)", async () => {
+    const { queryFn } = mockDb(entryRow());
+    const outcome = await upsertRateCardEntry(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      recordedAtIso: RECORDED_AT,
+      body: { name: "Copper Pipes", unit: "foot", unitPriceCents: 9900, trade: "plumbing" },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.entry.useCount, 1);
+    assert.equal(outcome.json.entry.normalizedName, "copper pipes");
+    assert.equal(outcome.json.entry.displayName, "Copper Pipes");
+    assert.equal(outcome.json.entry.unitPriceCents, 9900);
+  });
+
+  it("treats case and extra spaces as the same exact name on learn upsert", async () => {
+    const { calls, queryFn } = mockDb(entryRow());
+    const outcome = await upsertRateCardEntry(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      recordedAtIso: RECORDED_AT,
+      body: { name: "  COPPER   PIPE  ", unit: "foot", unitPriceCents: 5200, trade: "plumbing" },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.entry.useCount, 2);
+    assert.equal(outcome.json.entry.normalizedName, "copper pipe");
+    assert.equal(outcome.json.entry.unitPriceCents, 5200);
+    assert.deepEqual(calls[0]?.params, [CONTRACTOR_ID, "copper pipe", "foot", "plumbing"]);
+    assert.equal(calls[1]?.sql, UPDATE_RATE_CARD_SQL);
+  });
+
   it("does not match a different unit or trade on the same name", async () => {
     const { queryFn } = mockDb(entryRow());
     const otherUnit = await upsertRateCardEntry(queryFn, {

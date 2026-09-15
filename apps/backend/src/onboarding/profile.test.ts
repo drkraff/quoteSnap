@@ -145,6 +145,10 @@ describe("applyOnboardingProfile", () => {
       calls.some((c) => /INSERT INTO catalog_items/i.test(c.sql)),
       false,
     );
+    assert.equal(
+      calls.some((c) => /FROM catalog_items/i.test(c.sql)),
+      false,
+    );
   });
 
   it("returns 404 when the contractor row is missing", async () => {

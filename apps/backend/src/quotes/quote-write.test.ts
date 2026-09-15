@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { QuoteLineItemRow, QuoteRow } from "../routes/quotes-payload.js";
 import {
   applyQuotePut,
@@ -302,6 +305,23 @@ describe("parseQuoteCreateBody", () => {
     const parsed = parseQuoteCreateBody({ totalCents: -5 });
     assert.equal(parsed.ok, false);
   });
+
+  it("does not require catalog items or line items after skippable seed", () => {
+    const parsed = parseQuoteCreateBody({
+      status: "draft_local",
+      totalCents: 0,
+      catalogItems: [],
+      itemCount: 0,
+    });
+    assert.deepEqual(parsed, {
+      ok: true,
+      status: "draft_local",
+      customerPhone: null,
+      totalCents: 0,
+      privateNote: null,
+      clientSentence: null,
+    });
+  });
 });
 
 describe("parseLineItemInput", () => {
@@ -352,6 +372,29 @@ describe("parseLineItemInput", () => {
     assert.equal(computed.ok, true);
     if (!computed.ok) return;
     assert.equal(computed.item.priceSource, "computed");
+
+    const learned = parseLineItemInput({
+      name: "Laminate cabinets",
+      quantity: 14,
+      unitPriceCents: 180000,
+      unit: "foot",
+      priceSource: "learned",
+    });
+    assert.equal(learned.ok, true);
+    if (!learned.ok) return;
+    assert.equal(learned.item.priceSource, "learned");
+    assert.equal(learned.item.catalogItemId, undefined);
+
+    const unknown = parseLineItemInput({
+      name: "Mystery assembly",
+      quantity: 1,
+      unitPriceCents: null,
+      priceSource: "unknown",
+    });
+    assert.equal(unknown.ok, true);
+    if (!unknown.ok) return;
+    assert.equal(unknown.item.priceSource, "unknown");
+    assert.equal(unknown.item.unitPriceCents, 0);
 
     assert.equal(
       parseLineItemInput({
@@ -1308,5 +1351,86 @@ describe("applyQuotePut", () => {
     assert.equal(inserts[0]?.params?.[11], kitchenId);
     assert.equal(inserts[1]?.params?.[11], null);
     assert.equal(inserts[0]?.params?.[3], 0);
+  });
+
+  it("persists attach price_source on adhoc lines without a catalog id", async () => {
+    const { calls, queryFn } = mockDb({ existingLines: [] });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [
+          {
+            name: "Tear-out",
+            quantity: 1,
+            unitPriceCents: 900,
+            unit: "job",
+            priceSource: "spoken",
+          },
+          {
+            name: "Laminate cabinets",
+            quantity: 14,
+            unitPriceCents: 180000,
+            unit: "foot",
+            priceSource: "learned",
+          },
+          {
+            name: "Labor",
+            quantity: 2,
+            unitPriceCents: 7500,
+            unit: "hour",
+            priceSource: "computed",
+          },
+          {
+            name: "Mystery assembly",
+            quantity: 1,
+            unitPriceCents: null,
+            unit: "job",
+            priceSource: "unknown",
+          },
+        ],
+      },
+    });
+    assert.equal(outcome.status, 200);
+    const inserts = calls.filter((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.equal(inserts.length, 4);
+    assert.deepEqual(
+      inserts.map((c) => ({
+        catalogItemId: c.params?.[5],
+        name: c.params?.[1],
+        cents: c.params?.[3],
+        priceSource: c.params?.[8],
+      })),
+      [
+        { catalogItemId: null, name: "Tear-out", cents: 900, priceSource: "spoken" },
+        {
+          catalogItemId: null,
+          name: "Laminate cabinets",
+          cents: 180000,
+          priceSource: "learned",
+        },
+        { catalogItemId: null, name: "Labor", cents: 7500, priceSource: "computed" },
+        { catalogItemId: null, name: "Mystery assembly", cents: 0, priceSource: "unknown" },
+      ],
+    );
+  });
+});
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+describe("POST /quotes skippable catalog", () => {
+  it("inserts a draft without joining or counting catalog_items", () => {
+    const src = readFileSync(path.join(here, "../routes/quotes.ts"), "utf8");
+    const postStart = src.indexOf("// POST / — create a new quote");
+    const postEnd = src.indexOf("// GET /:id");
+    assert.ok(postStart >= 0 && postEnd > postStart);
+    const postSlice = src.slice(postStart, postEnd);
+    assert.match(
+      postSlice,
+      /INSERT INTO quotes \(contractor_id, status, customer_phone, total_cents, private_note, client_sentence\)/,
+    );
+    assert.doesNotMatch(postSlice, /catalog_items/);
+    assert.doesNotMatch(postSlice, /COUNT_CONTRACTOR_CATALOG/);
+    assert.doesNotMatch(postSlice, /itemCount/);
   });
 });
