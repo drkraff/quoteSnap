@@ -144,4 +144,33 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(json.includes(kitchenId), false);
     assert.equal(json.includes("Kitchen"), true);
   });
+
+  it("drops photos, local URIs, and r2 keys from the customer payload", () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: "+15555550100",
+      totalCents: 0,
+      photos: [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          clientId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          localUri: "file:///docs/photos/secret.jpg",
+          r2Key: "photos/contractor/secret.jpg",
+          mime: "image/jpeg",
+        },
+      ],
+      lineItems: [
+        {
+          name: "Cabinets",
+          quantity: 14,
+          unitPriceCents: null,
+        },
+      ],
+    });
+    const json = JSON.stringify(payload);
+    assert.equal(json.includes("photo"), false);
+    assert.equal(json.includes("localUri"), false);
+    assert.equal(json.includes("r2Key"), false);
+    assert.equal(json.includes("secret.jpg"), false);
+    assert.equal(payload.lineItems[0]!.unitPriceCents, null);
+  });
 });

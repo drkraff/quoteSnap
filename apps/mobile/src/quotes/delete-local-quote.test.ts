@@ -103,6 +103,13 @@ describe('shouldDropQueueItemForDeletedLocalQuote', () => {
         draftIds,
       ),
     ).toBe(true);
+    expect(
+      shouldDropQueueItemForDeletedLocalQuote(
+        { entityType: 'photo', entityId: quoteId, status: 'pending' },
+        quoteId,
+        draftIds,
+      ),
+    ).toBe(true);
   });
 
   it('leaves in-progress items and unrelated entities alone', () => {

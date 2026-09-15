@@ -148,6 +148,33 @@ describe('toCustomerQuotePayload', () => {
     expect(json).not.toContain(kitchenId);
     expect(json).toContain('Kitchen');
   });
+
+  it('drops photos, local URIs, and r2 keys from the customer payload', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: '+15555550100',
+      totalCents: 0,
+      photos: [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          localUri: 'file:///docs/photos/secret.jpg',
+          r2Key: 'photos/contractor/secret.jpg',
+        },
+      ],
+      lineItems: [
+        {
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+        },
+      ],
+    });
+    const json = JSON.stringify(payload);
+    expect(json).not.toContain('photo');
+    expect(json).not.toContain('localUri');
+    expect(json).not.toContain('r2Key');
+    expect(json).not.toContain('secret.jpg');
+    expect(payload.lineItems[0]!.unitPriceCents).toBeNull();
+  });
 });
 
 describe('toContractorLineItemSync', () => {
@@ -227,6 +254,25 @@ describe('toContractorLineItemSync', () => {
       unit: 'foot',
       privateNote: null,
       roomId: kitchenId,
+    });
+  });
+
+  it('keeps clientId on the contractor PUT so photo-on-line round-trips', () => {
+    const lineId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    expect(
+      toContractorLineItemSync({
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        clientId: lineId,
+      }),
+    ).toEqual({
+      name: 'Cabinets',
+      quantity: 14,
+      unitPriceCents: 0,
+      unit: null,
+      privateNote: null,
+      clientId: lineId,
     });
   });
 });

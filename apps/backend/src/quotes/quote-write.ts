@@ -36,6 +36,7 @@ import {
   parseOptionalRooms,
   type QuoteRoom,
 } from "./rooms.js";
+import { isUuid } from "./photos.js";
 
 export {
   CLIENT_QUOTE_STATUSES,
@@ -76,6 +77,8 @@ export type ParsedLineItemInput = {
   optionRole?: OptionRole | null;
   /** undefined = omitted (preserve); null = explicit clear. */
   roomId?: string | null;
+  /** undefined = omitted (preserve); null = explicit clear. Client-stable photo attach. */
+  clientId?: string | null;
 };
 
 export type ResolvedLineItem = {
@@ -90,6 +93,7 @@ export type ResolvedLineItem = {
   optionGroupId: string | null;
   optionRole: OptionRole | null;
   roomId: string | null;
+  clientId: string | null;
 };
 
 export type ParsedQuotePutBody =
@@ -330,6 +334,17 @@ export function parseLineItemInput(
     roomId = parsed.roomId;
   }
 
+  let clientId: string | null | undefined;
+  if (hasOwn(raw, "clientId")) {
+    if (raw.clientId === null || raw.clientId === "") {
+      clientId = null;
+    } else if (!isUuid(raw.clientId)) {
+      return { ok: false, error: "clientId must be a UUID or null" };
+    } else {
+      clientId = raw.clientId;
+    }
+  }
+
   return {
     ok: true,
     item: {
@@ -344,6 +359,7 @@ export function parseLineItemInput(
       optionGroupId,
       optionRole,
       roomId,
+      clientId,
     },
   };
 }
@@ -380,6 +396,7 @@ export function resolveReplacementLineItems(
       | "option_group_id"
       | "option_role"
       | "room_id"
+      | "client_id"
     >
   >,
 ): ResolvedLineItem[] {
@@ -459,6 +476,15 @@ export function resolveReplacementLineItems(
       roomId = match?.room_id ?? null;
     }
 
+    let clientId: string | null;
+    if (item.clientId === null) {
+      clientId = null;
+    } else if (item.clientId !== undefined) {
+      clientId = item.clientId;
+    } else {
+      clientId = match?.client_id ?? null;
+    }
+
     return {
       name: item.name,
       quantity: item.quantity,
@@ -471,6 +497,7 @@ export function resolveReplacementLineItems(
       optionGroupId,
       optionRole,
       roomId,
+      clientId,
     };
   });
 }
@@ -617,8 +644,8 @@ export const SELECT_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
 
 export const DELETE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role, room_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`;
+export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role, room_id, client_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`;
 
 /**
  * Quote metadata + line-item replace on one query function so the caller can
@@ -732,6 +759,7 @@ export async function applyQuotePut(
         item.optionGroupId,
         item.optionRole,
         item.roomId,
+        item.clientId,
       ]);
     }
   }

@@ -22,6 +22,7 @@ import { toDraftLineItems } from './draft-line-items';
 import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
+import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 import {
   hydrateArchivedFlag,
   isQuoteUnarchiveQueueItem,
@@ -236,6 +237,9 @@ export async function upsertQuotes(
           record.privateNote = quote.privateNote ?? null;
           record.clientSentence = quote.clientSentence ?? null;
           record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
+          record.photosJson = serializePhotos(
+            mergePhotosOnHydrate([], (quote.photos ?? []) as ServerQuotePhoto[]),
+          );
         });
         quoteByServerId.set(quote.id, local);
       }
@@ -276,6 +280,12 @@ export async function upsertQuotes(
           record.privateNote = quote.privateNote ?? null;
           record.clientSentence = quote.clientSentence ?? null;
           record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
+          record.photosJson = serializePhotos(
+            mergePhotosOnHydrate(
+              parsePhotosJson(record.photosJson),
+              (quote.photos ?? []) as ServerQuotePhoto[],
+            ),
+          );
           const serverArchived = quote.isArchived === true;
           const nextArchived = unarchiveHeldIds.has(localQuote.id)
             ? false

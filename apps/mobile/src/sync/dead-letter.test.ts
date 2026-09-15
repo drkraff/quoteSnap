@@ -50,6 +50,9 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
     expect(deadLetterTitle('audio', 'create', '{"filePath":"/tmp/a.m4a"}')).toBe(
       'Voice recording',
     );
+    expect(deadLetterTitle('photo', 'create', '{"filePath":"file:///docs/a.jpg"}')).toBe(
+      'Job photo',
+    );
     expect(deadLetterTitle('onboarding', 'seed', '{"trade":"plumbing"}')).toBe('Catalog setup');
     expect(deadLetterTitle('onboarding', 'profile', '{"trade":"plumbing"}')).toBe('Hourly rate');
     expect(
@@ -70,6 +73,7 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
   it('maps entity/action to a plain-language summary', () => {
     expect(deadLetterSummary('quote', 'create')).toBe("Couldn't save a new quote");
     expect(deadLetterSummary('audio', 'create')).toBe("Couldn't upload this recording");
+    expect(deadLetterSummary('photo', 'create')).toBe("Couldn't upload this photo");
     expect(deadLetterSummary('onboarding', 'seed')).toBe("Couldn't finish catalog setup");
     expect(deadLetterSummary('onboarding', 'profile')).toBe("Couldn't save your hourly rate");
     expect(deadLetterSummary('rate_card', 'update')).toBe("Couldn't save this learned price");

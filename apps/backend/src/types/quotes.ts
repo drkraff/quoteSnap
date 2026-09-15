@@ -5,6 +5,15 @@ export interface QuoteRoomResponse {
   privateNote: string | null;
 }
 
+export interface QuotePhotoResponse {
+  id: string;
+  clientId: string;
+  mime: string;
+  roomId: string | null;
+  lineClientId: string | null;
+  uploaded: true;
+}
+
 export interface QuoteResponse {
   id: string;
   status: string;
@@ -21,6 +30,8 @@ export interface QuoteResponse {
   clientSentence: string | null;
   /** Thin rooms/zones. Empty = single-memo / ungrouped. */
   rooms: QuoteRoomResponse[];
+  /** Contractor-only stills. Never copy into a customer PDF/SMS/approval payload. */
+  photos?: QuotePhotoResponse[];
 }
 
 export interface QuoteLineItemResponse {
@@ -42,6 +53,8 @@ export interface QuoteLineItemResponse {
   optionRole?: string | null;
   /** Optional room/zone. Null = ungrouped / default single-memo. */
   roomId?: string | null;
+  /** Client-stable id for photo-on-line attach. Null on older rows. */
+  clientId?: string | null;
 }
 
 export interface QuoteListItemResponse extends QuoteResponse {
@@ -75,6 +88,8 @@ export interface UpdateQuoteLineItemBody {
   optionRole?: string | null;
   /** Omit to preserve; null clears. Matches quotes.rooms[].id. */
   roomId?: string | null;
+  /** Omit to preserve; null clears. Client-stable photo attach. */
+  clientId?: string | null;
 }
 
 export interface UpdateQuoteBody {

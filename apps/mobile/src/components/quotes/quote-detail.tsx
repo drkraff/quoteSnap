@@ -14,6 +14,9 @@ import {
   OPTION_IN_TOTAL_LABEL,
 } from '../../quotes/option-groups';
 import { draftListRows, UNGROUPED_ROOM_LABEL } from '../../quotes/rooms';
+import { PhotoStrip } from './photo-strip';
+import type { QuotePhoto } from '../../quotes/photos';
+import { photosForLine, photosForQuote, photosForRoom } from '../../quotes/photos';
 
 interface LineItemDisplay {
   id: string;
@@ -26,6 +29,7 @@ interface LineItemDisplay {
   optionGroupId?: string | null;
   optionRole?: string | null;
   roomId?: string | null;
+  clientId?: string | null;
 }
 
 interface QuoteDetailProps {
@@ -38,6 +42,7 @@ interface QuoteDetailProps {
     privateNote?: string | null;
     clientSentence?: string | null;
     rooms?: { id: string; name: string; privateNote?: string | null }[];
+    photos?: QuotePhoto[];
   };
   lineItems: LineItemDisplay[];
 }
@@ -46,6 +51,7 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
   const totalDisplay = `$${(quote.totalCents / 100).toFixed(2)}`;
   const createdDate = formatRelativeDate(new Date(quote.createdAt));
   const phone = quote.customerPhone || 'No phone';
+  const photos = quote.photos ?? [];
   const groupedRows = draftListRows(
     quote.rooms ?? [],
     lineItems.map((item) => ({
@@ -104,6 +110,7 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
             <Text style={styles.noteBody}>{item.privateNote}</Text>
           </View>
         ) : null}
+        <PhotoStrip photos={item.clientId ? photosForLine(photos, item.clientId) : []} />
       </View>
     );
   }
@@ -138,6 +145,8 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
         </View>
       ) : null}
 
+      <PhotoStrip photos={photosForQuote(photos)} />
+
       {/* Line items grouped by room when rooms exist; single-memo stays flat. */}
       <FlatList
         data={groupedRows}
@@ -152,6 +161,7 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
                 {row.room.privateNote ? (
                   <Text style={styles.internalHint}>{row.room.privateNote}</Text>
                 ) : null}
+                <PhotoStrip photos={photosForRoom(photos, row.room.id)} />
               </View>
             );
           }

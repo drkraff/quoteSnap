@@ -10,7 +10,7 @@ import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
 import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue } from './sync-queue';
-import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer } from '../api/quotes';
+import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer, uploadQuotePhoto } from '../api/quotes';
 import { upsertRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
 import { QUOTE_MONEY_FROZEN_ERROR } from './frozen-quote';
@@ -51,6 +51,7 @@ jest.mock('../api/quotes', () => ({
   fetchQuote: jest.fn(),
   archiveQuote: jest.fn(),
   unarchiveQuote: jest.fn(),
+  uploadQuotePhoto: jest.fn(),
 }));
 
 jest.mock('../api/rate-card', () => ({
@@ -83,6 +84,7 @@ type FakeQuote = {
   sentAt: Date | null;
   voiceJobId: string | null;
   roomsJson?: string | null;
+  photosJson?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -119,6 +121,7 @@ const mockedUpdateQuoteOnServer = updateQuoteOnServer as unknown as jest.Mock;
 const mockedArchiveQuote = archiveQuote as unknown as jest.Mock;
 const mockedUnarchiveQuote = unarchiveQuote as unknown as jest.Mock;
 const mockedCreateQuoteOnServer = createQuoteOnServer as unknown as jest.Mock;
+const mockedUploadQuotePhoto = uploadQuotePhoto as unknown as jest.Mock;
 const mockedUpsertRateCardEntry = upsertRateCardEntry as unknown as jest.Mock;
 
 function makeQueueItem(overrides: Partial<FakeQueueItem> = {}): FakeQueueItem {
@@ -202,6 +205,7 @@ describe('processQueue', () => {
     mockedArchiveQuote.mockReset();
     mockedUnarchiveQuote.mockReset();
     mockedCreateQuoteOnServer.mockReset();
+    mockedUploadQuotePhoto.mockReset();
     mockedUpsertRateCardEntry.mockReset();
     resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
@@ -1565,5 +1569,83 @@ describe('processQueue', () => {
     expect(item.status).toBe('pending');
     expect(item.retryCount).toBe(1);
     expect(item.nextRetryAt).toBeInstanceOf(Date);
+  });
+
+  it('uploads a pending still once the parent quote has a server id', async () => {
+    const photoId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const serverPhotoId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+      photosJson: JSON.stringify([
+        {
+          id: photoId,
+          localUri: 'file:///docs/photos/q1/a.jpg',
+          mime: 'image/jpeg',
+          status: 'pending',
+        },
+      ]),
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'photo',
+      entityId: 'q1',
+      action: 'create',
+      payloadJson: JSON.stringify({
+        quoteLocalId: 'q1',
+        photoId,
+        filePath: 'file:///docs/photos/q1/a.jpg',
+        mime: 'image/jpeg',
+      }),
+    });
+    queueItems = [item];
+    mockedUploadQuotePhoto.mockResolvedValue({
+      photo: {
+        id: serverPhotoId,
+        clientId: photoId,
+        mime: 'image/jpeg',
+        roomId: null,
+        lineClientId: null,
+        uploaded: true,
+      },
+    });
+
+    await processQueue();
+
+    expect(mockedUploadQuotePhoto).toHaveBeenCalledWith('srv-q1', {
+      filePath: 'file:///docs/photos/q1/a.jpg',
+      clientId: photoId,
+      mime: 'image/jpeg',
+      roomId: null,
+      lineClientId: null,
+    });
+    expect(item.status).toBe('destroyed');
+    const stored = JSON.parse(quote.photosJson ?? '[]') as { status: string; serverId: string }[];
+    expect(stored[0]!.status).toBe('uploaded');
+    expect(stored[0]!.serverId).toBe(serverPhotoId);
+  });
+
+  it('keeps a photo pending when the parent quote has no server id yet', async () => {
+    const quote = makeQuote({ id: 'q1', status: 'draft_local', serverId: null });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'photo',
+      entityId: 'q1',
+      action: 'create',
+      payloadJson: JSON.stringify({
+        quoteLocalId: 'q1',
+        photoId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        filePath: 'file:///docs/a.jpg',
+        mime: 'image/jpeg',
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUploadQuotePhoto).not.toHaveBeenCalled();
+    expect(item.status).toBe('pending');
+    expect(item.lastError).toMatch(/parent quote has no server ID yet/);
   });
 });

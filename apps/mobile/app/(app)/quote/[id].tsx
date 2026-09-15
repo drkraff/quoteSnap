@@ -20,6 +20,7 @@ import {
   type QuoteDetailSnapshot,
 } from '../../../src/quotes/load-quote-detail';
 import { serializeRooms } from '../../../src/quotes/rooms';
+import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos } from '../../../src/quotes/photos';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
@@ -76,6 +77,12 @@ export default function QuoteDetailScreen(): JSX.Element {
                 record.privateNote = remoteQuote.privateNote ?? null;
                 record.clientSentence = remoteQuote.clientSentence ?? null;
                 record.roomsJson = serializeRooms(remoteQuote.rooms ?? []);
+                record.photosJson = serializePhotos(
+                  mergePhotosOnHydrate(
+                    parsePhotosJson(q.photosJson),
+                    remoteQuote.photos ?? [],
+                  ),
+                );
               });
             });
           } catch {
@@ -139,6 +146,8 @@ export default function QuoteDetailScreen(): JSX.Element {
           sentAt: quote.sentAt,
           privateNote: quote.privateNote,
           clientSentence: quote.clientSentence,
+          rooms: quote.rooms,
+          photos: quote.photos,
         }}
         lineItems={lineItems}
       />

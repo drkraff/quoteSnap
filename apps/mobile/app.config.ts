@@ -52,6 +52,15 @@ const config: ExpoConfig = {
           'QuoteSnap needs microphone access to record voice quotes.',
       },
     ],
+    [
+      'expo-image-picker',
+      {
+        cameraPermission:
+          'QuoteSnap needs camera access to attach job photos to a quote.',
+        photosPermission:
+          'QuoteSnap needs photo library access to attach job photos to a quote.',
+      },
+    ],
     // Wires WatermelonDB native Gradle into android/. disableJsi: true (camelCase,
     // not disableJSI) stops the plugin from compiling Android JSI — modern RN
     // removed JSIModulePackage / JSIModuleSpec. Keep SQLiteAdapter jsi: false

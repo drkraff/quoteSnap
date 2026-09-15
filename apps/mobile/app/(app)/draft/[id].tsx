@@ -10,11 +10,13 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { confidenceTier } from '../../../src/utils/confidence';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
 import * as FileSystem from 'expo-file-system';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { database } from '../../../src/db';
@@ -61,6 +63,7 @@ import { AlternateOptionSheet } from '../../../src/components/quotes/alternate-o
 import { PrivateNoteField } from '../../../src/components/quotes/private-note-field';
 import { ClientSentenceField } from '../../../src/components/quotes/client-sentence-field';
 import { PrivateNoteSheet } from '../../../src/components/quotes/private-note-sheet';
+import { PhotoStrip } from '../../../src/components/quotes/photo-strip';
 import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
@@ -98,6 +101,21 @@ import {
   updateRoomPrivateNote,
   type QuoteRoom,
 } from '../../../src/quotes/rooms';
+import {
+  ADD_PHOTO_LABEL,
+  PHOTO_CAMERA_LABEL,
+  PHOTO_LIBRARY_LABEL,
+  PHOTO_PRIVATE_HINT,
+  addPhoto,
+  ensureLineClientId,
+  parsePhotosJson,
+  photosForLine,
+  photosForQuote,
+  photosForRoom,
+  serializePhotos,
+  type QuotePhoto,
+} from '../../../src/quotes/photos';
+import { persistStillPlan, photoQueuePayload } from '../../../src/quotes/persist-photo';
 import { typedPriceSource } from '../../../src/utils/price-source';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 import { RESUME_KIND_DRAFT } from '../../../src/quotes/resume-checkpoint';
@@ -119,6 +137,7 @@ export default function DraftScreen(): JSX.Element {
   const [privateNote, setPrivateNote] = useState('');
   const [clientSentence, setClientSentence] = useState('');
   const [rooms, setRooms] = useState<QuoteRoom[]>([]);
+  const [photos, setPhotos] = useState<QuotePhoto[]>([]);
   const [newRoomName, setNewRoomName] = useState('');
   const [addToRoomId, setAddToRoomId] = useState<string | null>(null);
   const [roomPickerIndex, setRoomPickerIndex] = useState<number | null>(null);
@@ -211,6 +230,7 @@ export default function DraftScreen(): JSX.Element {
         setPrivateNote(q.privateNote ?? '');
         setClientSentence(q.clientSentence ?? '');
         setRooms(parseRoomsJson(q.roomsJson));
+        setPhotos(parsePhotosJson(q.photosJson));
         const draftCollection = database.get<Draft>('drafts');
         const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
         if (cancelled) return;
@@ -631,6 +651,110 @@ export default function DraftScreen(): JSX.Element {
     roomsSync.schedule({ quoteId: quote.id, rooms: next });
   }
 
+  async function persistPhotos(next: QuotePhoto[]): Promise<void> {
+    if (!quote) return;
+    setPhotos(next);
+    await database.write(async () => {
+      await quote.update((r) => {
+        r.photosJson = serializePhotos(next);
+      });
+    });
+  }
+
+  async function handleAddPhoto(target: {
+    roomId?: string | null;
+    lineIndex?: number;
+  }): Promise<void> {
+    if (!quote || !draft) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+
+    Alert.alert(ADD_PHOTO_LABEL, PHOTO_PRIVATE_HINT, [
+      {
+        text: PHOTO_CAMERA_LABEL,
+        onPress: () => { void pickAndAttachPhoto('camera', target); },
+      },
+      {
+        text: PHOTO_LIBRARY_LABEL,
+        onPress: () => { void pickAndAttachPhoto('library', target); },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function pickAndAttachPhoto(
+    source: 'camera' | 'library',
+    target: { roomId?: string | null; lineIndex?: number },
+  ): Promise<void> {
+    if (!quote || !draft) return;
+    try {
+      const permission =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Photo access needed',
+          'QuoteSnap needs camera or library access to attach job photos.',
+          [
+            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+            { text: 'Cancel', style: 'cancel' },
+          ],
+        );
+        return;
+      }
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.7,
+              exif: false,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.7,
+              exif: false,
+            });
+      if (result.canceled || !result.assets[0]?.uri) {
+        return;
+      }
+      const asset = result.assets[0];
+      const plan = persistStillPlan(
+        { uri: asset.uri, mimeType: asset.mimeType },
+        quote.id,
+        FileSystem.documentDirectory,
+      );
+      await FileSystem.makeDirectoryAsync(plan.destDir, { intermediates: true });
+      await FileSystem.copyAsync({ from: plan.sourceUri, to: plan.destUri });
+
+      let nextItems = lineItems;
+      let lineClientId: string | null = null;
+      if (target.lineIndex != null) {
+        nextItems = ensureLineClientId(lineItems, target.lineIndex);
+        lineClientId = nextItems[target.lineIndex]?.clientId ?? null;
+        if (nextItems !== lineItems) {
+          await persistLineItems(nextItems);
+        }
+      }
+      const nextPhotos = addPhoto(photos, {
+        id: plan.photoId,
+        localUri: plan.destUri,
+        mime: plan.mime,
+        roomId: target.roomId ?? null,
+        lineClientId,
+      });
+      await persistPhotos(nextPhotos);
+      await enqueue(photoQueuePayload({
+        quoteLocalId: quote.id,
+        photoId: plan.photoId,
+        filePath: plan.destUri,
+        mime: plan.mime,
+      }));
+    } catch {
+      Alert.alert('Could not attach photo', 'The still was not saved. Try again.');
+    }
+  }
+
   async function handleAddRoom(): Promise<void> {
     if (!quote) return;
     if (rejectFrozenMoneyWrite()) return;
@@ -856,6 +980,10 @@ export default function DraftScreen(): JSX.Element {
                 {row.room.privateNote ? (
                   <Text style={styles.lineNoteHint}>{row.room.privateNote}</Text>
                 ) : null}
+                <PhotoStrip
+                  photos={photosForRoom(photos, row.room.id)}
+                  onAdd={() => { void handleAddPhoto({ roomId: row.room.id }); }}
+                />
               </View>
             );
           }
@@ -973,6 +1101,10 @@ export default function DraftScreen(): JSX.Element {
                 </Text>
                 <Text style={styles.lineNoteHint}>{PRIVATE_NOTE_INTERNAL_HINT}</Text>
               </Pressable>
+              <PhotoStrip
+                photos={item.clientId ? photosForLine(photos, item.clientId) : []}
+                onAdd={() => { void handleAddPhoto({ lineIndex: index, roomId: item.roomId }); }}
+              />
             </View>
           );
         }}
@@ -1014,6 +1146,10 @@ export default function DraftScreen(): JSX.Element {
               value={clientSentence}
               onChangeText={handleClientSentenceChange}
               onBlur={() => { void sentenceSync.flush(); }}
+            />
+            <PhotoStrip
+              photos={photosForQuote(photos)}
+              onAdd={() => { void handleAddPhoto({}); }}
             />
             <View style={styles.addRoomRow}>
               <TextInput

@@ -63,6 +63,7 @@ type FakeQuote = {
   privateNote?: string | null;
   clientSentence?: string | null;
   roomsJson?: string | null;
+  photosJson?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -359,6 +360,16 @@ describe('upsertCatalogItems / upsertQuotes', () => {
             privateNote: 'internal only',
           },
         ],
+        photos: [
+          {
+            id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            clientId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            mime: 'image/jpeg',
+            roomId: null,
+            lineClientId: null,
+            uploaded: true,
+          },
+        ],
         lineItems: [
           {
             id: 'li-1',
@@ -394,6 +405,17 @@ describe('upsertCatalogItems / upsertQuotes', () => {
         id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         name: 'Kitchen',
         privateNote: 'internal only',
+      },
+    ]);
+    expect(JSON.parse(quotes[0]!.photosJson ?? '[]')).toEqual([
+      {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        localUri: '',
+        mime: 'image/jpeg',
+        status: 'uploaded',
+        serverId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        roomId: null,
+        lineClientId: null,
       },
     ]);
     expect(drafts).toHaveLength(1);

@@ -17,4 +17,5 @@ export class Quote extends Model {
   @text('private_note') privateNote!: string | null;
   @text('client_sentence') clientSentence!: string | null;
   @text('rooms_json') roomsJson!: string | null;
+  @text('photos_json') photosJson!: string | null;
 }

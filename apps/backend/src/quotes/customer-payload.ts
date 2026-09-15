@@ -45,6 +45,14 @@ export type CustomerQuoteSource = {
     roomName?: string | null;
   }>;
   rooms?: Array<{ id: string; name: string; privateNote?: string | null }>;
+  /** Contractor-only stills. Must never be copied into the customer payload. */
+  photos?: Array<{
+    id: string;
+    clientId?: string;
+    localUri?: string;
+    r2Key?: string;
+    mime?: string;
+  }>;
 };
 
 export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuotePayload {

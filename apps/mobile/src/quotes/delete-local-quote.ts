@@ -63,7 +63,7 @@ export function shouldDropQueueItemForDeletedLocalQuote(
   draftIds: readonly string[],
 ): boolean {
   if (item.status === 'in_progress') return false;
-  if (item.entityId === quoteId && (item.entityType === 'quote' || item.entityType === 'audio')) {
+  if (item.entityId === quoteId && (item.entityType === 'quote' || item.entityType === 'audio' || item.entityType === 'photo')) {
     return true;
   }
   return item.entityType === 'draft' && draftIds.includes(item.entityId);

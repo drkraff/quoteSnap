@@ -323,6 +323,23 @@ describe('adhoc / unknown prices', () => {
       )[0]!.roomId,
     ).toBeUndefined();
   });
+
+  it('round-trips clientId for photo-on-line without changing price', () => {
+    const lineId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const parsed = parseLineItems(
+      JSON.stringify([
+        {
+          catalogItemId: '',
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          clientId: lineId,
+        },
+      ]),
+    );
+    expect(parsed[0]!.clientId).toBe(lineId);
+    expect(parsed[0]!.unitPriceCents).toBeNull();
+  });
 });
 
 describe('addAlternate / selectOptionForTotal / dissolve', () => {
