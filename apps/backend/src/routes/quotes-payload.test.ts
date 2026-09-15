@@ -11,6 +11,7 @@ import {
   type QuoteRow,
 } from "./quotes-payload.js";
 import { filterUuidCatalogIds } from "../workers/voice-validation.js";
+import { toCustomerQuotePayload } from "../quotes/customer-payload.js";
 
 function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
   return {
@@ -24,6 +25,7 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
     sent_at: null,
     voice_job_id: null,
     is_archived: false,
+    private_note: null,
     ...overrides,
   };
 }
@@ -39,6 +41,7 @@ function lineItemRow(overrides: Partial<QuoteLineItemRow> = {}): QuoteLineItemRo
     confidence: 0.91,
     catalog_item_id: "33333333-3333-4333-8333-333333333333",
     unit: "foot",
+    private_note: null,
     ...overrides,
   };
 }
@@ -59,6 +62,7 @@ describe("quoteRowToResponse", () => {
       sentAt: null,
       voiceJobId: "job-abc",
       isArchived: false,
+      privateNote: null,
     });
   });
 
@@ -69,6 +73,14 @@ describe("quoteRowToResponse", () => {
   it("maps is_archived so hydrate can hide archived quotes", () => {
     assert.equal(quoteRowToResponse(quoteRow()).isArchived, false);
     assert.equal(quoteRowToResponse(quoteRow({ is_archived: true })).isArchived, true);
+  });
+
+  it("maps private_note for contractor hydrate (not a customer payload)", () => {
+    assert.equal(quoteRowToResponse(quoteRow()).privateNote, null);
+    assert.equal(
+      quoteRowToResponse(quoteRow({ private_note: "subcontractor check" })).privateNote,
+      "subcontractor check",
+    );
   });
 });
 
@@ -82,7 +94,15 @@ describe("lineItemRowToResponse", () => {
       unit: "foot",
       confidence: 0.91,
       catalogItemId: "33333333-3333-4333-8333-333333333333",
+      privateNote: null,
     });
+  });
+
+  it("maps a contractor line private_note so hydrate can restore it", () => {
+    assert.equal(
+      lineItemRowToResponse(lineItemRow({ private_note: "moisture from neighbor" })).privateNote,
+      "moisture from neighbor",
+    );
   });
 });
 
@@ -124,6 +144,30 @@ describe("nestLineItems", () => {
     const nested = nestLineItems(quotes, []);
     assert.equal(nested.length, 1);
     assert.deepEqual(nested[0]!.lineItems, []);
+  });
+});
+
+describe("contractor response vs customer payload", () => {
+  it("keeps private notes on the contractor mapper and drops them on the customer allowlist", () => {
+    const quote = quoteRowToResponse(
+      quoteRow({ private_note: "subcontractor check — do not tell the client" }),
+    );
+    const line = lineItemRowToResponse(
+      lineItemRow({ private_note: "moisture from neighbor pipe" }),
+    );
+    assert.equal(quote.privateNote, "subcontractor check — do not tell the client");
+    assert.equal(line.privateNote, "moisture from neighbor pipe");
+
+    const customer = toCustomerQuotePayload({
+      customerPhone: quote.customerPhone,
+      totalCents: quote.totalCents,
+      privateNote: quote.privateNote,
+      lineItems: [line],
+    });
+    const json = JSON.stringify(customer);
+    assert.equal(json.includes("subcontractor check"), false);
+    assert.equal(json.includes("moisture from neighbor"), false);
+    assert.equal(json.includes("privateNote"), false);
   });
 });
 

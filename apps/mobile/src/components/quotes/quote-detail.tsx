@@ -3,6 +3,7 @@ import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
 import { colors, spacing, typography } from '../../theme/tokens';
+import { PRIVATE_NOTE_INTERNAL_HINT, PRIVATE_NOTE_LABEL } from '../../quotes/private-notes';
 
 interface LineItemDisplay {
   id: string;
@@ -10,6 +11,7 @@ interface LineItemDisplay {
   quantity: number;
   unitPriceCents: number | null;
   unit?: string | null;
+  privateNote?: string | null;
 }
 
 interface QuoteDetailProps {
@@ -19,6 +21,7 @@ interface QuoteDetailProps {
     totalCents: number;
     createdAt: string;
     sentAt: string | null;
+    privateNote?: string | null;
   };
   lineItems: LineItemDisplay[];
 }
@@ -34,12 +37,20 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
       ? formatUnitPriceLabel(item.unitPriceCents)
       : `$${(((item.unitPriceCents ?? 0) * item.quantity) / 100).toFixed(2)}`;
     return (
-      <View style={styles.lineItemRow}>
-        <Text style={styles.lineItemName} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={styles.lineItemQty}>{`x${formatQuantityLabel(item.quantity, item.unit)}`}</Text>
-        <Text style={styles.lineItemPrice}>{itemTotal}</Text>
+      <View>
+        <View style={styles.lineItemRow}>
+          <Text style={styles.lineItemName} numberOfLines={2}>
+            {item.name}
+          </Text>
+          <Text style={styles.lineItemQty}>{`x${formatQuantityLabel(item.quantity, item.unit)}`}</Text>
+          <Text style={styles.lineItemPrice}>{itemTotal}</Text>
+        </View>
+        {item.privateNote ? (
+          <View style={styles.lineNote}>
+            <Text style={styles.internalHint}>{PRIVATE_NOTE_INTERNAL_HINT}</Text>
+            <Text style={styles.noteBody}>{item.privateNote}</Text>
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -57,6 +68,14 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
           </Text>
         )}
       </View>
+
+      {quote.privateNote ? (
+        <View style={styles.jobNote}>
+          <Text style={styles.noteLabel}>{PRIVATE_NOTE_LABEL}</Text>
+          <Text style={styles.internalHint}>{PRIVATE_NOTE_INTERNAL_HINT}</Text>
+          <Text style={styles.noteBody}>{quote.privateNote}</Text>
+        </View>
+      ) : null}
 
       {/* Line items */}
       <FlatList
@@ -167,6 +186,38 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     lineHeight: 26,
+    color: '#000000',
+  },
+  jobNote: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.secondary,
+    gap: spacing.xs,
+  },
+  lineNote: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.secondary,
+    gap: spacing.xs,
+  },
+  noteLabel: {
+    fontSize: typography.body.fontSize,
+    fontWeight: '700',
+    lineHeight: typography.body.lineHeight,
+    color: '#000000',
+  },
+  internalHint: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
+  },
+  noteBody: {
+    fontSize: typography.body.fontSize,
+    fontWeight: typography.body.fontWeight,
+    lineHeight: typography.body.lineHeight,
     color: '#000000',
   },
 });

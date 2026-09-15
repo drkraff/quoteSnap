@@ -28,6 +28,7 @@ import {
   removeItem,
   updateQuantity,
   updatePrice,
+  updatePrivateNote,
   recalculateTotal,
   serializeLineItems,
   isUnknownUnitPrice,
@@ -49,11 +50,13 @@ import {
 } from '../../../src/sync/draft-conflict-queue';
 import { SyncQueueItem } from '../../../src/db/models/sync-queue-item';
 import { useAuthStore } from '../../../src/store/auth-store';
-import { createDraftPhoneSync } from '../../../src/quotes/draft-phone-sync';
+import { createDraftPhoneSync, createLatestDebouncer, PHONE_SYNC_DEBOUNCE_MS } from '../../../src/quotes/draft-phone-sync';
 import { QUOTE_NOT_FOUND, findQuoteRecord } from '../../../src/quotes/find-quote';
 import { LineItemRow } from '../../../src/components/quotes/line-item-row';
 import { PriceEditSheet } from '../../../src/components/quotes/price-edit-sheet';
 import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picker-sheet';
+import { PrivateNoteField } from '../../../src/components/quotes/private-note-field';
+import { PrivateNoteSheet } from '../../../src/components/quotes/private-note-sheet';
 import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
@@ -61,6 +64,12 @@ import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review
 import { aiFailedRecoveryView } from '../../../src/quotes/ai-failed-recovery';
 import { retryVoiceQuotePlan } from '../../../src/quotes/retry-voice-quote';
 import { localVoiceAudioPath } from '../../../src/quotes/voice-audio';
+import {
+  LINE_PRIVATE_NOTE_ADD,
+  PRIVATE_NOTE_INTERNAL_HINT,
+  normalizePrivateNote,
+} from '../../../src/quotes/private-notes';
+import { toContractorLineItemSync } from '../../../src/quotes/customer-payload';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function DraftScreen(): JSX.Element {
@@ -73,7 +82,9 @@ export default function DraftScreen(): JSX.Element {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [phone, setPhone] = useState('');
+  const [privateNote, setPrivateNote] = useState('');
   const [priceEditIndex, setPriceEditIndex] = useState<number | null>(null);
+  const [lineNoteIndex, setLineNoteIndex] = useState<number | null>(null);
   const [showCatalogPicker, setShowCatalogPicker] = useState(false);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [validationError, setValidationError] = useState('');
@@ -98,6 +109,16 @@ export default function DraftScreen(): JSX.Element {
         payload: { customerPhone },
       });
     }),
+  ).current;
+  const noteSync = useRef(
+    createLatestDebouncer(async (value: { quoteId: string; privateNote: string | null }) => {
+      await enqueue({
+        entityType: 'quote',
+        entityId: value.quoteId,
+        action: 'update',
+        payload: { privateNote: value.privateNote },
+      });
+    }, PHONE_SYNC_DEBOUNCE_MS),
   ).current;
 
   // Load quote + draft on mount. Voice/hydrate usually already wrote a draft;
@@ -126,6 +147,7 @@ export default function DraftScreen(): JSX.Element {
         setQuote(q);
         setQuoteStatus(q.status);
         setPhone(q.customerPhone ?? '');
+        setPrivateNote(q.privateNote ?? '');
         const draftCollection = database.get<Draft>('drafts');
         const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
         if (cancelled) return;
@@ -249,8 +271,9 @@ export default function DraftScreen(): JSX.Element {
         clearTimeout(undoTimerRef.current);
       }
       void phoneSync.flush();
+      void noteSync.flush();
     };
-  }, [phoneSync]);
+  }, [phoneSync, noteSync]);
 
   function rejectFrozenMoneyWrite(): boolean {
     const status = quote?.status ?? quoteStatus;
@@ -457,6 +480,45 @@ export default function DraftScreen(): JSX.Element {
     setShowCatalogPicker(false);
   }
 
+  function handlePrivateNoteChange(text: string): void {
+    setPrivateNote(text);
+    const q = quoteRef.current;
+    if (!q) return;
+    void persistPrivateNoteLocal(q, text);
+    noteSync.schedule({ quoteId: q.id, privateNote: normalizePrivateNote(text) });
+  }
+
+  async function persistPrivateNoteLocal(q: Quote, text: string): Promise<void> {
+    await database.write(async () => {
+      await q.update((r) => {
+        r.privateNote = normalizePrivateNote(text);
+      });
+    });
+  }
+
+  async function handleLineNoteSave(raw: string | null): Promise<void> {
+    if (!draft || !quote || lineNoteIndex === null) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const newItems = updatePrivateNote(
+      lineItems,
+      lineNoteIndex,
+      normalizePrivateNote(raw),
+    );
+    await database.write(async () => {
+      await draft.update((r) => {
+        r.lineItemsJson = serializeLineItems(newItems);
+      });
+    });
+    await enqueue({
+      entityType: 'draft',
+      entityId: draft.id,
+      action: 'update',
+      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: recalculateTotal(newItems) },
+    });
+    setLineNoteIndex(null);
+  }
+
   async function persistPhoneLocal(q: Quote, text: string): Promise<void> {
     const gen = ++phoneWriteGen.current;
     await database.write(async () => {
@@ -478,6 +540,7 @@ export default function DraftScreen(): JSX.Element {
 
   async function handleSendPress(): Promise<void> {
     await phoneSync.flush();
+    await noteSync.flush();
     if (!quote || !draft) {
       setValidationError('Draft not loaded — please go back and try again');
       return;
@@ -524,12 +587,10 @@ export default function DraftScreen(): JSX.Element {
         status: 'draft_queued',
         customerPhone: phone,
         totalCents: recalculateTotal(lineItems),
-        lineItems: lineItems.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          unitPriceCents: i.unitPriceCents ?? 0,
-          unit: i.unit ?? null,
-        })),
+        // Contractor PUT may include private notes so they persist. Phase 6
+        // SMS/PDF/approval MUST use toCustomerQuotePayload (allowlist).
+        privateNote: normalizePrivateNote(privateNote),
+        lineItems: lineItems.map(toContractorLineItemSync),
       },
     });
     // Phase 6 wires the actual SMS send — navigate back to quotes list
@@ -568,16 +629,39 @@ export default function DraftScreen(): JSX.Element {
           const tier = priceUnknown ? 'needs_input' : confidenceTier(item.confidence);
           const displayTier = tier === 'clean' ? undefined : tier;
           return (
-            <LineItemRow
-              name={item.name}
-              quantity={item.quantity}
-              unit={item.unit}
-              unitPriceCents={item.unitPriceCents}
-              confidence={displayTier}
-              onQuantityChange={(delta) => { void handleQuantityChange(index, delta); }}
-              onPricePress={() => setPriceEditIndex(index)}
-              onDelete={() => { void handleDeleteItem(index); }}
-            />
+            <View>
+              <LineItemRow
+                name={item.name}
+                quantity={item.quantity}
+                unit={item.unit}
+                unitPriceCents={item.unitPriceCents}
+                confidence={displayTier}
+                onQuantityChange={(delta) => { void handleQuantityChange(index, delta); }}
+                onPricePress={() => setPriceEditIndex(index)}
+                onDelete={() => { void handleDeleteItem(index); }}
+              />
+              <Pressable
+                style={styles.lineNoteButton}
+                onPress={() => setLineNoteIndex(index)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  item.privateNote
+                    ? `Edit private note. ${PRIVATE_NOTE_INTERNAL_HINT}`
+                    : `${LINE_PRIVATE_NOTE_ADD}. ${PRIVATE_NOTE_INTERNAL_HINT}`
+                }
+              >
+                <Text
+                  style={[
+                    styles.lineNoteText,
+                    !item.privateNote && styles.lineNotePlaceholder,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {item.privateNote || LINE_PRIVATE_NOTE_ADD}
+                </Text>
+                <Text style={styles.lineNoteHint}>{PRIVATE_NOTE_INTERNAL_HINT}</Text>
+              </Pressable>
+            </View>
           );
         }}
         onScrollToIndexFailed={(info) => {
@@ -620,17 +704,24 @@ export default function DraftScreen(): JSX.Element {
           <EmptyState onAddItem={() => setShowCatalogPicker(true)} />
         }
         ListFooterComponent={
-          <Pressable
-            style={styles.addItemButton}
-            onPress={() => setShowCatalogPicker(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Add item from catalog"
-          >
-            <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
-            <Text style={styles.addItemText}>Add Item</Text>
-          </Pressable>
+          <>
+            <Pressable
+              style={styles.addItemButton}
+              onPress={() => setShowCatalogPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Add item from catalog"
+            >
+              <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
+              <Text style={styles.addItemText}>Add Item</Text>
+            </Pressable>
+            <PrivateNoteField
+              value={privateNote}
+              onChangeText={handlePrivateNoteChange}
+              onBlur={() => { void noteSync.flush(); }}
+            />
+          </>
         }
-        contentContainerStyle={{ paddingBottom: 160 }}
+        contentContainerStyle={{ paddingBottom: 200 }}
       />
 
       {/* Sticky footer */}
@@ -682,6 +773,14 @@ export default function DraftScreen(): JSX.Element {
         onDismiss={() => setPriceEditIndex(null)}
       />
 
+      <PrivateNoteSheet
+        visible={lineNoteIndex !== null}
+        lineName={lineNoteIndex !== null ? lineItems[lineNoteIndex]?.name ?? '' : ''}
+        currentNote={lineNoteIndex !== null ? lineItems[lineNoteIndex]?.privateNote ?? null : null}
+        onSave={(note) => { void handleLineNoteSave(note); }}
+        onDismiss={() => setLineNoteIndex(null)}
+      />
+
       <CatalogPickerSheet
         visible={showCatalogPicker}
         items={catalogItems.map((c) => ({ id: c.id, name: c.name, unitPriceCents: c.unitPriceCents }))}
@@ -726,6 +825,28 @@ const styles = StyleSheet.create({
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
     color: colors.accent,
+  },
+  lineNoteButton: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.secondary,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 2,
+  },
+  lineNoteText: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: '#000000',
+  },
+  lineNotePlaceholder: {
+    color: colors.accent,
+  },
+  lineNoteHint: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.mutedText,
   },
   footer: {
     position: 'absolute',

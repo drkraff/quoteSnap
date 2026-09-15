@@ -96,6 +96,20 @@ describe('remoteLineItemsToDraftJson', () => {
       },
     ]);
   });
+
+  it('keeps a contractor privateNote on draft JSON and detail rows', () => {
+    const json = remoteLineItemsToDraftJson([
+      {
+        id: 'li-1',
+        name: 'Pipe',
+        quantity: 2,
+        unitPriceCents: 1500,
+        privateNote: 'moisture from neighbor',
+      },
+    ]);
+    expect(JSON.parse(json)[0].privateNote).toBe('moisture from neighbor');
+    expect(lineItemsFromDraftJson(json)[0]!.privateNote).toBe('moisture from neighbor');
+  });
 });
 
 describe('resolveQuoteDetailView', () => {

@@ -15,6 +15,7 @@ import {
   isFrozenQuoteStatus,
   type ClientQuoteStatus,
 } from "./statuses.js";
+import { parseOptionalPrivateNote } from "./private-note.js";
 
 export {
   CLIENT_QUOTE_STATUSES,
@@ -45,6 +46,8 @@ export type ParsedLineItemInput = {
   catalogItemId?: string | null;
   /** undefined = omitted (preserve); null = explicit clear */
   unit?: string | null;
+  /** undefined = omitted (preserve); null = explicit clear. Contractor-only. */
+  privateNote?: string | null;
 };
 
 export type ResolvedLineItem = {
@@ -54,6 +57,7 @@ export type ResolvedLineItem = {
   confidence: number | null;
   catalogItemId: string | null;
   unit: string | null;
+  privateNote: string | null;
 };
 
 export type ParsedQuotePutBody =
@@ -63,6 +67,7 @@ export type ParsedQuotePutBody =
       status?: ClientQuoteStatus;
       customerPhone?: string | null;
       totalCents?: number;
+      privateNote?: string | null;
       lineItems?: ParsedLineItemInput[];
     };
 
@@ -73,6 +78,7 @@ export type ParsedQuoteCreateBody =
       status: ClientQuoteStatus;
       customerPhone: string | null;
       totalCents: number;
+      privateNote: string | null;
     };
 
 export type QuotePutOutcome =
@@ -230,6 +236,15 @@ export function parseLineItemInput(
     }
   }
 
+  let privateNote: string | null | undefined;
+  if (hasOwn(raw, "privateNote")) {
+    const parsed = parseOptionalPrivateNote(raw.privateNote);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    privateNote = parsed.note;
+  }
+
   return {
     ok: true,
     item: {
@@ -239,6 +254,7 @@ export function parseLineItemInput(
       confidence,
       catalogItemId,
       unit,
+      privateNote,
     },
   };
 }
@@ -256,7 +272,7 @@ export function totalCentsFromLineItems(items: Array<{ quantity: number; unitPri
  */
 export function resolveReplacementLineItems(
   incoming: ParsedLineItemInput[],
-  existing: Array<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit">>,
+  existing: Array<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note">>,
 ): ResolvedLineItem[] {
   const unused = existing.map((row) => ({ ...row }));
 
@@ -291,6 +307,15 @@ export function resolveReplacementLineItems(
       unit = match?.unit ?? null;
     }
 
+    let privateNote: string | null;
+    if (item.privateNote === null) {
+      privateNote = null;
+    } else if (item.privateNote !== undefined) {
+      privateNote = item.privateNote;
+    } else {
+      privateNote = match?.private_note ?? null;
+    }
+
     return {
       name: item.name,
       quantity: item.quantity,
@@ -298,6 +323,7 @@ export function resolveReplacementLineItems(
       confidence,
       catalogItemId,
       unit,
+      privateNote,
     };
   });
 }
@@ -333,7 +359,16 @@ export function parseQuoteCreateBody(body: unknown): ParsedQuoteCreateBody {
   const customerPhone =
     raw.customerPhone === undefined ? null : (raw.customerPhone as string | null);
 
-  return { ok: true, status, customerPhone, totalCents };
+  let privateNote: string | null = null;
+  if (hasOwn(raw, "privateNote")) {
+    const parsed = parseOptionalPrivateNote(raw.privateNote);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    privateNote = parsed.note;
+  }
+
+  return { ok: true, status, customerPhone, totalCents, privateNote };
 }
 
 export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
@@ -350,6 +385,14 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
 
   if (hasOwn(raw, "customerPhone")) {
     parsed.customerPhone = raw.customerPhone as string | null;
+  }
+
+  if (hasOwn(raw, "privateNote")) {
+    const note = parseOptionalPrivateNote(raw.privateNote);
+    if (!note.ok) {
+      return note;
+    }
+    parsed.privateNote = note.note;
   }
 
   if (hasOwn(raw, "totalCents") && raw.totalCents !== undefined) {
@@ -379,6 +422,7 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
     parsed.status === undefined &&
     parsed.customerPhone === undefined &&
     parsed.totalCents === undefined &&
+    parsed.privateNote === undefined &&
     parsed.lineItems === undefined
   ) {
     return { ok: false, error: "At least one field required" };
@@ -399,8 +443,8 @@ export const SELECT_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
 
 export const DELETE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`;
+export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`;
 
 /**
  * Quote metadata + line-item replace on one query function so the caller can
@@ -464,6 +508,10 @@ export async function applyQuotePut(
     params.push(parsed.customerPhone);
     setClauses.push(`customer_phone = $${params.length}`);
   }
+  if (parsed.privateNote !== undefined) {
+    params.push(parsed.privateNote);
+    setClauses.push(`private_note = $${params.length}`);
+  }
   if (totalCents !== undefined) {
     params.push(totalCents);
     setClauses.push(`total_cents = $${params.length}`);
@@ -497,6 +545,7 @@ export async function applyQuotePut(
         item.confidence,
         item.catalogItemId,
         item.unit,
+        item.privateNote,
       ]);
     }
   }

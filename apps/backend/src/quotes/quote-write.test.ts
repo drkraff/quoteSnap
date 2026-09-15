@@ -36,18 +36,20 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
     sent_at: null,
     voice_job_id: null,
     is_archived: false,
+    private_note: null,
     ...overrides,
   };
 }
 
 function existingLine(
-  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit">> = {},
-): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit"> {
+  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note">> = {},
+): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note"> {
   return {
     name: "Copper pipe",
     confidence: 0.91,
     catalog_item_id: CATALOG_ID,
     unit: "foot",
+    private_note: null,
     ...overrides,
   };
 }
@@ -181,6 +183,15 @@ describe("parseQuotePutBody", () => {
     assert.equal(parsed.status, "draft_queued");
     assert.equal(parsed.totalCents, 2500);
   });
+
+  it("accepts a privateNote-only body (not a money write)", () => {
+    const parsed = parseQuotePutBody({ privateNote: "third floor, no elevator" });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.privateNote, "third floor, no elevator");
+    assert.equal(parsed.lineItems, undefined);
+    assert.equal(parsed.totalCents, undefined);
+  });
 });
 
 describe("parseQuoteCreateBody", () => {
@@ -190,6 +201,7 @@ describe("parseQuoteCreateBody", () => {
       status: "draft_local",
       customerPhone: null,
       totalCents: 0,
+      privateNote: null,
     });
   });
 
@@ -288,6 +300,7 @@ describe("resolveReplacementLineItems", () => {
         confidence: 0.91,
         catalogItemId: CATALOG_ID,
         unit: "foot",
+        privateNote: null,
       },
     ]);
   });
@@ -391,6 +404,7 @@ describe("resolveReplacementLineItems", () => {
       confidence: null,
       catalogItemId: null,
       unit: null,
+      privateNote: null,
     });
   });
 
@@ -532,6 +546,7 @@ describe("applyQuotePut", () => {
         confidence: 0.91,
         catalog_item_id: CATALOG_ID,
         unit: "foot",
+        private_note: null,
       },
     ];
     for (const status of ["sent", "approved", "declined", "expired", "failed_send"]) {
@@ -650,6 +665,7 @@ describe("applyQuotePut", () => {
         confidence: 0.91,
         catalog_item_id: CATALOG_ID,
         unit: "foot",
+        private_note: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -680,7 +696,7 @@ describe("applyQuotePut", () => {
     assert.equal(update!.params?.[0], 4500);
 
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot"]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot", null]);
   });
 
   it("issues DELETE before INSERT on the same queryFn so a mid-loop failure can roll back", async () => {
@@ -717,6 +733,7 @@ describe("applyQuotePut", () => {
         confidence: 0.91,
         catalog_item_id: CATALOG_ID,
         unit: "foot",
+        private_note: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -736,6 +753,83 @@ describe("applyQuotePut", () => {
       },
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot"]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot", null]);
+  });
+
+  it("writes a quote-level privateNote without replacing line items", async () => {
+    const { calls, queryFn } = mockDb();
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { privateNote: "  subcontractor check  " },
+    });
+    assert.equal(outcome.status, 200);
+    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.ok(update);
+    assert.match(update!.sql, /private_note = \$/);
+    assert.equal(update!.params?.[0], "subcontractor check");
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+    assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), false);
+  });
+
+  it("preserves an existing line private_note when the client omits it", async () => {
+    const existing: QuoteLineItemRow[] = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        quote_id: QUOTE_ID,
+        name: "Copper pipe",
+        quantity: 2,
+        unit_price_cents: 1500,
+        created_at: new Date("2026-09-01T12:01:00.000Z"),
+        confidence: 0.91,
+        catalog_item_id: CATALOG_ID,
+        unit: "foot",
+        private_note: "moisture from neighbor",
+      },
+    ];
+    const { calls, queryFn } = mockDb({ existingLines: existing });
+    await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [{ name: "Copper pipe", quantity: 2, unitPriceCents: 1500 }],
+      },
+    });
+    const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.equal(insert?.params?.[7], "moisture from neighbor");
+  });
+
+  it("clears a line private_note when the client sends null", async () => {
+    const existing: QuoteLineItemRow[] = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        quote_id: QUOTE_ID,
+        name: "Copper pipe",
+        quantity: 2,
+        unit_price_cents: 1500,
+        created_at: new Date("2026-09-01T12:01:00.000Z"),
+        confidence: 0.91,
+        catalog_item_id: CATALOG_ID,
+        unit: "foot",
+        private_note: "moisture from neighbor",
+      },
+    ];
+    const { calls, queryFn } = mockDb({ existingLines: existing });
+    await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [
+          {
+            name: "Copper pipe",
+            quantity: 2,
+            unitPriceCents: 1500,
+            privateNote: null,
+          },
+        ],
+      },
+    });
+    const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.equal(insert?.params?.[7], null);
   });
 });

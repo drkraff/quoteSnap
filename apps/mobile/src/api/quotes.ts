@@ -10,6 +10,8 @@ export interface QuoteResponse {
   sentAt: string | null;
   voiceJobId: string | null;
   isArchived?: boolean;
+  /** Contractor-only. Never copy into a customer PDF/SMS payload. */
+  privateNote?: string | null;
 }
 
 export interface QuoteLineItemResponse {
@@ -20,6 +22,8 @@ export interface QuoteLineItemResponse {
   unit?: string | null;
   confidence?: number | null;
   catalogItemId?: string | null;
+  /** Contractor-only. Never copy into a customer PDF/SMS payload. */
+  privateNote?: string | null;
 }
 
 export interface QuoteListItem extends QuoteResponse {
@@ -57,6 +61,7 @@ export async function createQuoteOnServer(body: {
   status?: string;
   customerPhone?: string;
   totalCents?: number;
+  privateNote?: string | null;
 }): Promise<QuoteResponse> {
   const data = await apiClient.post<QuoteSingleResponse>('/quotes', body);
   return data.quote;
@@ -68,12 +73,14 @@ export async function updateQuoteOnServer(
     status?: string;
     customerPhone?: string;
     totalCents?: number;
-    lineItems?: Array<{
+    privateNote?: string | null;
+    lineItems?: {
       name: string;
       quantity: number;
       unitPriceCents: number | null;
       unit?: string | null;
-    }>;
+      privateNote?: string | null;
+    }[];
   },
 ): Promise<QuoteResponse> {
   const data = await apiClient.put<QuoteSingleResponse>(

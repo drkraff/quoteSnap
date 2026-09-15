@@ -67,6 +67,18 @@ export default function QuoteDetailScreen(): JSX.Element {
           setLoading(false);
         },
         persistRemoteLineItems,
+        persistRemoteQuote: async (remoteQuote) => {
+          try {
+            const q = await database.get<Quote>('quotes').find(id);
+            await database.write(async () => {
+              await q.update((record) => {
+                record.privateNote = remoteQuote.privateNote ?? null;
+              });
+            });
+          } catch {
+            // Local persist is best-effort; the in-memory snapshot still shows.
+          }
+        },
       });
 
       if (cancelled) return;
@@ -122,6 +134,7 @@ export default function QuoteDetailScreen(): JSX.Element {
           totalCents: quote.totalCents,
           createdAt: quote.createdAt,
           sentAt: quote.sentAt,
+          privateNote: quote.privateNote,
         }}
         lineItems={lineItems}
       />

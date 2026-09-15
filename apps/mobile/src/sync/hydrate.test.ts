@@ -60,6 +60,7 @@ type FakeQuote = {
   sentAt: Date | null;
   voiceJobId: string | null;
   isArchived: boolean;
+  privateNote?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -133,6 +134,7 @@ describe('toDraftLineItems', () => {
           quantity: 1,
           unitPriceCents: 200,
           catalogItemId: null,
+          privateNote: 'moisture from neighbor',
         },
       ],
       localIds,
@@ -151,6 +153,7 @@ describe('toDraftLineItems', () => {
         name: 'Manual',
         quantity: 1,
         unitPriceCents: 200,
+        privateNote: 'moisture from neighbor',
       },
     ]);
   });
@@ -214,6 +217,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
             sentAt: null,
             voiceJobId: null,
             isArchived: false,
+            privateNote: null,
           });
           writer(record);
           quotes.push(record);
@@ -281,6 +285,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
         updatedAt: '2026-09-02T00:00:00.000Z',
         sentAt: null,
         voiceJobId: null,
+        privateNote: 'subcontractor check',
         lineItems: [
           {
             id: 'li-1',
@@ -289,6 +294,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
             unitPriceCents: 1500,
             confidence: 0.9,
             catalogItemId: 'srv-cat-1',
+            privateNote: 'moisture from neighbor',
           },
         ],
       },
@@ -307,6 +313,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       status: 'draft_local',
       totalCents: 3000,
       voiceJobId: null,
+      privateNote: 'subcontractor check',
     });
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.quoteId).toBe(quotes[0]!.id);
@@ -317,6 +324,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
         quantity: 2,
         unitPriceCents: 1500,
         confidence: 0.9,
+        privateNote: 'moisture from neighbor',
       },
     ]);
   });

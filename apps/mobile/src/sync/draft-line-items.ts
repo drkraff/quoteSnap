@@ -22,6 +22,9 @@ export function toDraftLineItems(
     if (item.confidence != null) {
       line.confidence = item.confidence;
     }
+    if (item.privateNote) {
+      line.privateNote = item.privateNote;
+    }
     return line;
   });
 }

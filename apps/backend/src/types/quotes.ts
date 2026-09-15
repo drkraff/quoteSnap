@@ -8,6 +8,8 @@ export interface QuoteResponse {
   sentAt: string | null;
   voiceJobId: string | null;
   isArchived: boolean;
+  /** Contractor-only. Never copy into a customer PDF/SMS/approval payload. */
+  privateNote: string | null;
 }
 
 export interface QuoteLineItemResponse {
@@ -19,6 +21,8 @@ export interface QuoteLineItemResponse {
   unit?: string | null;
   confidence: number | null;
   catalogItemId: string | null;
+  /** Contractor-only. Never copy into a customer PDF/SMS/approval payload. */
+  privateNote: string | null;
 }
 
 export interface QuoteListItemResponse extends QuoteResponse {
@@ -29,6 +33,7 @@ export interface CreateQuoteBody {
   status?: string;
   customerPhone?: string;
   totalCents?: number;
+  privateNote?: string | null;
 }
 
 export interface UpdateQuoteLineItemBody {
@@ -40,11 +45,15 @@ export interface UpdateQuoteLineItemBody {
   confidence?: number | null;
   /** Omit to preserve existing catalog_item_id; null clears. */
   catalogItemId?: string | null;
+  /** Omit to preserve existing private_note; null clears. Contractor-only. */
+  privateNote?: string | null;
 }
 
 export interface UpdateQuoteBody {
   status?: string;
   customerPhone?: string;
   totalCents?: number;
+  /** Contractor-only job note. Omit to preserve; null clears. */
+  privateNote?: string | null;
   lineItems?: UpdateQuoteLineItemBody[];
 }

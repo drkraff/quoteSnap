@@ -15,6 +15,7 @@ export type LocalQuoteRecord = {
   createdAt: Date;
   sentAt: Date | null;
   voiceJobId?: string | null;
+  privateNote?: string | null;
 };
 
 export type QuoteDetailSnapshot = {
@@ -23,6 +24,7 @@ export type QuoteDetailSnapshot = {
   totalCents: number;
   createdAt: string;
   sentAt: string | null;
+  privateNote?: string | null;
 };
 
 export type QuoteDetailSource = 'local' | 'network' | 'none';
@@ -64,6 +66,9 @@ export function lineItemsFromDraftJson(json: string): QuoteLineItemResponse[] {
     if (item.unit) {
       row.unit = item.unit;
     }
+    if (item.privateNote) {
+      row.privateNote = item.privateNote;
+    }
     return row;
   });
 }
@@ -85,6 +90,9 @@ export function remoteLineItemsToDraftJson(
     if (item.unit) {
       line.unit = item.unit;
     }
+    if (item.privateNote) {
+      line.privateNote = item.privateNote;
+    }
     return line;
   });
   return serializeLineItems(lines);
@@ -97,6 +105,7 @@ function snapshotFromLocal(quote: LocalQuoteRecord): QuoteDetailSnapshot {
     totalCents: quote.totalCents,
     createdAt: quote.createdAt.toISOString(),
     sentAt: quote.sentAt?.toISOString() ?? null,
+    privateNote: quote.privateNote ?? null,
   };
 }
 
@@ -107,6 +116,7 @@ function snapshotFromRemote(quote: QuoteResponse): QuoteDetailSnapshot {
     totalCents: quote.totalCents,
     createdAt: quote.createdAt,
     sentAt: quote.sentAt,
+    privateNote: quote.privateNote ?? null,
   };
 }
 
@@ -185,6 +195,7 @@ export type LoadQuoteDetailDeps = {
   persistRemoteLineItems?: (
     lineItems: QuoteLineItemResponse[],
   ) => Promise<void>;
+  persistRemoteQuote?: (quote: QuoteResponse) => Promise<void>;
 };
 
 /**
@@ -238,6 +249,7 @@ export async function loadQuoteDetail(
       remote: { ok: true, quote: remote.quote, lineItems: remote.lineItems },
     });
     try {
+      await deps.persistRemoteQuote?.(remote.quote);
       await deps.persistRemoteLineItems?.(remote.lineItems);
     } catch {
       // In-memory refresh still wins; next offline open keeps the prior draft.

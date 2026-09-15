@@ -24,5 +24,16 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 4,
+      steps: [
+        addColumns({
+          table: 'quotes',
+          columns: [
+            { name: 'private_note', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });
