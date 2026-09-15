@@ -21,7 +21,7 @@ import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sy
 import { createSingleFlight } from './single-flight';
 import { resolveAudioQuoteServerId, quoteServerIdFromUploadError } from './audio-parent';
 import { syncQueuedOnboardingProfile, syncQueuedOnboardingSeed } from './offline-onboarding-seed';
-import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
+import { canRetryDeadLetter, deadLetterRetryPatch, queueFailureMessage } from './dead-letter';
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
 import { parseRoomsJson } from '../quotes/rooms';
@@ -457,7 +457,7 @@ async function processQueueOnce(): Promise<void> {
         });
         continue;
       }
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = queueFailureMessage(error);
       const nextCount = item.retryCount + 1;
       const schedule = applyFailureSchedule(nextCount, Date.now());
       await database.write(async () => {
@@ -527,7 +527,10 @@ export async function getDeadLetterItems(): Promise<SyncQueueItem[]> {
   return deadLetterItemsQuery().fetch();
 }
 
-/** SYNC-04: re-queue a dead-letter item and kick `processQueue`. */
+/**
+ * SYNC-04: re-queue a dead-letter item and kick `processQueue`.
+ * Only status / retry bookkeeping change — payloadJson (cents, lines) stays as stored.
+ */
 export async function retryDeadLetterItem(item: SyncQueueItem): Promise<void> {
   if (!canRetryDeadLetter(item.status)) return;
   const patch = deadLetterRetryPatch();

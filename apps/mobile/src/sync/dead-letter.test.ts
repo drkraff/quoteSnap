@@ -1,3 +1,4 @@
+import { FROZEN_QUOTE_WRITE_MESSAGE, QUOTE_MONEY_FROZEN_ERROR } from './frozen-quote';
 import {
   canRetryDeadLetter,
   deadLetterBannerMessage,
@@ -7,9 +8,12 @@ import {
   deadLetterTitle,
   DEAD_LETTER_EMPTY_BODY,
   DEAD_LETTER_EMPTY_HEADING,
+  DEAD_LETTER_GENERIC_REASON,
   DEAD_LETTER_LIST_INTRO,
   DEAD_LETTER_RETRY_LABEL,
   listDeadLetterViews,
+  queueFailureMessage,
+  QUOTE_STATUS_LOCK_REASON,
   SYNC_ISSUES_TITLE,
   syncIssuesHeaderLabel,
   toDeadLetterListItem,
@@ -46,6 +50,25 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
       'New quote: +15555550100',
     );
     expect(deadLetterTitle('quote', 'update', '{}')).toBe('Quote update');
+    expect(
+      deadLetterTitle('quote', 'update', JSON.stringify({ isArchived: true })),
+    ).toBe('Quote archive');
+    expect(
+      deadLetterTitle('quote', 'update', JSON.stringify({ isArchived: false })),
+    ).toBe('Quote restore');
+    expect(
+      deadLetterTitle('quote', 'update', JSON.stringify({ status: 'sent' })),
+    ).toBe('Mark quote sent');
+    expect(
+      deadLetterTitle(
+        'quote',
+        'update',
+        JSON.stringify({
+          lineItems: [{ name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+          totalCents: 1500,
+        }),
+      ),
+    ).toBe('Quote prices');
     expect(deadLetterTitle('draft', 'update', '{}')).toBe('Quote draft');
     expect(deadLetterTitle('audio', 'create', '{"filePath":"/tmp/a.m4a"}')).toBe(
       'Voice recording',
@@ -79,6 +102,16 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
 
   it('maps entity/action to a plain-language summary', () => {
     expect(deadLetterSummary('quote', 'create')).toBe("Couldn't save a new quote");
+    expect(deadLetterSummary('quote', 'update', JSON.stringify({ isArchived: true }))).toBe(
+      "Couldn't archive this quote",
+    );
+    expect(
+      deadLetterSummary(
+        'quote',
+        'update',
+        JSON.stringify({ lineItems: [{ name: 'Pipe', quantity: 1, unitPriceCents: 0 }], totalCents: 0 }),
+      ),
+    ).toBe("Couldn't update line items or prices");
     expect(deadLetterSummary('audio', 'create')).toBe("Couldn't upload this recording");
     expect(deadLetterSummary('photo', 'create')).toBe("Couldn't upload this photo");
     expect(deadLetterSummary('onboarding', 'seed')).toBe("Couldn't finish catalog setup");
@@ -89,7 +122,7 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
   });
 
   it('maps lastError to plumber-facing copy, never technical internals', () => {
-    expect(deadLetterErrorMessage(null)).toBe("Couldn't sync this change. Try again.");
+    expect(deadLetterErrorMessage(null)).toBe(DEAD_LETTER_GENERIC_REASON);
     expect(deadLetterErrorMessage('network down')).toBe(
       "Couldn't reach the server. Check your signal and try again.",
     );
@@ -105,18 +138,47 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
     expect(deadLetterErrorMessage('Catalog already seeded')).toBe(
       'This change may already be on the server. Retry to confirm.',
     );
-    expect(
-      deadLetterErrorMessage('Quote line items and totals cannot be changed after send'),
-    ).toBe('This quote was already sent. Line items and prices cannot be changed.');
-    expect(
-      deadLetterErrorMessage('This quote was already sent. Line items and prices cannot be changed.'),
-    ).toBe('This quote was already sent. Line items and prices cannot be changed.');
-    expect(deadLetterErrorMessage('ENOENT: /data/user/0/stack')).toBe(
-      "Couldn't sync this change. Try again.",
+    expect(deadLetterErrorMessage(QUOTE_MONEY_FROZEN_ERROR)).toBe(FROZEN_QUOTE_WRITE_MESSAGE);
+    expect(deadLetterErrorMessage(FROZEN_QUOTE_WRITE_MESSAGE)).toBe(FROZEN_QUOTE_WRITE_MESSAGE);
+    expect(deadLetterErrorMessage('Quote cannot be updated in its current status')).toBe(
+      QUOTE_STATUS_LOCK_REASON,
     );
+    expect(deadLetterErrorMessage('The photo file is missing on this device.')).toBe(
+      'The photo file is missing on this device.',
+    );
+    expect(deadLetterErrorMessage('ENOENT: /data/user/0/stack')).toBe(DEAD_LETTER_GENERIC_REASON);
+    expect(deadLetterErrorMessage('Unknown error')).toBe(DEAD_LETTER_GENERIC_REASON);
     expect(deadLetterErrorMessage('Cannot sync update: no server ID for catalog item')).not.toMatch(
       /server ID/,
     );
+  });
+
+  it('does not put invented dollar amounts in Sync issues titles', () => {
+    const view = toDeadLetterListItem(
+      source({
+        entityType: 'quote',
+        action: 'update',
+        payloadJson: JSON.stringify({
+          lineItems: [{ name: 'Pipe', quantity: 1, unitPriceCents: 99999 }],
+          totalCents: 99999,
+        }),
+        lastError: QUOTE_MONEY_FROZEN_ERROR,
+      }),
+    );
+    expect(view.title).toBe('Quote prices');
+    expect(view.title).not.toMatch(/\$|99999|999\.99/);
+    expect(view.error).toBe(FROZEN_QUOTE_WRITE_MESSAGE);
+  });
+
+  it('keeps the stored ApiError string so the list can show a reason', () => {
+    expect(queueFailureMessage({ status: 409, error: QUOTE_MONEY_FROZEN_ERROR })).toBe(
+      QUOTE_MONEY_FROZEN_ERROR,
+    );
+    expect(
+      queueFailureMessage({ status: 409, error: 'Quote cannot be updated in its current status' }),
+    ).toBe('Quote cannot be updated in its current status');
+    expect(queueFailureMessage(new Error('network down'))).toBe('network down');
+    expect(queueFailureMessage({ nope: true })).toBe('Unknown error');
   });
 
   it('lists mixed dead-letter rows for the Sync issues screen', () => {
@@ -168,5 +230,8 @@ describe('dead-letter retry helpers (SYNC-04)', () => {
       retryCount: 0,
       nextRetryAt: null,
     });
+    expect(deadLetterRetryPatch()).not.toHaveProperty('payloadJson');
+    expect(deadLetterRetryPatch()).not.toHaveProperty('totalCents');
+    expect(deadLetterRetryPatch()).not.toHaveProperty('lineItems');
   });
 });
