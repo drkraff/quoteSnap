@@ -21,7 +21,7 @@ IDs stay as they are in REQUIREMENTS. This file does **not** invent FAIL-09…FA
 
 | Status | Meaning |
 |--------|---------|
-| **done** | Detection, UX, and recovery exist in code on `master` (through PR #72). Physical UAT may still be open. |
+| **done** | Detection, UX, and recovery exist in code on `master` (through PR #77). Physical UAT may still be open. |
 | **partial** | Detection and a UX/recovery exist, with a documented gap. |
 | **not started** | Defined here only. No product path yet (usually Phase 6). |
 
@@ -154,11 +154,11 @@ Related: `apps/mobile/app.config.ts` `microphonePermission` string.
 
 **Detection.** Live Watermelon observe of `sync_queue_items` with `status = dead_letter`.
 
-**UX.** Quotes/Catalog banner + header warning open **Sync issues**: plain-language entity/action + last error + **Retry**. Empty: **All caught up**.
+**UX.** Quotes/Catalog banner + header warning open **Sync issues**: plain-language entity/action + last error + **Retry** (freeze / status-lock copy; never dump a stack). Empty: **All caught up**.
 
-**Recovery.** Retry resets to `pending` (`deadLetterRetryPatch`) and kicks `processQueue`. Frozen-quote money PUTs are parked here instead of retrying into dead-letter via backoff (thin SYNC-06).
+**Recovery.** Retry resets to `pending` (`deadLetterRetryPatch`) and kicks `processQueue` without rewriting stored totals or prices. Frozen-quote money PUTs are parked here instead of retrying into dead-letter via backoff (thin SYNC-06).
 
-**Status: done.** `apps/mobile/app/(app)/sync-issues.tsx`, `apps/mobile/src/sync/dead-letter.ts`, `use-dead-letter-items.ts`. Tests: `dead-letter.test.ts`.
+**Status: done.** `apps/mobile/app/(app)/sync-issues.tsx`, `apps/mobile/src/sync/dead-letter.ts`, `use-dead-letter-items.ts`. Tests: `dead-letter.test.ts`. PR #75 retry UX (plain-English freeze / status-lock; retry omits payload).
 
 ---
 

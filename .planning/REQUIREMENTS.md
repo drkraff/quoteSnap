@@ -211,4 +211,4 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-15 — overnight ships through PR #62 plus day-session #63–#72 (photo import stub, My rates `q` filter, FAIL-01 map, P0 attach tests, share cancel/empty edges, PDF Assumptions, cost×markup keypad, option-group selection, CONTEXT sync #71, rooms empty/delete/ungroup #72). SMS-01…10 and FAIL-06/08 stay pending. Status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-15 — overnight ships through PR #62 plus day-session #63–#77 (photo import stub, My rates `q` + unit chip filter, FAIL-01 map, P0 attach tests, share cancel/empty edges, PDF Assumptions, cost×markup keypad, option-group selection, CONTEXT sync #71/#73, rooms empty/delete/ungroup #72, Metro UAT checklist #74, dead-letter retry UX #75, My rates empty-delete #76, paste-import empty/OCR-stub copy #77). SMS-01…10 and FAIL-06/08 stay pending. Status narrative lives in CONTEXT.md*
