@@ -60,7 +60,10 @@ function parseIntParam(value: unknown): number | undefined | "invalid" {
 }
 
 /** Exact lookup when `name` is present; omit `name` for the contractor list. */
-export function isRateCardExactLookupQuery(query: { name?: unknown }): boolean {
+export function isRateCardExactLookupQuery(query: {
+  name?: unknown;
+  [key: string]: unknown;
+}): boolean {
   return query.name !== undefined;
 }
 

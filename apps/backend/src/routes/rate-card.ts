@@ -76,9 +76,10 @@ router.get("/", authenticateToken, async (req: Request, res: Response): Promise<
 router.delete("/:id", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
+    const { id } = req.params as { id: string };
     const outcome = await deleteRateCardEntry(query, {
       contractorId,
-      id: req.params["id"] ?? "",
+      id,
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
