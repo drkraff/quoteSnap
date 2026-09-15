@@ -2,8 +2,10 @@ import {
   canHardDeleteLocalQuote,
   DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE,
   DELETE_LOCAL_QUOTE_CONFIRM_TITLE,
+  hardDeleteEmptyLocalQuote,
   hasMeaningfulLineItems,
   quoteRowSwipeAction,
+  removeQuoteListEntry,
   shouldDropQueueItemForDeletedLocalQuote,
 } from './delete-local-quote';
 
@@ -21,6 +23,9 @@ describe('hasMeaningfulLineItems', () => {
       hasMeaningfulLineItems(
         JSON.stringify([{ catalogItemId: 'p', name: 'Pipe', quantity: 1, unitPriceCents: 100 }]),
       ),
+    ).toBe(true);
+    expect(
+      hasMeaningfulLineItems(JSON.stringify([{ name: 'Pipe', quantity: 0, unitPriceCents: 0 }])),
     ).toBe(true);
   });
 });
@@ -144,5 +149,223 @@ describe('delete copy', () => {
     expect(DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE.toLowerCase()).toContain('this device');
     expect(DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE.toLowerCase()).not.toContain('archive');
     expect(DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE.toLowerCase()).not.toContain('server');
+  });
+});
+
+type StoreQuote = {
+  id: string;
+  serverId: string | null;
+  status: string;
+  totalCents: number;
+  customerPhone: string | null;
+  destroyed?: boolean;
+  destroyPermanently: () => Promise<void>;
+};
+
+type StoreDraft = {
+  id: string;
+  lineItemsJson: string;
+  destroyed?: boolean;
+  destroyPermanently: () => Promise<void>;
+};
+
+type StoreQueue = {
+  entityType: string;
+  entityId: string;
+  status: string;
+  destroyed?: boolean;
+  destroyPermanently: () => Promise<void>;
+};
+
+function attachDestroy<T extends object>(
+  row: T,
+  onDestroy: () => void,
+): T & { destroyed?: boolean; destroyPermanently: () => Promise<void> } {
+  const wrapped = row as T & { destroyed?: boolean; destroyPermanently: () => Promise<void> };
+  wrapped.destroyPermanently = async () => {
+    wrapped.destroyed = true;
+    onDestroy();
+  };
+  return wrapped;
+}
+
+describe('hardDeleteEmptyLocalQuote', () => {
+  async function write(work: () => Promise<void>): Promise<void> {
+    await work();
+  }
+
+  it('refuses when serverId is present and does not destroy local rows', async () => {
+    const quote = attachDestroy(
+      {
+        id: 'q1',
+        serverId: 'srv-q1',
+        status: 'draft_local',
+        totalCents: 0,
+        customerPhone: null,
+      },
+      () => {
+        throw new Error('must not destroy a server-backed quote');
+      },
+    );
+    const draft = attachDestroy(
+      { id: 'd1', lineItemsJson: '[]' },
+      () => {
+        throw new Error('must not destroy draft');
+      },
+    );
+
+    await expect(
+      hardDeleteEmptyLocalQuote({
+        quote,
+        drafts: [draft],
+        queueItems: [],
+        write,
+      }),
+    ).resolves.toBe('refused');
+    expect(quote.destroyed).toBeUndefined();
+    expect(draft.destroyed).toBeUndefined();
+  });
+
+  it('refuses a non-empty local draft (named or priced lines)', async () => {
+    const quote = attachDestroy(
+      {
+        id: 'q1',
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        customerPhone: null,
+      },
+      () => {
+        throw new Error('must not destroy a non-empty draft');
+      },
+    );
+    const draft = attachDestroy(
+      {
+        id: 'd1',
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 1, unitPriceCents: 100 }]),
+      },
+      () => {
+        throw new Error('must not destroy draft');
+      },
+    );
+
+    await expect(
+      hardDeleteEmptyLocalQuote({
+        quote,
+        drafts: [draft],
+        queueItems: [],
+        write,
+      }),
+    ).resolves.toBe('refused');
+    expect(quote.destroyed).toBeUndefined();
+  });
+
+  it('destroys quote, draft, and pending queue rows locally with no server delete', async () => {
+    const store = {
+      quotes: [] as StoreQuote[],
+      drafts: [] as StoreDraft[],
+      queue: [] as StoreQueue[],
+    };
+    const quote = attachDestroy(
+      {
+        id: 'q1',
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        customerPhone: null,
+      },
+      () => {
+        store.quotes = store.quotes.filter((row) => row.id !== 'q1');
+      },
+    );
+    const draft = attachDestroy(
+      { id: 'd1', lineItemsJson: '[]' },
+      () => {
+        store.drafts = store.drafts.filter((row) => row.id !== 'd1');
+      },
+    );
+    const pending = attachDestroy(
+      { entityType: 'quote', entityId: 'q1', status: 'pending' },
+      () => {
+        store.queue = store.queue.filter((row) => row.entityId !== 'q1' || row.status === 'in_progress');
+      },
+    );
+    const inProgress = attachDestroy(
+      { entityType: 'quote', entityId: 'q1', status: 'in_progress' },
+      () => {
+        throw new Error('must not drop in_progress queue rows');
+      },
+    );
+    store.quotes = [quote];
+    store.drafts = [draft];
+    store.queue = [pending, inProgress];
+
+    await expect(
+      hardDeleteEmptyLocalQuote({
+        quote,
+        drafts: store.drafts,
+        queueItems: store.queue,
+        write,
+      }),
+    ).resolves.toBe('deleted');
+
+    expect(store.quotes).toEqual([]);
+    expect(store.drafts).toEqual([]);
+    expect(store.queue).toEqual([inProgress]);
+    expect(quote.customerPhone).toBeNull();
+    expect(quote.totalCents).toBe(0);
+  });
+
+  it('returns an empty list after deleting the last junk draft (no replacement Manual Quote)', async () => {
+    const store = {
+      quotes: [] as StoreQuote[],
+      drafts: [] as StoreDraft[],
+    };
+    const quote = attachDestroy(
+      {
+        id: 'junk-1',
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        customerPhone: null,
+      },
+      () => {
+        store.quotes = store.quotes.filter((row) => row.id !== 'junk-1');
+      },
+    );
+    const draft = attachDestroy(
+      { id: 'draft-junk', lineItemsJson: '[]' },
+      () => {
+        store.drafts = store.drafts.filter((row) => row.id !== 'draft-junk');
+      },
+    );
+    store.quotes = [quote];
+    store.drafts = [draft];
+
+    await expect(
+      hardDeleteEmptyLocalQuote({
+        quote,
+        drafts: store.drafts,
+        queueItems: [],
+        write,
+      }),
+    ).resolves.toBe('deleted');
+
+    const remaining = removeQuoteListEntry(store.quotes, quote.id);
+    expect(remaining).toEqual([]);
+    expect(store.quotes).toEqual([]);
+    expect(store.drafts).toEqual([]);
+  });
+});
+
+describe('removeQuoteListEntry', () => {
+  it('drops the row and leaves remaining totals and phones untouched', () => {
+    const keep = { id: 'keep', totalCents: 69500, customerPhone: '+15555550100' };
+    const junk = { id: 'junk', totalCents: 0, customerPhone: null as string | null };
+    const next = removeQuoteListEntry([junk, keep], junk.id);
+    expect(next).toEqual([keep]);
+    expect(next[0]?.totalCents).toBe(69500);
+    expect(next[0]?.customerPhone).toBe('+15555550100');
+    expect(removeQuoteListEntry([], junk.id)).toEqual([]);
   });
 });

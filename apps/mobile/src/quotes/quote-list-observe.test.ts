@@ -77,4 +77,9 @@ describe('quoteListRenderKey', () => {
   it('stays stable when nothing visible changed', () => {
     expect(quoteListRenderKey([row], true)).toBe(quoteListRenderKey([row], true));
   });
+
+  it('does not invent a quote row when the list is empty', () => {
+    expect(quoteListRenderKey([], true)).toBe('1:');
+    expect(quoteListRenderKey([], false)).toBe('0:');
+  });
 });

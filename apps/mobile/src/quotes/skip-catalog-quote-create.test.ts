@@ -39,4 +39,11 @@ describe('skippable catalog does not block quote create', () => {
     expect(quotesScreen).not.toMatch(/itemCount/);
     expect(draftReadyLocalFields('[]')).toEqual({ status: 'draft_local', totalCents: 0 });
   });
+
+  it('hard-deletes empty local drafts without a server DELETE or a replacement quote', () => {
+    expect(quotesScreen).toContain('hardDeleteEmptyLocalQuote');
+    expect(quotesScreen).toContain('ListEmptyComponent={<QuotesEmptyState archived={showArchived} />}');
+    expect(quotesScreen).not.toMatch(/method:\s*['"]DELETE['"]/);
+    expect(quotesScreen).not.toMatch(/\/quotes\/:id/);
+  });
 });
