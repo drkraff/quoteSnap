@@ -23,6 +23,10 @@ import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../src/theme/t
 import { localVoiceAudioPath } from '../../src/quotes/voice-audio';
 import { findQuoteRecord } from '../../src/quotes/find-quote';
 import { parseReuseQuoteId } from '../../src/quotes/retry-voice-quote';
+import {
+  shouldAlertOnVoiceStopError,
+  voiceUploadEnqueueParams,
+} from '../../src/quotes/voice-upload-queue';
 
 type RecordingState = 'idle' | 'recording' | 'stopped';
 
@@ -85,7 +89,7 @@ export default function VoiceRecordScreen(): JSX.Element {
       intervalRef.current = setInterval(() => {
         setDurationSeconds((prev) => prev + 1);
       }, 1000);
-    } catch (error) {
+    } catch {
       Alert.alert('Recording Error', 'Failed to start recording. Please try again.');
     }
   }, []);
@@ -153,17 +157,27 @@ export default function VoiceRecordScreen(): JSX.Element {
       // Reset audio mode
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
 
-      await enqueue({
-        entityType: 'audio',
-        entityId: newQuoteId,
-        action: 'create',
-        payload: { filePath: dest, quoteLocalId: newQuoteId },
-      });
+      // FAIL-03: local m4a + quote are already durable. Enqueue (or keep)
+      // the voice job; never Alert if NetInfo is down or POST /voice/upload
+      // fails — SYNC-03 retries in the background.
+      try {
+        await enqueue(voiceUploadEnqueueParams(newQuoteId, dest));
+      } catch {
+        // FAIL-03: local quote + m4a already exist. Never Alert mid-flow;
+        // SYNC-03 retries when a queue row can be written / NetInfo returns.
+        if (shouldAlertOnVoiceStopError('after_persist')) {
+          Alert.alert('Recording Error', 'Failed to save recording. Please try again.');
+          setRecordingState('idle');
+          return;
+        }
+      }
 
       setRecordingState('stopped');
       router.back();
-    } catch (error) {
-      Alert.alert('Recording Error', 'Failed to save recording. Please try again.');
+    } catch {
+      if (shouldAlertOnVoiceStopError('before_persist')) {
+        Alert.alert('Recording Error', 'Failed to save recording. Please try again.');
+      }
       setRecordingState('idle');
     }
   }, [router, reuseQuoteId]);

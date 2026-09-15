@@ -60,7 +60,7 @@ describe('draftFailedLocalFields', () => {
 describe('quoteListRenderKey', () => {
   const row = { id: 'q1', status: 'ai_processing', totalCents: 0 };
 
-  it('changes when status, total, connectivity, or serverId changes (FlatList extraData)', () => {
+  it('changes when status, total, connectivity, serverId, or voiceJobId changes (FlatList extraData)', () => {
     const processingOffline = quoteListRenderKey([row], false);
     expect(processingOffline).not.toBe(
       quoteListRenderKey([{ ...row, status: 'draft_local', totalCents: 69500 }], false),
@@ -68,6 +68,9 @@ describe('quoteListRenderKey', () => {
     expect(processingOffline).not.toBe(quoteListRenderKey([row], true));
     expect(quoteListRenderKey([row], true)).not.toBe(
       quoteListRenderKey([{ ...row, serverId: 'srv-q1' }], true),
+    );
+    expect(quoteListRenderKey([{ ...row, serverId: 'srv-q1' }], true)).not.toBe(
+      quoteListRenderKey([{ ...row, serverId: 'srv-q1', voiceJobId: 'job-1' }], true),
     );
   });
 

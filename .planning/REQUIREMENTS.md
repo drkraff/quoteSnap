@@ -89,7 +89,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 
 - [ ] **FAIL-01**: All 16 failure scenarios defined in WORKFLOW-failure-edge-cases.md have a defined detection method, UX state, and recovery path
 - [ ] **FAIL-02**: Mic permission denied: contractor sees an actionable in-app prompt (not a system crash)
-- [ ] **FAIL-03**: Audio upload fails offline: item enters the sync queue; contractor is not shown an error mid-flow
+- [x] **FAIL-03**: Audio upload fails offline: item enters the sync queue; contractor is not shown an error mid-flow
 - [x] **FAIL-04**: Whisper transcription fails: contractor is shown a retry option with the original audio available
 - [x] **FAIL-05**: GPT-4o mapping timeout or failure: contractor is shown a partial draft with flagged items and a manual fallback
 - [ ] **FAIL-06**: Twilio SMS delivery failure: quote enters failed_send state; contractor can retry from the history screen
@@ -195,7 +195,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 | SYNC-06 | Phase 7 | Complete (thin: status guards, no snapshot table) |
 | FAIL-01 | Phase 7 | Pending |
 | FAIL-02 | Phase 7 | Pending |
-| FAIL-03 | Phase 7 | Pending |
+| FAIL-03 | Phase 7 | Complete |
 | FAIL-04 | Phase 7 | Complete |
 | FAIL-05 | Phase 7 | Complete |
 | FAIL-06 | Phase 7 | Pending |
@@ -209,4 +209,4 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-14 — thin SYNC-06 freeze-sent-quotes + FAIL-04/05 voice retry; status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-15 — FAIL-03 offline voice upload queues without mid-flow error; status narrative lives in CONTEXT.md*
