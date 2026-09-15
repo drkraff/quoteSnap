@@ -14,6 +14,7 @@ import { importRateCardFromText } from '../../api/rate-card';
 import { parseImportedQuoteText } from '../../rate-card/import-parse';
 import {
   IMPORT_CTA_LABEL,
+  IMPORT_OCR_STUB_HEADING,
   IMPORT_OLD_QUOTES_BODY,
   IMPORT_OLD_QUOTES_TITLE,
   IMPORT_PHOTO_HINT,
@@ -30,7 +31,9 @@ import {
 } from '../../rate-card/import-files';
 import {
   importedLineQueueItems,
+  importFeedbackView,
   previewImportedQuotes,
+  type ImportFeedbackView,
 } from '../../rate-card/import-apply';
 
 type ImportOldQuotesFormProps = {
@@ -46,8 +49,10 @@ export function ImportOldQuotesForm({
 }: ImportOldQuotesFormProps): JSX.Element {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<OldQuotePickedFile[]>([]);
-  const [status, setStatus] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<ImportFeedbackView | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const photosNeedPaste = files.length > 0 && oldQuoteFilesNeedPaste(files);
 
   async function handlePickPhotos(): Promise<void> {
     const picked = await pickOldQuoteImages(
@@ -56,14 +61,24 @@ export function ImportOldQuotesForm({
     );
     if (!picked.ok) {
       if (picked.reason === PHOTO_PERMISSION_DENIED) {
-        setStatus('Could not open photos. Paste the lines instead, or skip and quote with blanks.');
+        setFeedback({
+          heading: 'Could not open photos',
+          body: 'Paste the lines instead, or skip and quote with blanks.',
+          skippedLabels: [],
+          tone: 'calm',
+        });
       }
       return;
     }
     const next = mergePickedOldQuoteFiles(files, picked.files);
     setFiles(next);
     if (oldQuoteFilesNeedPaste(next)) {
-      setStatus(IMPORT_PHOTO_HINT);
+      setFeedback({
+        heading: IMPORT_OCR_STUB_HEADING,
+        body: IMPORT_PHOTO_HINT,
+        skippedLabels: [],
+        tone: 'calm',
+      });
     }
   }
 
@@ -73,7 +88,7 @@ export function ImportOldQuotesForm({
     try {
       const parsed = parseImportedQuoteText(text);
       if (parsed.lines.length === 0) {
-        setStatus(preview.message);
+        setFeedback(importFeedbackView(preview));
         return;
       }
       try {
@@ -85,12 +100,19 @@ export function ImportOldQuotesForm({
             mime: file.mime,
           })),
         });
-        setStatus(result.message);
+        setFeedback(
+          importFeedbackView({
+            ...preview,
+            imported: result.imported,
+            skipped: result.skipped,
+            message: result.message,
+          }),
+        );
       } catch {
         for (const item of importedLineQueueItems(parsed.lines, trade)) {
           await enqueue(item);
         }
-        setStatus(preview.message);
+        setFeedback(importFeedbackView(preview));
       }
     } finally {
       setBusy(false);
@@ -115,6 +137,9 @@ export function ImportOldQuotesForm({
           {files.map((file) => file.filename).join(', ')}
         </Text>
       ) : null}
+      {photosNeedPaste ? (
+        <Text style={styles.photoHint}>{IMPORT_PHOTO_HINT}</Text>
+      ) : null}
       <Pressable
         style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
         onPress={() => {
@@ -128,16 +153,16 @@ export function ImportOldQuotesForm({
       <Pressable
         style={({ pressed }) => [
           styles.cta,
-          (busy || (text.trim() === '' && files.length === 0)) && styles.ctaDisabled,
+          busy && styles.ctaDisabled,
           pressed && styles.pressed,
         ]}
         onPress={() => {
           void handleImport();
         }}
-        disabled={busy || (text.trim() === '' && files.length === 0)}
+        disabled={busy}
         accessibilityRole="button"
         accessibilityLabel={IMPORT_CTA_LABEL}
-        accessibilityState={{ disabled: busy || (text.trim() === '' && files.length === 0) }}
+        accessibilityState={{ disabled: busy }}
       >
         {busy ? (
           <ActivityIndicator color="#ffffff" accessibilityLabel="Importing" />
@@ -145,7 +170,28 @@ export function ImportOldQuotesForm({
           <Text style={styles.ctaText}>{IMPORT_CTA_LABEL}</Text>
         )}
       </Pressable>
-      {status ? <Text style={styles.status}>{status}</Text> : null}
+      {feedback ? (
+        <View
+          style={[
+            styles.feedback,
+            feedback.tone === 'review' ? styles.feedbackReview : styles.feedbackCalm,
+          ]}
+          accessibilityRole="summary"
+          accessibilityLabel={feedback.heading}
+        >
+          <Text style={styles.feedbackHeading}>{feedback.heading}</Text>
+          <Text style={styles.feedbackBody}>{feedback.body}</Text>
+          {feedback.skippedLabels.length > 0 ? (
+            <View style={styles.skippedList}>
+              {feedback.skippedLabels.map((label, index) => (
+                <Text key={`${index}-${label}`} style={styles.skippedLine}>
+                  {`• ${label}`}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       <Pressable
         style={({ pressed }) => [styles.skip, pressed && styles.pressed]}
         onPress={onSkip}
@@ -183,6 +229,12 @@ const styles = StyleSheet.create({
   },
   fileList: {
     fontSize: typography.label.fontSize,
+    color: colors.mutedText,
+    marginBottom: spacing.xs,
+  },
+  photoHint: {
+    fontSize: typography.label.fontSize,
+    lineHeight: typography.label.lineHeight,
     color: colors.mutedText,
     marginBottom: spacing.sm,
   },
@@ -224,10 +276,38 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '600',
   },
-  status: {
+  feedback: {
     marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+  },
+  feedbackCalm: {
+    backgroundColor: colors.secondary,
+    borderColor: colors.border,
+  },
+  feedbackReview: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  feedbackHeading: {
     fontSize: typography.body.fontSize,
+    fontWeight: '700',
     lineHeight: typography.body.lineHeight,
+  },
+  feedbackBody: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
+  },
+  skippedList: {
+    gap: spacing.xs,
+  },
+  skippedLine: {
+    fontSize: typography.label.fontSize,
+    lineHeight: typography.label.lineHeight,
     color: colors.mutedText,
   },
   pressed: {

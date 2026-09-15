@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   importedLinesToUpsertBodies,
   parseImportedQuoteText,
+  skippedLinesForDisplay,
 } from "./import-parse.js";
 
 const FIXTURE_PATH = path.join(
@@ -67,6 +68,32 @@ describe("parseImportedQuoteText", () => {
     const parsed = parseImportedQuoteText("Laminate cabinets    14 lin ft\n");
     assert.deepEqual(parsed.lines, []);
     assert.equal(parsed.skipped[0]?.reason, "no_price");
+  });
+
+  it("keeps partial paste failures as skipped lines without inventing dollars", () => {
+    const parsed = parseImportedQuoteText(
+      "Replace outlet    each    $85\nLaminate cabinets    14 lin ft\nMystery line with no price\n",
+    );
+    assert.deepEqual(parsed.lines, [
+      { name: "Replace outlet", unit: "each", unitPriceCents: 8500 },
+    ]);
+    assert.deepEqual(
+      parsed.skipped.map((line) => line.raw),
+      ["Laminate cabinets    14 lin ft", "Mystery line with no price"],
+    );
+    assert.equal(
+      parsed.skipped.every((line) => !("unitPriceCents" in line)),
+      true,
+    );
+  });
+
+  it("lists item-like skipped lines for display and omits headers", () => {
+    const parsed = parseImportedQuoteText(
+      "Quote #1042\nReplace outlet    each    $85\nLaminate cabinets    14 lin ft\n",
+    );
+    assert.deepEqual(skippedLinesForDisplay(parsed.skipped), [
+      { raw: "Laminate cabinets    14 lin ft", reason: "no_price" },
+    ]);
   });
 
   it("maps @ and /h as unit prices, not line totals", () => {
