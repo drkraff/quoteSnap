@@ -122,6 +122,11 @@ import {
   type QuotePhoto,
 } from '../../../src/quotes/photos';
 import { persistStillPlan, photoQueuePayload } from '../../../src/quotes/persist-photo';
+import {
+  IMPORT_FROM_PHOTO_LABEL,
+  PHOTO_IMPORT_BLANK_PRICE_HINT,
+  importLineFromPhoto,
+} from '../../../src/quotes/photo-import';
 import { typedPriceSource } from '../../../src/utils/price-source';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 import { RESUME_KIND_DRAFT } from '../../../src/quotes/resume-checkpoint';
@@ -689,9 +694,35 @@ export default function DraftScreen(): JSX.Element {
     ]);
   }
 
+  async function handleImportFromPhoto(roomId?: string | null): Promise<void> {
+    if (!quote || !draft) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+
+    Alert.alert(
+      IMPORT_FROM_PHOTO_LABEL,
+      `${PHOTO_IMPORT_BLANK_PRICE_HINT} ${PHOTO_PRIVATE_HINT}`,
+      [
+        {
+          text: PHOTO_CAMERA_LABEL,
+          onPress: () => {
+            void pickAndAttachPhoto('camera', { roomId, importAsLine: true });
+          },
+        },
+        {
+          text: PHOTO_LIBRARY_LABEL,
+          onPress: () => {
+            void pickAndAttachPhoto('library', { roomId, importAsLine: true });
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }
+
   async function pickAndAttachPhoto(
     source: 'camera' | 'library',
-    target: { roomId?: string | null; lineIndex?: number },
+    target: { roomId?: string | null; lineIndex?: number; importAsLine?: boolean },
   ): Promise<void> {
     if (!quote || !draft) return;
     try {
@@ -734,23 +765,37 @@ export default function DraftScreen(): JSX.Element {
       await FileSystem.makeDirectoryAsync(plan.destDir, { intermediates: true });
       await FileSystem.copyAsync({ from: plan.sourceUri, to: plan.destUri });
 
-      let nextItems = lineItems;
-      let lineClientId: string | null = null;
-      if (target.lineIndex != null) {
-        nextItems = ensureLineClientId(lineItems, target.lineIndex);
-        lineClientId = nextItems[target.lineIndex]?.clientId ?? null;
-        if (nextItems !== lineItems) {
-          await persistLineItems(nextItems);
+      if (target.importAsLine) {
+        const imported = importLineFromPhoto({
+          items: lineItems,
+          photos,
+          localUri: plan.destUri,
+          mime: plan.mime,
+          photoId: plan.photoId,
+          filename: asset.fileName ?? asset.uri,
+          roomId: target.roomId ?? null,
+        });
+        await persistLineItems(imported.items);
+        await persistPhotos(imported.photos);
+      } else {
+        let nextItems = lineItems;
+        let lineClientId: string | null = null;
+        if (target.lineIndex != null) {
+          nextItems = ensureLineClientId(lineItems, target.lineIndex);
+          lineClientId = nextItems[target.lineIndex]?.clientId ?? null;
+          if (nextItems !== lineItems) {
+            await persistLineItems(nextItems);
+          }
         }
+        const nextPhotos = addPhoto(photos, {
+          id: plan.photoId,
+          localUri: plan.destUri,
+          mime: plan.mime,
+          roomId: target.roomId ?? null,
+          lineClientId,
+        });
+        await persistPhotos(nextPhotos);
       }
-      const nextPhotos = addPhoto(photos, {
-        id: plan.photoId,
-        localUri: plan.destUri,
-        mime: plan.mime,
-        roomId: target.roomId ?? null,
-        lineClientId,
-      });
-      await persistPhotos(nextPhotos);
       await enqueue(photoQueuePayload({
         quoteLocalId: quote.id,
         photoId: plan.photoId,
@@ -1011,6 +1056,14 @@ export default function DraftScreen(): JSX.Element {
                     <Text style={styles.roomHeaderButtonText}>{ROOM_ADD_ITEM_LABEL}</Text>
                   </Pressable>
                   <Pressable
+                    onPress={() => { void handleImportFromPhoto(row.room.id); }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${IMPORT_FROM_PHOTO_LABEL} in ${row.room.name}. ${PHOTO_IMPORT_BLANK_PRICE_HINT}`}
+                    style={styles.roomHeaderButton}
+                  >
+                    <Text style={styles.roomHeaderButtonText}>{IMPORT_FROM_PHOTO_LABEL}</Text>
+                  </Pressable>
+                  <Pressable
                     onPress={() => setRoomNoteId(row.room.id)}
                     accessibilityRole="button"
                     accessibilityLabel={
@@ -1238,6 +1291,15 @@ export default function DraftScreen(): JSX.Element {
             >
               <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
               <Text style={styles.addItemText}>Add Item</Text>
+            </Pressable>
+            <Pressable
+              style={styles.addItemButton}
+              onPress={() => { void handleImportFromPhoto(null); }}
+              accessibilityRole="button"
+              accessibilityLabel={`${IMPORT_FROM_PHOTO_LABEL}. ${PHOTO_IMPORT_BLANK_PRICE_HINT}`}
+            >
+              <Ionicons name="camera-outline" size={20} color={colors.accent} />
+              <Text style={styles.addItemText}>{IMPORT_FROM_PHOTO_LABEL}</Text>
             </Pressable>
             <PrivateNoteField
               value={privateNote}
