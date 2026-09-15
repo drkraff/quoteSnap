@@ -6,6 +6,7 @@ import { uploadToR2, deleteFromR2 } from '../services/r2.js';
 import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
+import { snapshotPriceSourceFromRow } from '../quotes/price-source.js';
 import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
 import {
   failedVoiceStatusPayload,
@@ -198,7 +199,8 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
               qli.quantity,
               qli.unit_price_cents AS "unitPriceCents",
               qli.unit,
-              qli.confidence
+              qli.confidence,
+              qli.price_source AS "priceSource"
        FROM quote_line_items qli
        WHERE qli.quote_id = $1
        ORDER BY qli.created_at ASC`,
@@ -212,6 +214,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       unitPriceCents: number;
       unit: string | null;
       confidence: number | null;
+      priceSource: string | null;
     };
 
     const lineItems = (lineItemsResult.rows as LineItemRow[]).map((row) => ({
@@ -221,6 +224,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       unitPriceCents: row.unitPriceCents > 0 ? row.unitPriceCents : null,
       unit: row.unit,
       confidence: row.confidence ?? undefined,
+      priceSource: snapshotPriceSourceFromRow(row.priceSource, row.unitPriceCents),
     }));
 
     res.json({

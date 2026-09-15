@@ -85,12 +85,14 @@ export function toContractorLineItemSync(item: {
   unitPriceCents: number | null;
   unit?: string | null;
   privateNote?: string | null;
+  priceSource?: string | null;
 }): {
   name: string;
   quantity: number;
   unitPriceCents: number;
   unit: string | null;
   privateNote: string | null;
+  priceSource?: string;
 } {
   return {
     name: item.name,
@@ -98,5 +100,6 @@ export function toContractorLineItemSync(item: {
     unitPriceCents: item.unitPriceCents ?? 0,
     unit: item.unit ?? null,
     privateNote: item.privateNote ?? null,
+    ...(item.priceSource ? { priceSource: item.priceSource } : {}),
   };
 }

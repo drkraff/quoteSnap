@@ -40,6 +40,7 @@ export interface DraftLineItemsResponse {
     unitPriceCents: number | null;
     unit?: string | null;
     confidence: number | undefined;
+    priceSource?: string | null;
   }>;
 }
 

@@ -3,6 +3,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
+import { draftPriceFlag, draftPriceSourceLabel } from '../../utils/price-source';
 
 interface LineItemRowProps {
   name: string;
@@ -13,6 +14,7 @@ interface LineItemRowProps {
   onPricePress: () => void;
   onDelete: () => void;
   confidence?: 'review' | 'needs_input';
+  priceSource?: string | null;
 }
 
 export function LineItemRow({
@@ -24,10 +26,14 @@ export function LineItemRow({
   onPricePress,
   onDelete,
   confidence,
+  priceSource,
 }: LineItemRowProps): JSX.Element {
   const priceUnknown = isUnknownUnitPrice(unitPriceCents);
   const priceDisplay = formatUnitPriceLabel(unitPriceCents);
   const quantityDisplay = formatQuantityLabel(quantity, unit);
+  const flag = draftPriceFlag(priceSource, unitPriceCents);
+  const sourceLabel = draftPriceSourceLabel(flag);
+  const unknownFlag = flag === 'unknown';
 
   function renderRightActions(): JSX.Element {
     return (
@@ -48,7 +54,7 @@ export function LineItemRow({
   const minusDisabled = quantity === 1;
 
   const tierBorderStyle =
-    confidence === 'needs_input'
+    confidence === 'needs_input' || unknownFlag
       ? { borderLeftWidth: 4, borderLeftColor: colors.destructive }
       : confidence === 'review'
         ? { borderLeftWidth: 4, borderLeftColor: '#d97706' }
@@ -56,7 +62,7 @@ export function LineItemRow({
 
   return (
     <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
-      <View style={[styles.row, tierBorderStyle, confidence != null && styles.rowFlagged]}>
+      <View style={[styles.row, tierBorderStyle, (confidence != null || sourceLabel != null || unknownFlag) && styles.rowFlagged]}>
         {/* Left: item name + confidence badge */}
         <View style={styles.nameColumn}>
           <Text style={styles.name} numberOfLines={1}>
@@ -105,11 +111,20 @@ export function LineItemRow({
           style={styles.priceButton}
           onPress={onPricePress}
           accessibilityRole="button"
-          accessibilityLabel={priceUnknown ? 'Add price' : 'Edit price'}
+          accessibilityLabel={
+            priceUnknown
+              ? 'Add price. Unknown'
+              : sourceLabel
+                ? `Edit price. ${sourceLabel}`
+                : 'Edit price'
+          }
         >
           <Text style={[styles.priceText, priceUnknown && styles.priceUnknown]}>
             {priceDisplay}
           </Text>
+          {sourceLabel ? (
+            <Text style={styles.priceSourceLabel}>{sourceLabel}</Text>
+          ) : null}
         </Pressable>
       </View>
     </Swipeable>
@@ -192,6 +207,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 18,
     color: colors.destructive,
+  },
+  priceSourceLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '400',
+    lineHeight: 18,
+    color: colors.mutedText,
+    marginTop: 2,
   },
   deleteAction: {
     backgroundColor: colors.destructive,

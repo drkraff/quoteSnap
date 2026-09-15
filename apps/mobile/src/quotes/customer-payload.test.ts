@@ -93,4 +93,23 @@ describe('toContractorLineItemSync', () => {
       privateNote: SECRET_LINE,
     });
   });
+
+  it('keeps priceSource on the contractor PUT so flags can round-trip', () => {
+    expect(
+      toContractorLineItemSync({
+        name: 'Labor',
+        quantity: 2,
+        unitPriceCents: 7500,
+        unit: 'hour',
+        priceSource: 'computed',
+      }),
+    ).toEqual({
+      name: 'Labor',
+      quantity: 2,
+      unitPriceCents: 7500,
+      unit: 'hour',
+      privateNote: null,
+      priceSource: 'computed',
+    });
+  });
 });

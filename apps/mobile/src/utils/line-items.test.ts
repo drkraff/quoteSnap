@@ -43,6 +43,7 @@ describe('addItem', () => {
       name: 'Pipe',
       quantity: 1,
       unitPriceCents: 500,
+      priceSource: 'catalog',
     });
   });
 
@@ -109,6 +110,7 @@ describe('updatePrice', () => {
     ];
     const result = updatePrice(items, 0, 2500);
     expect(result[0].unitPriceCents).toBe(2500);
+    expect(result[0].priceSource).toBe('known');
   });
 
   it('does not modify other items', () => {
@@ -208,5 +210,30 @@ describe('adhoc / unknown prices', () => {
     expect(JSON.parse(serializeLineItems(parsed))[0].privateNote).toBe(
       'moisture from neighbor',
     );
+  });
+
+  it('round-trips attach priceSource on draft JSON', () => {
+    const json = JSON.stringify([
+      {
+        catalogItemId: '',
+        name: 'Labor',
+        quantity: 2,
+        unit: 'hour',
+        unitPriceCents: 7500,
+        priceSource: 'computed',
+      },
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unit: 'foot',
+        unitPriceCents: null,
+        priceSource: 'unknown',
+      },
+    ]);
+    const parsed = parseLineItems(json);
+    expect(parsed[0]!.priceSource).toBe('computed');
+    expect(parsed[1]!.priceSource).toBe('unknown');
+    expect(parseLineItems(JSON.stringify([{ name: 'X', quantity: 1, unitPriceCents: 1, priceSource: 'guessed' }]))[0]!.priceSource).toBeUndefined();
   });
 });

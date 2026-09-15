@@ -23,6 +23,8 @@ export interface QuoteLineItemResponse {
   catalogItemId: string | null;
   /** Contractor-only. Never copy into a customer PDF/SMS/approval payload. */
   privateNote: string | null;
+  /** Snapshot provenance from attach or contractor edit. */
+  priceSource?: string | null;
 }
 
 export interface QuoteListItemResponse extends QuoteResponse {
@@ -47,6 +49,8 @@ export interface UpdateQuoteLineItemBody {
   catalogItemId?: string | null;
   /** Omit to preserve existing private_note; null clears. Contractor-only. */
   privateNote?: string | null;
+  /** Omit to preserve existing price_source. */
+  priceSource?: string | null;
 }
 
 export interface UpdateQuoteBody {
