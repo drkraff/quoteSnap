@@ -150,6 +150,10 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           payload.privateNote === undefined
             ? undefined
             : (payload.privateNote as string | null),
+        clientSentence:
+          payload.clientSentence === undefined
+            ? undefined
+            : (payload.clientSentence as string | null),
       });
       await database.write(async () => {
         await localQuote.update((r) => {
@@ -197,6 +201,10 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           payload.privateNote === undefined
             ? undefined
             : (payload.privateNote as string | null),
+        clientSentence:
+          payload.clientSentence === undefined
+            ? undefined
+            : (payload.clientSentence as string | null),
         lineItems: payload.lineItems as {
           name: string;
           quantity: number;

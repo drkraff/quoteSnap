@@ -18,6 +18,7 @@ export type LocalQuoteRecord = {
   sentAt: Date | null;
   voiceJobId?: string | null;
   privateNote?: string | null;
+  clientSentence?: string | null;
 };
 
 export type QuoteDetailSnapshot = {
@@ -27,6 +28,7 @@ export type QuoteDetailSnapshot = {
   createdAt: string;
   sentAt: string | null;
   privateNote?: string | null;
+  clientSentence?: string | null;
 };
 
 export type QuoteDetailSource = 'local' | 'network' | 'none';
@@ -125,6 +127,7 @@ function snapshotFromLocal(quote: LocalQuoteRecord): QuoteDetailSnapshot {
     createdAt: quote.createdAt.toISOString(),
     sentAt: quote.sentAt?.toISOString() ?? null,
     privateNote: quote.privateNote ?? null,
+    clientSentence: quote.clientSentence ?? null,
   };
 }
 
@@ -136,6 +139,7 @@ function snapshotFromRemote(quote: QuoteResponse): QuoteDetailSnapshot {
     createdAt: quote.createdAt,
     sentAt: quote.sentAt,
     privateNote: quote.privateNote ?? null,
+    clientSentence: quote.clientSentence ?? null,
   };
 }
 

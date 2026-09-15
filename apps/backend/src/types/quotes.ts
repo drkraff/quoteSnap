@@ -10,6 +10,8 @@ export interface QuoteResponse {
   isArchived: boolean;
   /** Contractor-only. Never copy into a customer PDF/SMS/approval payload. */
   privateNote: string | null;
+  /** Customer-facing scope / assumptions. Include on PDF/SMS/approval. */
+  clientSentence: string | null;
 }
 
 export interface QuoteLineItemResponse {
@@ -40,6 +42,7 @@ export interface CreateQuoteBody {
   customerPhone?: string;
   totalCents?: number;
   privateNote?: string | null;
+  clientSentence?: string | null;
 }
 
 export interface UpdateQuoteLineItemBody {
@@ -67,5 +70,7 @@ export interface UpdateQuoteBody {
   totalCents?: number;
   /** Contractor-only job note. Omit to preserve; null clears. */
   privateNote?: string | null;
+  /** Customer-facing quote note. Omit to preserve; null clears. */
+  clientSentence?: string | null;
   lineItems?: UpdateQuoteLineItemBody[];
 }

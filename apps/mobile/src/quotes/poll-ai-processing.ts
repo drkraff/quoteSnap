@@ -36,8 +36,12 @@ export type PollAiProcessingDeps = {
   getVoiceStatus: (jobId: string) => Promise<VoiceStatusResponse>;
   fetchQuote: (serverId: string) => Promise<RemoteQuoteForPoll>;
   getDraftLineItems: (quoteId: string) => Promise<DraftLineItemsResponse>;
-  markDraftReady: (quote: PollableAiQuote, lineItemsJson: string) => Promise<void>;
-  markFailed: (quote: PollableAiQuote, lineItemsJson: string) => Promise<void>;
+  markDraftReady: (
+    quote: PollableAiQuote,
+    lineItemsJson: string,
+    clientSentence?: string | null,
+  ) => Promise<void>;
+  markFailed: (quote: PollableAiQuote, lineItemsJson: string, clientSentence?: string | null) => Promise<void>;
   stampVoiceJobId: (quote: PollableAiQuote, jobId: string) => Promise<void>;
 };
 
@@ -85,7 +89,11 @@ async function applyComplete(
 ): Promise<PollAiProcessingOutcome> {
   try {
     const draftData = await deps.getDraftLineItems(draftId);
-    await deps.markDraftReady(quote, lineItemsJsonFromUnknown(draftData.lineItems));
+    await deps.markDraftReady(
+      quote,
+      lineItemsJsonFromUnknown(draftData.lineItems),
+      draftData.clientSentence ?? null,
+    );
   } catch {
     // Same as the existing quotes-list poller: do not stay in ai_processing
     // if the draft fetch fails after the server already finished.
@@ -117,7 +125,11 @@ async function applyFailed(
   if (hasText(draftId)) {
     try {
       const draftData = await deps.getDraftLineItems(draftId);
-      await deps.markFailed(quote, lineItemsJsonFromUnknown(draftData.lineItems));
+      await deps.markFailed(
+        quote,
+        lineItemsJsonFromUnknown(draftData.lineItems),
+        draftData.clientSentence ?? null,
+      );
       return 'ai_failed';
     } catch {
       // FAIL-04 ASR: no draft yet. Still mark failed so Retry can surface.

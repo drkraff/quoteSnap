@@ -3,7 +3,8 @@
  * Do not spread QuoteResponse / QuoteRow — those include privateNote for
  * the authenticated contractor API (hydrate + draft sync).
  *
- * Client-facing scope and private notes are different objects (design #9).
+ * Client-facing scope (clientSentence) is on the allowlist. Private notes
+ * are a different object (design #9) and must never be copied here.
  */
 
 export type CustomerLineItemPayload = {
@@ -16,15 +17,17 @@ export type CustomerLineItemPayload = {
 export type CustomerQuotePayload = {
   customerPhone: string | null;
   totalCents: number;
+  clientSentence: string | null;
   lineItems: CustomerLineItemPayload[];
 };
 
-const CUSTOMER_QUOTE_KEYS = ["customerPhone", "totalCents", "lineItems"] as const;
+const CUSTOMER_QUOTE_KEYS = ["customerPhone", "totalCents", "clientSentence", "lineItems"] as const;
 const CUSTOMER_LINE_KEYS = ["name", "quantity", "unitPriceCents", "unit"] as const;
 
 export type CustomerQuoteSource = {
   customerPhone: string | null;
   totalCents: number;
+  clientSentence?: string | null;
   privateNote?: string | null;
   notes?: string | null;
   lineItems: Array<{
@@ -43,6 +46,7 @@ export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuo
   return {
     customerPhone: source.customerPhone,
     totalCents: source.totalCents,
+    clientSentence: source.clientSentence ?? null,
     lineItems: source.lineItems
       .filter((item) => item.optionRole !== "alt")
       .map((item) => ({

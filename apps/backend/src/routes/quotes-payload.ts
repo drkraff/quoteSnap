@@ -13,6 +13,7 @@ export type QuoteRow = {
   voice_job_id: string | null;
   is_archived: boolean;
   private_note: string | null;
+  client_sentence: string | null;
 };
 
 export type QuoteLineItemRow = {
@@ -32,7 +33,7 @@ export type QuoteLineItemRow = {
 };
 
 export const QUOTE_COLUMNS =
-  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note";
+  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note, client_sentence";
 
 /** Active Quotes list (catalog GET analog). Default GET /quotes. */
 export function listQuotesSql(archived: boolean): string {
@@ -66,6 +67,7 @@ export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
     voiceJobId: row.voice_job_id,
     isArchived: row.is_archived,
     privateNote: row.private_note,
+    clientSentence: row.client_sentence,
   };
 }
 

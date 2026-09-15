@@ -37,6 +37,7 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
     voice_job_id: null,
     is_archived: false,
     private_note: null,
+    client_sentence: null,
     ...overrides,
   };
 }
@@ -195,6 +196,18 @@ describe("parseQuotePutBody", () => {
     assert.equal(parsed.lineItems, undefined);
     assert.equal(parsed.totalCents, undefined);
   });
+
+  it("accepts a clientSentence-only body (not a money write)", () => {
+    const parsed = parseQuotePutBody({
+      clientSentence: "Appliances and decorative lighting not included.",
+    });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.clientSentence, "Appliances and decorative lighting not included.");
+    assert.equal(parsed.privateNote, undefined);
+    assert.equal(parsed.lineItems, undefined);
+    assert.equal(parsed.totalCents, undefined);
+  });
 });
 
 describe("parseQuoteCreateBody", () => {
@@ -205,6 +218,7 @@ describe("parseQuoteCreateBody", () => {
       customerPhone: null,
       totalCents: 0,
       privateNote: null,
+      clientSentence: null,
     });
   });
 
@@ -933,6 +947,22 @@ describe("applyQuotePut", () => {
     assert.ok(update);
     assert.match(update!.sql, /private_note = \$/);
     assert.equal(update!.params?.[0], "subcontractor check");
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+    assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), false);
+  });
+
+  it("writes a quote-level clientSentence without replacing line items", async () => {
+    const { calls, queryFn } = mockDb();
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { clientSentence: "  Appliances not included.  " },
+    });
+    assert.equal(outcome.status, 200);
+    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.ok(update);
+    assert.match(update!.sql, /client_sentence = \$/);
+    assert.equal(update!.params?.[0], "Appliances not included.");
     assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
     assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), false);
   });

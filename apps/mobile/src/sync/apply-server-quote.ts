@@ -45,6 +45,7 @@ export async function applyServerQuoteInWrite(
     record.voiceJobId = serverQuote.voiceJobId;
     record.isArchived = serverQuote.isArchived === true;
     record.privateNote = serverQuote.privateNote ?? null;
+    record.clientSentence = serverQuote.clientSentence ?? null;
   });
   await draft.update((record) => {
     record.lineItemsJson = lineItemsJson;

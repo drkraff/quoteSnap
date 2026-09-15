@@ -73,6 +73,7 @@ export default function QuoteDetailScreen(): JSX.Element {
             await database.write(async () => {
               await q.update((record) => {
                 record.privateNote = remoteQuote.privateNote ?? null;
+                record.clientSentence = remoteQuote.clientSentence ?? null;
               });
             });
           } catch {
@@ -135,6 +136,7 @@ export default function QuoteDetailScreen(): JSX.Element {
           createdAt: quote.createdAt,
           sentAt: quote.sentAt,
           privateNote: quote.privateNote,
+          clientSentence: quote.clientSentence,
         }}
         lineItems={lineItems}
       />

@@ -203,6 +203,38 @@ describe('resolveQuoteDetailView', () => {
     });
   });
 
+  it('keeps a customer-facing clientSentence on local and network snapshots', () => {
+    const local = resolveQuoteDetailView({
+      localQuote: localQuote({
+        privateNote: 'subcontractor check',
+        clientSentence: 'Appliances not included.',
+      }),
+      localDraftJson: hydrateDraftJson,
+      remote: { skipped: true },
+    });
+    expect(local.quote).toMatchObject({
+      privateNote: 'subcontractor check',
+      clientSentence: 'Appliances not included.',
+    });
+
+    const remote = resolveQuoteDetailView({
+      localQuote: localQuote(),
+      localDraftJson: hydrateDraftJson,
+      remote: {
+        ok: true,
+        quote: remoteQuote({
+          privateNote: 'internal only',
+          clientSentence: 'Decorative lighting not included.',
+        }),
+        lineItems: remoteLineItems,
+      },
+    });
+    expect(remote.quote).toMatchObject({
+      privateNote: 'internal only',
+      clientSentence: 'Decorative lighting not included.',
+    });
+  });
+
   it('treats empty draft JSON as a local snapshot, not a missing payload', () => {
     const result = resolveQuoteDetailView({
       localQuote: localQuote(),

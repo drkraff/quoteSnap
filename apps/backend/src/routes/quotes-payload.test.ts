@@ -26,6 +26,7 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
     voice_job_id: null,
     is_archived: false,
     private_note: null,
+    client_sentence: null,
     ...overrides,
   };
 }
@@ -66,6 +67,7 @@ describe("quoteRowToResponse", () => {
       voiceJobId: "job-abc",
       isArchived: false,
       privateNote: null,
+      clientSentence: null,
     });
   });
 
@@ -83,6 +85,16 @@ describe("quoteRowToResponse", () => {
     assert.equal(
       quoteRowToResponse(quoteRow({ private_note: "subcontractor check" })).privateNote,
       "subcontractor check",
+    );
+  });
+
+  it("maps client_sentence for contractor hydrate and the customer allowlist", () => {
+    assert.equal(quoteRowToResponse(quoteRow()).clientSentence, null);
+    assert.equal(
+      quoteRowToResponse(
+        quoteRow({ client_sentence: "Appliances and decorative lighting not included." }),
+      ).clientSentence,
+      "Appliances and decorative lighting not included.",
     );
   });
 });
@@ -187,24 +199,31 @@ describe("nestLineItems", () => {
 describe("contractor response vs customer payload", () => {
   it("keeps private notes on the contractor mapper and drops them on the customer allowlist", () => {
     const quote = quoteRowToResponse(
-      quoteRow({ private_note: "subcontractor check — do not tell the client" }),
+      quoteRow({
+        private_note: "subcontractor check — do not tell the client",
+        client_sentence: "Appliances not included.",
+      }),
     );
     const line = lineItemRowToResponse(
       lineItemRow({ private_note: "moisture from neighbor pipe" }),
     );
     assert.equal(quote.privateNote, "subcontractor check — do not tell the client");
+    assert.equal(quote.clientSentence, "Appliances not included.");
     assert.equal(line.privateNote, "moisture from neighbor pipe");
 
     const customer = toCustomerQuotePayload({
       customerPhone: quote.customerPhone,
       totalCents: quote.totalCents,
       privateNote: quote.privateNote,
+      clientSentence: quote.clientSentence,
       lineItems: [line],
     });
     const json = JSON.stringify(customer);
     assert.equal(json.includes("subcontractor check"), false);
     assert.equal(json.includes("moisture from neighbor"), false);
     assert.equal(json.includes("privateNote"), false);
+    assert.equal(customer.clientSentence, "Appliances not included.");
+    assert.equal(json.includes("Appliances not included."), true);
   });
 });
 

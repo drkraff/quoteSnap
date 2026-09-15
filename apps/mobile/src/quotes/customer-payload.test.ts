@@ -14,6 +14,7 @@ describe('toCustomerQuotePayload', () => {
     const payload = toCustomerQuotePayload({
       customerPhone: '+15555550100',
       totalCents: 2500,
+      clientSentence: 'Appliances and decorative lighting not included.',
       privateNote: SECRET_JOB,
       notes: 'leftover drafts.notes must not leak either',
       lineItems: [
@@ -31,6 +32,7 @@ describe('toCustomerQuotePayload', () => {
     expect(payload).toEqual({
       customerPhone: '+15555550100',
       totalCents: 2500,
+      clientSentence: 'Appliances and decorative lighting not included.',
       lineItems: [
         {
           name: 'Replace outlet',
@@ -52,6 +54,7 @@ describe('toCustomerQuotePayload', () => {
     expect(json).not.toContain('privateNote');
     expect(json).not.toContain('private_note');
     expect(json).not.toContain('notes');
+    expect(json).toContain('Appliances and decorative lighting not included.');
   });
 
   it('does not invent prices — unknown unitPriceCents stays null', () => {
@@ -71,6 +74,7 @@ describe('toCustomerQuotePayload', () => {
     });
     expect(payload.lineItems[0]!.unitPriceCents).toBeNull();
     expect(payload.totalCents).toBe(0);
+    expect(payload.clientSentence).toBeNull();
     expect(JSON.stringify(payload)).not.toContain(SECRET_JOB);
   });
 
@@ -107,6 +111,7 @@ describe('toCustomerQuotePayload', () => {
       },
     ]);
     expect(payload.totalCents).toBe(180000);
+    expect(payload.clientSentence).toBeNull();
     expect(JSON.stringify(payload)).not.toContain('Keep the tub');
     expect(JSON.stringify(payload)).not.toContain('optionRole');
   });

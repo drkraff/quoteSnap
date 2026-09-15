@@ -59,6 +59,7 @@ import { PriceEditSheet } from '../../../src/components/quotes/price-edit-sheet'
 import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picker-sheet';
 import { AlternateOptionSheet } from '../../../src/components/quotes/alternate-option-sheet';
 import { PrivateNoteField } from '../../../src/components/quotes/private-note-field';
+import { ClientSentenceField } from '../../../src/components/quotes/client-sentence-field';
 import { PrivateNoteSheet } from '../../../src/components/quotes/private-note-sheet';
 import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
@@ -72,6 +73,7 @@ import {
   PRIVATE_NOTE_INTERNAL_HINT,
   normalizePrivateNote,
 } from '../../../src/quotes/private-notes';
+import { normalizeClientSentence } from '../../../src/quotes/client-sentence';
 import { toContractorLineItemSync } from '../../../src/quotes/customer-payload';
 import {
   ADD_ALTERNATE_LABEL,
@@ -93,6 +95,7 @@ export default function DraftScreen(): JSX.Element {
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [phone, setPhone] = useState('');
   const [privateNote, setPrivateNote] = useState('');
+  const [clientSentence, setClientSentence] = useState('');
   const [priceEditIndex, setPriceEditIndex] = useState<number | null>(null);
   const [lineNoteIndex, setLineNoteIndex] = useState<number | null>(null);
   const [alternateForIndex, setAlternateForIndex] = useState<number | null>(null);
@@ -131,6 +134,16 @@ export default function DraftScreen(): JSX.Element {
       });
     }, PHONE_SYNC_DEBOUNCE_MS),
   ).current;
+  const sentenceSync = useRef(
+    createLatestDebouncer(async (value: { quoteId: string; clientSentence: string | null }) => {
+      await enqueue({
+        entityType: 'quote',
+        entityId: value.quoteId,
+        action: 'update',
+        payload: { clientSentence: value.clientSentence },
+      });
+    }, PHONE_SYNC_DEBOUNCE_MS),
+  ).current;
 
   // Load quote + draft on mount. Voice/hydrate usually already wrote a draft;
   // create an empty one if missing so catalog add works on ai_failed quotes.
@@ -159,6 +172,7 @@ export default function DraftScreen(): JSX.Element {
         setQuoteStatus(q.status);
         setPhone(q.customerPhone ?? '');
         setPrivateNote(q.privateNote ?? '');
+        setClientSentence(q.clientSentence ?? '');
         const draftCollection = database.get<Draft>('drafts');
         const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
         if (cancelled) return;
@@ -526,6 +540,22 @@ export default function DraftScreen(): JSX.Element {
     });
   }
 
+  function handleClientSentenceChange(text: string): void {
+    setClientSentence(text);
+    const q = quoteRef.current;
+    if (!q) return;
+    void persistClientSentenceLocal(q, text);
+    sentenceSync.schedule({ quoteId: q.id, clientSentence: normalizeClientSentence(text) });
+  }
+
+  async function persistClientSentenceLocal(q: Quote, text: string): Promise<void> {
+    await database.write(async () => {
+      await q.update((r) => {
+        r.clientSentence = normalizeClientSentence(text);
+      });
+    });
+  }
+
   async function handleLineNoteSave(raw: string | null): Promise<void> {
     if (!draft || !quote || lineNoteIndex === null) return;
     if (rejectFrozenMoneyWrite()) return;
@@ -598,6 +628,7 @@ export default function DraftScreen(): JSX.Element {
   async function handleSendPress(): Promise<void> {
     await phoneSync.flush();
     await noteSync.flush();
+    await sentenceSync.flush();
     if (!quote || !draft) {
       setValidationError('Draft not loaded — please go back and try again');
       return;
@@ -647,6 +678,7 @@ export default function DraftScreen(): JSX.Element {
         // Contractor PUT may include private notes so they persist. Phase 6
         // SMS/PDF/approval MUST use toCustomerQuotePayload (allowlist).
         privateNote: normalizePrivateNote(privateNote),
+        clientSentence: normalizeClientSentence(clientSentence),
         lineItems: lineItems.map(toContractorLineItemSync),
       },
     });
@@ -785,6 +817,11 @@ export default function DraftScreen(): JSX.Element {
                 onAddItems={() => setShowCatalogPicker(true)}
               />
             ) : null}
+            <ClientSentenceField
+              value={clientSentence}
+              onChangeText={handleClientSentenceChange}
+              onBlur={() => { void sentenceSync.flush(); }}
+            />
           </>
         }
         ListEmptyComponent={

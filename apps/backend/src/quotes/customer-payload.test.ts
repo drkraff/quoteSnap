@@ -15,6 +15,7 @@ describe("toCustomerQuotePayload", () => {
     const payload = toCustomerQuotePayload({
       customerPhone: "+15555550100",
       totalCents: 2500,
+      clientSentence: "Appliances and decorative lighting not included.",
       privateNote: SECRET_JOB,
       notes: "leftover drafts.notes must not leak either",
       lineItems: [
@@ -32,6 +33,7 @@ describe("toCustomerQuotePayload", () => {
     assert.deepEqual(payload, {
       customerPhone: "+15555550100",
       totalCents: 2500,
+      clientSentence: "Appliances and decorative lighting not included.",
       lineItems: [
         {
           name: "Replace outlet",
@@ -54,6 +56,7 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(json.includes("privateNote"), false);
     assert.equal(json.includes("private_note"), false);
     assert.equal(json.includes("notes"), false);
+    assert.equal(json.includes("Appliances and decorative lighting not included."), true);
   });
 
   it("does not invent prices — unknown unitPriceCents stays null", () => {
@@ -73,6 +76,7 @@ describe("toCustomerQuotePayload", () => {
     });
     assert.equal(payload.lineItems[0]!.unitPriceCents, null);
     assert.equal(payload.totalCents, 0);
+    assert.equal(payload.clientSentence, null);
     assert.equal(JSON.stringify(payload).includes(SECRET_JOB), false);
   });
 
@@ -103,6 +107,7 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(payload.lineItems.length, 1);
     assert.equal(payload.lineItems[0]!.name, "Walk-in shower");
     assert.equal(payload.totalCents, 180000);
+    assert.equal(payload.clientSentence, null);
     assert.equal(JSON.stringify(payload).includes("Keep the tub"), false);
     assert.equal(JSON.stringify(payload).includes("optionRole"), false);
     assert.equal(JSON.stringify(payload).includes("optionGroupId"), false);
