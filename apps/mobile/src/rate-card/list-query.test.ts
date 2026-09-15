@@ -1,4 +1,9 @@
-import { nextRateCardListOffset, rateCardListPath, RATE_CARD_LIST_PAGE_SIZE } from './list-query';
+import {
+  nextRateCardListOffset,
+  rateCardListPath,
+  rateCardListSearchParam,
+  RATE_CARD_LIST_PAGE_SIZE,
+} from './list-query';
 
 describe('rateCardListPath', () => {
   it('omits name so GET stays a list, not exact lookup', () => {
@@ -8,6 +13,28 @@ describe('rateCardListPath', () => {
     );
     expect(rateCardListPath()).not.toContain('name=');
     expect(rateCardListPath({ limit: 25, offset: 50 })).not.toContain('unit=');
+  });
+
+  it('sends normalized q for substring filter without name=', () => {
+    expect(rateCardListPath({ q: '  Copper   PIPE ' })).toBe('/rate-card?q=copper+pipe');
+    expect(
+      rateCardListPath({
+        limit: RATE_CARD_LIST_PAGE_SIZE,
+        offset: 0,
+        q: 'pipe',
+        unit: 'foot',
+      }),
+    ).toBe('/rate-card?limit=100&offset=0&q=pipe&unit=foot');
+    expect(rateCardListPath({ q: 'pipe' })).not.toContain('name=');
+    expect(rateCardListPath({ q: '   ' })).toBe('/rate-card');
+  });
+});
+
+describe('rateCardListSearchParam', () => {
+  it('trims and lowercases like the rate-card name key', () => {
+    expect(rateCardListSearchParam('  PIPE ')).toBe('pipe');
+    expect(rateCardListSearchParam('')).toBeUndefined();
+    expect(rateCardListSearchParam('   ')).toBeUndefined();
   });
 });
 

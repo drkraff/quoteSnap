@@ -6,10 +6,12 @@ import {
   RATE_CARD_LIST_DEFAULT_LIMIT,
   RATE_CARD_LIST_MAX_LIMIT,
   SELECT_RATE_CARD_LIST_SQL,
+  buildRateCardListSql,
   deleteRateCardEntry,
   isRateCardExactLookupQuery,
   listRateCardEntries,
   parseRateCardListQuery,
+  parseRateCardListSearch,
 } from "./list.js";
 import { SELECT_RATE_CARD_BY_KEY_SQL, type RateCardQueryFn, type RateCardRow } from "./upsert.js";
 
@@ -47,25 +49,32 @@ function mockListDb(rows: RateCardRow[]): {
   const stored = [...rows];
   const queryFn: RateCardQueryFn = async (sql, params) => {
     calls.push({ sql, params });
-    if (sql === COUNT_RATE_CARD_LIST_SQL) {
+    const isCount = sql.includes("COUNT(*)::int AS total");
+    const isSelect = sql.includes("ORDER BY normalized_name ASC, unit ASC, trade_key ASC");
+    if (isCount || isSelect) {
       const contractorId = params?.[0];
-      return {
-        rows: [{ total: stored.filter((row) => row.contractor_id === contractorId).length }],
-      };
-    }
-    if (sql === SELECT_RATE_CARD_LIST_SQL) {
-      const contractorId = params?.[0];
-      const limit = params?.[1] as number;
-      const offset = params?.[2] as number;
-      const scoped = stored
-        .filter((row) => row.contractor_id === contractorId)
-        .sort((a, b) => {
-          const name = a.normalized_name.localeCompare(b.normalized_name);
-          if (name !== 0) return name;
-          const unit = a.unit.localeCompare(b.unit);
-          if (unit !== 0) return unit;
-          return a.trade_key.localeCompare(b.trade_key);
-        });
+      let scoped = stored.filter((row) => row.contractor_id === contractorId);
+      if (sql.includes("position(")) {
+        const q = params?.[1] as string;
+        scoped = scoped.filter((row) => row.normalized_name.includes(q));
+      }
+      const unitSlot = sql.match(/unit = \$(\d+)/);
+      if (unitSlot) {
+        const unit = params?.[Number(unitSlot[1]) - 1] as string;
+        scoped = scoped.filter((row) => row.unit === unit);
+      }
+      if (isCount) {
+        return { rows: [{ total: scoped.length }] };
+      }
+      scoped.sort((a, b) => {
+        const name = a.normalized_name.localeCompare(b.normalized_name);
+        if (name !== 0) return name;
+        const unit = a.unit.localeCompare(b.unit);
+        if (unit !== 0) return unit;
+        return a.trade_key.localeCompare(b.trade_key);
+      });
+      const limit = params?.[params.length - 2] as number;
+      const offset = params?.[params.length - 1] as number;
       return { rows: scoped.slice(offset, offset + limit) };
     }
     if (sql === DELETE_RATE_CARD_SQL) {
@@ -91,6 +100,25 @@ describe("isRateCardExactLookupQuery", () => {
     assert.equal(isRateCardExactLookupQuery({ name: "" }), true);
     assert.equal(isRateCardExactLookupQuery({}), false);
     assert.equal(isRateCardExactLookupQuery({ limit: "50" }), false);
+    assert.equal(isRateCardExactLookupQuery({ q: "pipe" }), false);
+    assert.equal(isRateCardExactLookupQuery({ search: "pipe" }), false);
+    assert.equal(isRateCardExactLookupQuery({ name: "Copper Pipe", q: "pipe" }), true);
+  });
+});
+
+describe("parseRateCardListSearch", () => {
+  it("normalizes q, aliases search, and treats blank as no filter", () => {
+    assert.deepEqual(parseRateCardListSearch({ q: "  Copper   PIPE " }), {
+      ok: true,
+      q: "copper pipe",
+    });
+    assert.deepEqual(parseRateCardListSearch({ search: "PIPE" }), { ok: true, q: "pipe" });
+    assert.deepEqual(parseRateCardListSearch({ q: "pipe", search: "outlet" }), {
+      ok: true,
+      q: "pipe",
+    });
+    assert.deepEqual(parseRateCardListSearch({ q: "   " }), { ok: true });
+    assert.deepEqual(parseRateCardListSearch({}), { ok: true });
   });
 });
 
@@ -115,6 +143,24 @@ describe("parseRateCardListQuery", () => {
     assert.equal(parseRateCardListQuery({ offset: -1 }).ok, false);
     assert.equal(parseRateCardListQuery({ offset: "nope" }).ok, false);
   });
+
+  it("accepts optional q/search and unit on the list, not as exact lookup keys", () => {
+    assert.deepEqual(parseRateCardListQuery({ q: "  PIPE ", unit: "foot" }), {
+      ok: true,
+      limit: RATE_CARD_LIST_DEFAULT_LIMIT,
+      offset: 0,
+      q: "pipe",
+      unit: "foot",
+    });
+    assert.deepEqual(parseRateCardListQuery({ search: "outlet", unit: "per vent" }), {
+      ok: true,
+      limit: RATE_CARD_LIST_DEFAULT_LIMIT,
+      offset: 0,
+      q: "outlet",
+      unit: "each",
+    });
+    assert.equal(parseRateCardListQuery({ unit: "furlong" }).ok, false);
+  });
 });
 
 describe("SELECT_RATE_CARD_LIST_SQL", () => {
@@ -122,6 +168,25 @@ describe("SELECT_RATE_CARD_LIST_SQL", () => {
     assert.match(SELECT_RATE_CARD_LIST_SQL, /ORDER BY normalized_name ASC, unit ASC, trade_key ASC/);
     assert.match(SELECT_RATE_CARD_LIST_SQL, /WHERE contractor_id = \$1/);
     assert.doesNotMatch(SELECT_RATE_CARD_LIST_SQL, /similarity|embedding|tsvector|fuzzy/i);
+  });
+});
+
+describe("buildRateCardListSql", () => {
+  it("uses position() substring on normalized_name, not embeddings or exact-key SQL", () => {
+    const filtered = buildRateCardListSql({ q: "pipe" });
+    assert.match(filtered.selectSql, /position\(\$2 in normalized_name\) > 0/);
+    assert.match(filtered.countSql, /position\(\$2 in normalized_name\) > 0/);
+    assert.deepEqual(filtered.filterParams, ["pipe"]);
+    assert.notEqual(filtered.selectSql, SELECT_RATE_CARD_BY_KEY_SQL);
+    assert.doesNotMatch(filtered.selectSql, /normalized_name = /);
+    assert.doesNotMatch(filtered.selectSql, /similarity|embedding|tsvector|fuzzy|ILIKE/i);
+  });
+
+  it("ANDs optional unit without turning q into a LIKE wildcard pattern", () => {
+    const both = buildRateCardListSql({ q: "%pipe%", unit: "foot" });
+    assert.match(both.selectSql, /position\(\$2 in normalized_name\) > 0 AND unit = \$3/);
+    assert.deepEqual(both.filterParams, ["%pipe%", "foot"]);
+    assert.match(both.selectSql, /LIMIT \$4 OFFSET \$5/);
   });
 });
 
@@ -220,6 +285,119 @@ describe("listRateCardEntries", () => {
     );
     assert.equal(queried, false);
     assert.equal(outcome.status, 400);
+  });
+
+  it("filters list mode by normalized name substring and keeps stored cents", async () => {
+    const pipe = entryRow();
+    const outlet = entryRow({
+      id: SECOND_ID,
+      normalized_name: "outlet swap",
+      display_name: "Outlet Swap",
+      unit: "each",
+      unit_price_cents: 8500,
+      source: "typed",
+    });
+    const piping = entryRow({
+      id: "33333333-3333-4333-8333-333333333333",
+      normalized_name: "drain snake",
+      display_name: "Drain Snake",
+      unit: "job",
+      unit_price_cents: 12000,
+    });
+    const { calls, queryFn } = mockListDb([pipe, outlet, piping]);
+
+    const outcome = await listRateCardEntries(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      query: { q: "  PIPE " },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.total, 1);
+    assert.equal(outcome.json.entries.length, 1);
+    assert.equal(outcome.json.entries[0]?.displayName, "Copper Pipe");
+    assert.equal(outcome.json.entries[0]?.unitPriceCents, 4500);
+    assert.equal(calls[0]?.sql, buildRateCardListSql({ q: "pipe" }).countSql);
+    assert.deepEqual(calls[0]?.params, [CONTRACTOR_ID, "pipe"]);
+    assert.notEqual(calls[1]?.sql, SELECT_RATE_CARD_BY_KEY_SQL);
+    assert.match(calls[1]?.sql ?? "", /position\(\$2 in normalized_name\) > 0/);
+  });
+
+  it("accepts search as a q alias and optional unit, and treats LIKE metacharacters as literal", async () => {
+    const pipe = entryRow();
+    const percentName = entryRow({
+      id: SECOND_ID,
+      normalized_name: "%pipe%",
+      display_name: "%Pipe%",
+      unit_price_cents: 9900,
+    });
+    const footOnly = entryRow({
+      id: "33333333-3333-4333-8333-333333333333",
+      normalized_name: "copper pipe",
+      display_name: "Copper Pipe job",
+      unit: "job",
+      unit_price_cents: 15000,
+    });
+    const { queryFn } = mockListDb([pipe, percentName, footOnly]);
+
+    const bySearch = await listRateCardEntries(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      query: { search: "Pipe" },
+    });
+    assert.equal(bySearch.status, 200);
+    if (bySearch.status !== 200) return;
+    assert.equal(bySearch.json.total, 3);
+
+    const literal = await listRateCardEntries(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      query: { q: "%pipe%" },
+    });
+    assert.equal(literal.status, 200);
+    if (literal.status !== 200) return;
+    assert.equal(literal.json.total, 1);
+    assert.equal(literal.json.entries[0]?.unitPriceCents, 9900);
+
+    const unitFiltered = await listRateCardEntries(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      query: { q: "copper", unit: "foot" },
+    });
+    assert.equal(unitFiltered.status, 200);
+    if (unitFiltered.status !== 200) return;
+    assert.equal(unitFiltered.json.total, 1);
+    assert.equal(unitFiltered.json.entries[0]?.unit, "foot");
+    assert.equal(unitFiltered.json.entries[0]?.unitPriceCents, 4500);
+  });
+
+  it("paginates the filtered total and does not invent rows on a miss", async () => {
+    const rows = [
+      entryRow({ id: ENTRY_ID, normalized_name: "copper pipe", display_name: "Copper Pipe" }),
+      entryRow({
+        id: SECOND_ID,
+        normalized_name: "copper fitting",
+        display_name: "Copper Fitting",
+        unit: "each",
+        unit_price_cents: 2100,
+      }),
+    ];
+    const { queryFn } = mockListDb(rows);
+    const page = await listRateCardEntries(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      query: { q: "copper", limit: 1, offset: 1 },
+    });
+    assert.equal(page.status, 200);
+    if (page.status !== 200) return;
+    assert.equal(page.json.total, 2);
+    assert.equal(page.json.entries.length, 1);
+    assert.equal(page.json.entries[0]?.displayName, "Copper Pipe");
+    assert.equal(page.json.entries[0]?.unitPriceCents, 4500);
+
+    const miss = await listRateCardEntries(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      query: { q: "thermostat" },
+    });
+    assert.deepEqual(miss, {
+      status: 200,
+      json: { entries: [], limit: RATE_CARD_LIST_DEFAULT_LIMIT, offset: 0, total: 0 },
+    });
   });
 });
 

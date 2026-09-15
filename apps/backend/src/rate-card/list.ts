@@ -1,4 +1,10 @@
+import {
+  catalogUnitErrorMessage,
+  parseCatalogUnit,
+  type CatalogUnit,
+} from "../catalog/units.js";
 import type { RateCardListResponse } from "../types/rate-card.js";
+import { normalizeRateCardName } from "./normalize.js";
 import {
   RATE_CARD_COLUMNS,
   rateCardRowToResponse,
@@ -8,6 +14,7 @@ import {
 
 export const RATE_CARD_LIST_DEFAULT_LIMIT = 100;
 export const RATE_CARD_LIST_MAX_LIMIT = 200;
+export const RATE_CARD_LIST_SEARCH_MAX_LENGTH = 200;
 
 export const SELECT_RATE_CARD_LIST_SQL = `SELECT ${RATE_CARD_COLUMNS}
        FROM rate_card_entries
@@ -37,9 +44,14 @@ export type RateCardDeleteOutcome =
   | { status: 404; json: { error: string } }
   | { status: 200; json: { deleted: true } };
 
+export type RateCardListFilter = {
+  q?: string;
+  unit?: CatalogUnit;
+};
+
 export type ParsedRateCardListQuery =
   | { ok: false; error: string }
-  | { ok: true; limit: number; offset: number };
+  | { ok: true; limit: number; offset: number; q?: string; unit?: CatalogUnit };
 
 function queryValue(value: unknown): unknown {
   return Array.isArray(value) ? value[0] : value;
@@ -59,7 +71,32 @@ function parseIntParam(value: unknown): number | undefined | "invalid" {
   return "invalid";
 }
 
-/** Exact lookup when `name` is present; omit `name` for the contractor list. */
+/** Prefer `q` over `search`. Empty / whitespace means no name filter. */
+export function parseRateCardListSearch(query: {
+  q?: unknown;
+  search?: unknown;
+}): { ok: true; q?: string } | { ok: false; error: string } {
+  const raw = queryValue(query.q !== undefined ? query.q : query.search);
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true };
+  }
+  if (typeof raw !== "string") {
+    return { ok: false, error: "q must be a string" };
+  }
+  const normalized = normalizeRateCardName(raw);
+  if (normalized === "") {
+    return { ok: true };
+  }
+  if (normalized.length > RATE_CARD_LIST_SEARCH_MAX_LENGTH) {
+    return {
+      ok: false,
+      error: `q must be at most ${RATE_CARD_LIST_SEARCH_MAX_LENGTH} characters`,
+    };
+  }
+  return { ok: true, q: normalized };
+}
+
+/** Exact lookup when `name` is present; omit `name` for the contractor list. `q`/`search` stay list-only. */
 export function isRateCardExactLookupQuery(query: {
   name?: unknown;
   [key: string]: unknown;
@@ -70,6 +107,9 @@ export function isRateCardExactLookupQuery(query: {
 export function parseRateCardListQuery(query: {
   limit?: unknown;
   offset?: unknown;
+  q?: unknown;
+  search?: unknown;
+  unit?: unknown;
 }): ParsedRateCardListQuery {
   const limitRaw = parseIntParam(query.limit);
   if (limitRaw === "invalid") {
@@ -95,14 +135,85 @@ export function parseRateCardListQuery(query: {
     return { ok: false, error: "offset must be an integer of 0 or more" };
   }
 
-  return { ok: true, limit, offset };
+  const search = parseRateCardListSearch(query);
+  if (!search.ok) {
+    return search;
+  }
+
+  const unitRaw = queryValue(query.unit);
+  let unit: CatalogUnit | undefined;
+  if (unitRaw !== undefined && unitRaw !== null && unitRaw !== "") {
+    const parsedUnit = parseCatalogUnit(unitRaw);
+    if (!parsedUnit) {
+      return { ok: false, error: catalogUnitErrorMessage() };
+    }
+    unit = parsedUnit;
+  }
+
+  return {
+    ok: true,
+    limit,
+    offset,
+    ...(search.q ? { q: search.q } : {}),
+    ...(unit ? { unit } : {}),
+  };
+}
+
+/**
+ * List-mode WHERE clause. Substring uses position() so `%`/`_` in q are
+ * literal, not LIKE wildcards. Not embeddings / fuzzy / voice attach.
+ */
+export function buildRateCardListSql(filter: RateCardListFilter): {
+  countSql: string;
+  selectSql: string;
+  filterParams: unknown[];
+} {
+  if (!filter.q && !filter.unit) {
+    return {
+      countSql: COUNT_RATE_CARD_LIST_SQL,
+      selectSql: SELECT_RATE_CARD_LIST_SQL,
+      filterParams: [],
+    };
+  }
+
+  const clauses = ["contractor_id = $1"];
+  const filterParams: unknown[] = [];
+  let n = 2;
+  if (filter.q) {
+    clauses.push(`position($${n} in normalized_name) > 0`);
+    filterParams.push(filter.q);
+    n += 1;
+  }
+  if (filter.unit) {
+    clauses.push(`unit = $${n}`);
+    filterParams.push(filter.unit);
+    n += 1;
+  }
+  const whereSql = clauses.join(" AND ");
+  return {
+    countSql: `SELECT COUNT(*)::int AS total
+       FROM rate_card_entries
+       WHERE ${whereSql}`,
+    selectSql: `SELECT ${RATE_CARD_COLUMNS}
+       FROM rate_card_entries
+       WHERE ${whereSql}
+       ORDER BY normalized_name ASC, unit ASC, trade_key ASC
+       LIMIT $${n} OFFSET $${n + 1}`,
+    filterParams,
+  };
 }
 
 export async function listRateCardEntries(
   queryFn: RateCardQueryFn,
   args: {
     contractorId: string;
-    query: { limit?: unknown; offset?: unknown };
+    query: {
+      limit?: unknown;
+      offset?: unknown;
+      q?: unknown;
+      search?: unknown;
+      unit?: unknown;
+    };
   },
 ): Promise<RateCardListOutcome> {
   const parsed = parseRateCardListQuery(args.query);
@@ -110,10 +221,16 @@ export async function listRateCardEntries(
     return { status: 400, json: { error: parsed.error } };
   }
 
-  const count = await queryFn(COUNT_RATE_CARD_LIST_SQL, [args.contractorId]);
+  const { countSql, selectSql, filterParams } = buildRateCardListSql({
+    q: parsed.q,
+    unit: parsed.unit,
+  });
+
+  const count = await queryFn(countSql, [args.contractorId, ...filterParams]);
   const total = Number((count.rows[0] as { total?: unknown } | undefined)?.total ?? 0);
-  const result = await queryFn(SELECT_RATE_CARD_LIST_SQL, [
+  const result = await queryFn(selectSql, [
     args.contractorId,
+    ...filterParams,
     parsed.limit,
     parsed.offset,
   ]);
