@@ -5,9 +5,12 @@ import {
   ActivityIndicator,
   StyleSheet,
   ScrollView,
+  Pressable,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { database } from '../../../src/db';
 import { Quote } from '../../../src/db/models/quote';
 import { Draft } from '../../../src/db/models/draft';
@@ -21,15 +24,24 @@ import {
 } from '../../../src/quotes/load-quote-detail';
 import { serializeRooms } from '../../../src/quotes/rooms';
 import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos } from '../../../src/quotes/photos';
+import { useAuthStore } from '../../../src/store/auth-store';
+import {
+  SHARE_QUOTE_EMPTY,
+  SHARE_QUOTE_LABEL,
+  shareCustomerQuote,
+} from '../../../src/quotes/share-customer-quote';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const contractor = useAuthStore((s) => s.contractor);
 
   const [quote, setQuote] = useState<QuoteDetailSnapshot | null>(null);
   const [lineItems, setLineItems] = useState<QuoteLineItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +123,38 @@ export default function QuoteDetailScreen(): JSX.Element {
     };
   }, [id]);
 
+  async function handleSharePress(): Promise<void> {
+    if (!quote || sharing) return;
+    const selectedCount = lineItems.filter((item) => item.optionRole !== 'alt').length;
+    if (selectedCount < 1) {
+      Alert.alert('Cannot share', SHARE_QUOTE_EMPTY);
+      return;
+    }
+    setSharing(true);
+    try {
+      const result = await shareCustomerQuote(
+        {
+          customerPhone: quote.customerPhone,
+          totalCents: quote.totalCents,
+          clientSentence: quote.clientSentence,
+          privateNote: quote.privateNote,
+          rooms: quote.rooms,
+          photos: quote.photos,
+          lineItems,
+        },
+        {
+          displayName: contractor?.displayName,
+          trade: contractor?.trade,
+        },
+      );
+      if (!result.ok) {
+        Alert.alert('Cannot share', result.message);
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -136,7 +180,10 @@ export default function QuoteDetailScreen(): JSX.Element {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}
+    >
       <QuoteDetail
         quote={{
           status: quote.status,
@@ -151,6 +198,15 @@ export default function QuoteDetailScreen(): JSX.Element {
         }}
         lineItems={lineItems}
       />
+      <Pressable
+        style={[styles.shareButton, sharing && styles.shareButtonBusy]}
+        onPress={() => { void handleSharePress(); }}
+        accessibilityRole="button"
+        accessibilityLabel={SHARE_QUOTE_LABEL}
+        accessibilityState={{ disabled: sharing }}
+      >
+        <Text style={styles.shareButtonText}>{SHARE_QUOTE_LABEL}</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -176,5 +232,24 @@ const styles = StyleSheet.create({
     lineHeight: typography.body.lineHeight,
     color: colors.mutedText,
     textAlign: 'center',
+  },
+  shareButton: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.dominant,
+  },
+  shareButtonBusy: {
+    opacity: 0.6,
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.accent,
   },
 });
