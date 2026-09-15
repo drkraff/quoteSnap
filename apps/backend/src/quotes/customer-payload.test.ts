@@ -75,4 +75,36 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(payload.totalCents, 0);
     assert.equal(JSON.stringify(payload).includes(SECRET_JOB), false);
   });
+
+  it("omits the unselected alt from the customer payload (totals stay selected-only)", () => {
+    const groupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const payload = toCustomerQuotePayload({
+      customerPhone: "+15555550100",
+      totalCents: 180000,
+      lineItems: [
+        {
+          name: "Walk-in shower",
+          quantity: 1,
+          unitPriceCents: 180000,
+          unit: "job",
+          optionGroupId: groupId,
+          optionRole: "base",
+        },
+        {
+          name: "Keep the tub",
+          quantity: 1,
+          unitPriceCents: 45000,
+          unit: "job",
+          optionGroupId: groupId,
+          optionRole: "alt",
+        },
+      ],
+    });
+    assert.equal(payload.lineItems.length, 1);
+    assert.equal(payload.lineItems[0]!.name, "Walk-in shower");
+    assert.equal(payload.totalCents, 180000);
+    assert.equal(JSON.stringify(payload).includes("Keep the tub"), false);
+    assert.equal(JSON.stringify(payload).includes("optionRole"), false);
+    assert.equal(JSON.stringify(payload).includes("optionGroupId"), false);
+  });
 });

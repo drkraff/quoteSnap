@@ -10,6 +10,8 @@ import {
   formatUnitPriceLabel,
   isUnknownUnitPrice,
   serializeLineItems,
+  addAlternate,
+  selectOptionForTotal,
   type LineItem,
 } from './line-items';
 
@@ -163,6 +165,34 @@ describe('recalculateTotal', () => {
     ];
     expect(recalculateTotal(items)).toBe(0);
   });
+
+  it('uses only the selected (base) option in the total', () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const items: LineItem[] = [
+      {
+        catalogItemId: '',
+        name: 'Walk-in shower',
+        quantity: 1,
+        unitPriceCents: 180000,
+        optionGroupId: groupId,
+        optionRole: 'base',
+      },
+      {
+        catalogItemId: '',
+        name: 'Keep the tub',
+        quantity: 1,
+        unitPriceCents: 45000,
+        optionGroupId: groupId,
+        optionRole: 'alt',
+      },
+      { catalogItemId: '', name: 'Vanity', quantity: 1, unitPriceCents: 80000 },
+    ];
+    expect(recalculateTotal(items)).toBe(260000);
+    const selectedAlt = selectOptionForTotal(items, 1);
+    expect(selectedAlt[0]!.optionRole).toBe('alt');
+    expect(selectedAlt[1]!.optionRole).toBe('base');
+    expect(recalculateTotal(selectedAlt)).toBe(125000);
+  });
 });
 
 describe('adhoc / unknown prices', () => {
@@ -235,5 +265,97 @@ describe('adhoc / unknown prices', () => {
     expect(parsed[0]!.priceSource).toBe('computed');
     expect(parsed[1]!.priceSource).toBe('unknown');
     expect(parseLineItems(JSON.stringify([{ name: 'X', quantity: 1, unitPriceCents: 1, priceSource: 'guessed' }]))[0]!.priceSource).toBeUndefined();
+  });
+
+  it('round-trips optionGroupId + optionRole on draft JSON', () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const json = JSON.stringify([
+      {
+        catalogItemId: '',
+        name: 'Walk-in shower',
+        quantity: 1,
+        unitPriceCents: 180000,
+        optionGroupId: groupId,
+        optionRole: 'base',
+      },
+      {
+        catalogItemId: '',
+        name: 'Keep the tub',
+        quantity: 1,
+        unitPriceCents: 45000,
+        optionGroupId: groupId,
+        optionRole: 'alt',
+      },
+    ]);
+    const parsed = parseLineItems(json);
+    expect(parsed[0]!.optionGroupId).toBe(groupId);
+    expect(parsed[0]!.optionRole).toBe('base');
+    expect(parsed[1]!.optionRole).toBe('alt');
+    const roundTrip = JSON.parse(serializeLineItems(parsed));
+    expect(roundTrip[0].optionGroupId).toBe(groupId);
+    expect(roundTrip[1].optionRole).toBe('alt');
+    expect(
+      parseLineItems(
+        JSON.stringify([{ name: 'X', quantity: 1, unitPriceCents: 1, optionRole: 'best' }]),
+      )[0]!.optionRole,
+    ).toBeUndefined();
+  });
+});
+
+describe('addAlternate / selectOptionForTotal / dissolve', () => {
+  const GROUP = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+  it('links an unpaired line to one alternate without inventing a price', () => {
+    const items: LineItem[] = [
+      { catalogItemId: '', name: 'Walk-in shower', quantity: 1, unitPriceCents: 180000 },
+    ];
+    const paired = addAlternate(
+      items,
+      0,
+      { name: 'Keep the tub', unitPriceCents: null },
+      GROUP,
+    );
+    expect(paired).toHaveLength(2);
+    expect(paired[0]).toMatchObject({
+      name: 'Walk-in shower',
+      optionGroupId: GROUP,
+      optionRole: 'base',
+      unitPriceCents: 180000,
+    });
+    expect(paired[1]).toMatchObject({
+      name: 'Keep the tub',
+      optionGroupId: GROUP,
+      optionRole: 'alt',
+      unitPriceCents: null,
+      quantity: 1,
+    });
+    expect(recalculateTotal(paired)).toBe(180000);
+    expect(addAlternate(paired, 0, { name: 'Third package', unitPriceCents: 1 }, GROUP)).toHaveLength(2);
+  });
+
+  it('clears the leftover partner when one side of the pair is removed', () => {
+    const items: LineItem[] = [
+      {
+        catalogItemId: '',
+        name: 'Walk-in shower',
+        quantity: 1,
+        unitPriceCents: 180000,
+        optionGroupId: GROUP,
+        optionRole: 'base',
+      },
+      {
+        catalogItemId: '',
+        name: 'Keep the tub',
+        quantity: 1,
+        unitPriceCents: 45000,
+        optionGroupId: GROUP,
+        optionRole: 'alt',
+      },
+    ];
+    const leftover = removeItem(items, 1);
+    expect(leftover).toHaveLength(1);
+    expect(leftover[0]!.optionGroupId).toBeUndefined();
+    expect(leftover[0]!.optionRole).toBeUndefined();
+    expect(leftover[0]!.name).toBe('Walk-in shower');
   });
 });

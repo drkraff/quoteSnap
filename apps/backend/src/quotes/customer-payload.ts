@@ -34,6 +34,8 @@ export type CustomerQuoteSource = {
     unit?: string | null;
     privateNote?: string | null;
     notes?: string | null;
+    optionGroupId?: string | null;
+    optionRole?: string | null;
   }>;
 };
 
@@ -41,12 +43,14 @@ export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuo
   return {
     customerPhone: source.customerPhone,
     totalCents: source.totalCents,
-    lineItems: source.lineItems.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      unitPriceCents: item.unitPriceCents,
-      unit: item.unit ?? null,
-    })),
+    lineItems: source.lineItems
+      .filter((item) => item.optionRole !== "alt")
+      .map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents,
+        unit: item.unit ?? null,
+      })),
   };
 }
 

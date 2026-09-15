@@ -22,6 +22,14 @@ import {
   parseOptionalPriceSource,
   type SnapshotPriceSource,
 } from "./price-source.js";
+import {
+  isOptionRole,
+  lineContributesToTotal,
+  parseOptionalOptionGroupId,
+  parseOptionalOptionRole,
+  parseOptionGroupFields,
+  type OptionRole,
+} from "./option-groups.js";
 
 export {
   CLIENT_QUOTE_STATUSES,
@@ -56,6 +64,10 @@ export type ParsedLineItemInput = {
   privateNote?: string | null;
   /** undefined = omitted (preserve). */
   priceSource?: SnapshotPriceSource;
+  /** undefined = omitted (preserve); null = explicit clear (with role). */
+  optionGroupId?: string | null;
+  /** undefined = omitted (preserve); null = explicit clear (with id). */
+  optionRole?: OptionRole | null;
 };
 
 export type ResolvedLineItem = {
@@ -67,6 +79,8 @@ export type ResolvedLineItem = {
   unit: string | null;
   privateNote: string | null;
   priceSource: SnapshotPriceSource;
+  optionGroupId: string | null;
+  optionRole: OptionRole | null;
 };
 
 export type ParsedQuotePutBody =
@@ -263,6 +277,38 @@ export function parseLineItemInput(
     priceSource = parsed.source;
   }
 
+  const idKeyPresent = hasOwn(raw, "optionGroupId");
+  const roleKeyPresent = hasOwn(raw, "optionRole");
+  let optionGroupId: string | null | undefined;
+  let optionRole: OptionRole | null | undefined;
+  if (idKeyPresent) {
+    const parsed = parseOptionalOptionGroupId(raw.optionGroupId);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    optionGroupId = parsed.optionGroupId;
+  }
+  if (roleKeyPresent) {
+    const parsed = parseOptionalOptionRole(raw.optionRole);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    optionRole = parsed.optionRole;
+  }
+  if (idKeyPresent || roleKeyPresent) {
+    const pair = parseOptionGroupFields(
+      optionGroupId,
+      optionRole,
+      idKeyPresent,
+      roleKeyPresent,
+    );
+    if (!pair.ok) {
+      return pair;
+    }
+    optionGroupId = pair.fields.optionGroupId;
+    optionRole = pair.fields.optionRole;
+  }
+
   return {
     ok: true,
     item: {
@@ -274,12 +320,21 @@ export function parseLineItemInput(
       unit,
       privateNote,
       priceSource,
+      optionGroupId,
+      optionRole,
     },
   };
 }
 
-export function totalCentsFromLineItems(items: Array<{ quantity: number; unitPriceCents: number }>): number {
-  return items.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
+export function totalCentsFromLineItems(
+  items: Array<{ quantity: number; unitPriceCents: number; optionRole?: string | null }>,
+): number {
+  return items.reduce((sum, item) => {
+    if (!lineContributesToTotal(item)) {
+      return sum;
+    }
+    return sum + item.quantity * item.unitPriceCents;
+  }, 0);
 }
 
 /**
@@ -291,7 +346,19 @@ export function totalCentsFromLineItems(items: Array<{ quantity: number; unitPri
  */
 export function resolveReplacementLineItems(
   incoming: ParsedLineItemInput[],
-  existing: Array<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source">>,
+  existing: Array<
+    Pick<
+      QuoteLineItemRow,
+      | "name"
+      | "confidence"
+      | "catalog_item_id"
+      | "unit"
+      | "private_note"
+      | "price_source"
+      | "option_group_id"
+      | "option_role"
+    >
+  >,
 ): ResolvedLineItem[] {
   const unused = existing.map((row) => ({ ...row }));
 
@@ -344,6 +411,22 @@ export function resolveReplacementLineItems(
       priceSource = inferSnapshotPriceSource(item.unitPriceCents);
     }
 
+    let optionGroupId: string | null;
+    let optionRole: OptionRole | null;
+    if (item.optionGroupId === null || item.optionRole === null) {
+      optionGroupId = null;
+      optionRole = null;
+    } else if (item.optionGroupId !== undefined && item.optionRole !== undefined) {
+      optionGroupId = item.optionGroupId;
+      optionRole = item.optionRole;
+    } else if (isOptionRole(match?.option_role) && match?.option_group_id) {
+      optionGroupId = match.option_group_id;
+      optionRole = match.option_role;
+    } else {
+      optionGroupId = null;
+      optionRole = null;
+    }
+
     return {
       name: item.name,
       quantity: item.quantity,
@@ -353,6 +436,8 @@ export function resolveReplacementLineItems(
       unit,
       privateNote,
       priceSource,
+      optionGroupId,
+      optionRole,
     };
   });
 }
@@ -472,8 +557,8 @@ export const SELECT_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
 
 export const DELETE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note, price_source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`;
+export const INSERT_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, name, quantity, unit_price_cents, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`;
 
 /**
  * Quote metadata + line-item replace on one query function so the caller can
@@ -576,6 +661,8 @@ export async function applyQuotePut(
         item.unit,
         item.privateNote,
         item.priceSource,
+        item.optionGroupId,
+        item.optionRole,
       ]);
     }
   }

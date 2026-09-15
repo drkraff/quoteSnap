@@ -25,6 +25,7 @@ import {
   LineItem,
   parseLineItems,
   addItem,
+  addAlternate,
   removeItem,
   updateQuantity,
   updatePrice,
@@ -32,6 +33,7 @@ import {
   recalculateTotal,
   serializeLineItems,
   isUnknownUnitPrice,
+  selectOptionForTotal,
 } from '../../../src/utils/line-items';
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
@@ -55,6 +57,7 @@ import { QUOTE_NOT_FOUND, findQuoteRecord } from '../../../src/quotes/find-quote
 import { LineItemRow } from '../../../src/components/quotes/line-item-row';
 import { PriceEditSheet } from '../../../src/components/quotes/price-edit-sheet';
 import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picker-sheet';
+import { AlternateOptionSheet } from '../../../src/components/quotes/alternate-option-sheet';
 import { PrivateNoteField } from '../../../src/components/quotes/private-note-field';
 import { PrivateNoteSheet } from '../../../src/components/quotes/private-note-sheet';
 import { EmptyState } from '../../../src/components/catalog/empty-state';
@@ -70,6 +73,13 @@ import {
   normalizePrivateNote,
 } from '../../../src/quotes/private-notes';
 import { toContractorLineItemSync } from '../../../src/quotes/customer-payload';
+import {
+  ADD_ALTERNATE_LABEL,
+  OPTION_ALTERNATE_LABEL,
+  OPTION_IN_TOTAL_LABEL,
+  OPTION_USE_FOR_TOTAL_LABEL,
+} from '../../../src/quotes/option-groups';
+import { typedPriceSource } from '../../../src/utils/price-source';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function DraftScreen(): JSX.Element {
@@ -85,6 +95,7 @@ export default function DraftScreen(): JSX.Element {
   const [privateNote, setPrivateNote] = useState('');
   const [priceEditIndex, setPriceEditIndex] = useState<number | null>(null);
   const [lineNoteIndex, setLineNoteIndex] = useState<number | null>(null);
+  const [alternateForIndex, setAlternateForIndex] = useState<number | null>(null);
   const [showCatalogPicker, setShowCatalogPicker] = useState(false);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [validationError, setValidationError] = useState('');
@@ -328,6 +339,25 @@ export default function DraftScreen(): JSX.Element {
     }
   }
 
+  async function persistLineItems(newItems: LineItem[]): Promise<void> {
+    if (!draft || !quote) return;
+    const newTotal = recalculateTotal(newItems);
+    await database.write(async () => {
+      await draft.update((r) => {
+        r.lineItemsJson = serializeLineItems(newItems);
+      });
+      await quote.update((r) => {
+        r.totalCents = newTotal;
+      });
+    });
+    await enqueue({
+      entityType: 'draft',
+      entityId: draft.id,
+      action: 'update',
+      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
+    });
+  }
+
   async function handleQuantityChange(index: number, delta: number): Promise<void> {
     if (!draft || !quote) return;
     if (rejectFrozenMoneyWrite()) return;
@@ -519,6 +549,33 @@ export default function DraftScreen(): JSX.Element {
     setLineNoteIndex(null);
   }
 
+  async function handleAddAlternate(raw: {
+    name: string;
+    unitPriceCents: number | null;
+  }): Promise<void> {
+    if (!draft || !quote || alternateForIndex === null) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const newItems = addAlternate(lineItems, alternateForIndex, {
+      name: raw.name,
+      unitPriceCents: raw.unitPriceCents,
+      priceSource:
+        raw.unitPriceCents == null || raw.unitPriceCents === 0
+          ? 'unknown'
+          : typedPriceSource(raw.unitPriceCents),
+    });
+    await persistLineItems(newItems);
+    setAlternateForIndex(null);
+  }
+
+  async function handleSelectOption(index: number): Promise<void> {
+    if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const newItems = selectOptionForTotal(lineItems, index);
+    await persistLineItems(newItems);
+  }
+
   async function persistPhoneLocal(q: Quote, text: string): Promise<void> {
     const gen = ++phoneWriteGen.current;
     await database.write(async () => {
@@ -614,6 +671,7 @@ export default function DraftScreen(): JSX.Element {
   }
 
   const sendEnabled = canSend(lineItems.length, phone) && !needsReview;
+  const totalDisplay = `$${(recalculateTotal(lineItems) / 100).toFixed(2)}`;
 
   return (
     <KeyboardAvoidingView
@@ -628,8 +686,10 @@ export default function DraftScreen(): JSX.Element {
           const priceUnknown = isUnknownUnitPrice(item.unitPriceCents);
           const tier = priceUnknown ? 'needs_input' : confidenceTier(item.confidence);
           const displayTier = tier === 'clean' ? undefined : tier;
+          const paired = Boolean(item.optionGroupId);
+          const isAlt = item.optionRole === 'alt';
           return (
-            <View>
+            <View style={isAlt ? styles.altBlock : undefined}>
               <LineItemRow
                 name={item.name}
                 quantity={item.quantity}
@@ -641,6 +701,32 @@ export default function DraftScreen(): JSX.Element {
                 onPricePress={() => setPriceEditIndex(index)}
                 onDelete={() => { void handleDeleteItem(index); }}
               />
+              {paired ? (
+                <View style={styles.optionRow}>
+                  <Text style={[styles.optionBadge, isAlt && styles.optionBadgeAlt]}>
+                    {isAlt ? OPTION_ALTERNATE_LABEL : OPTION_IN_TOTAL_LABEL}
+                  </Text>
+                  {isAlt ? (
+                    <Pressable
+                      onPress={() => { void handleSelectOption(index); }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${OPTION_USE_FOR_TOTAL_LABEL}. ${item.name}`}
+                      style={styles.optionSelectButton}
+                    >
+                      <Text style={styles.optionSelectText}>{OPTION_USE_FOR_TOTAL_LABEL}</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.optionAddButton}
+                  onPress={() => setAlternateForIndex(index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${ADD_ALTERNATE_LABEL} for ${item.name}`}
+                >
+                  <Text style={styles.optionAddText}>{ADD_ALTERNATE_LABEL}</Text>
+                </Pressable>
+              )}
               <Pressable
                 style={styles.lineNoteButton}
                 onPress={() => setLineNoteIndex(index)}
@@ -745,6 +831,10 @@ export default function DraftScreen(): JSX.Element {
         {validationError.length > 0 && (
           <Text style={styles.validationError}>{validationError}</Text>
         )}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalAmount}>{totalDisplay}</Text>
+        </View>
         <Pressable
           style={[
             styles.sendButton,
@@ -780,6 +870,13 @@ export default function DraftScreen(): JSX.Element {
         currentNote={lineNoteIndex !== null ? lineItems[lineNoteIndex]?.privateNote ?? null : null}
         onSave={(note) => { void handleLineNoteSave(note); }}
         onDismiss={() => setLineNoteIndex(null)}
+      />
+
+      <AlternateOptionSheet
+        visible={alternateForIndex !== null}
+        baseName={alternateForIndex !== null ? lineItems[alternateForIndex]?.name ?? '' : ''}
+        onSave={(value) => { void handleAddAlternate(value); }}
+        onDismiss={() => setAlternateForIndex(null)}
       />
 
       <CatalogPickerSheet
@@ -848,6 +945,64 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     color: colors.mutedText,
+  },
+  altBlock: {
+    backgroundColor: colors.secondary,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+    backgroundColor: colors.secondary,
+  },
+  optionBadge: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    lineHeight: typography.label.lineHeight,
+    color: colors.accent,
+  },
+  optionBadgeAlt: {
+    color: colors.mutedText,
+  },
+  optionSelectButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  optionSelectText: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  optionAddButton: {
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
+    backgroundColor: colors.dominant,
+  },
+  optionAddText: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  totalLabel: {
+    fontSize: typography.body.fontSize,
+    fontWeight: '700',
+    lineHeight: typography.body.lineHeight,
+    color: '#000000',
+  },
+  totalAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 26,
+    color: '#000000',
   },
   footer: {
     position: 'absolute',

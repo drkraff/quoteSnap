@@ -42,8 +42,8 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
 }
 
 function existingLine(
-  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source">> = {},
-): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source"> {
+  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source" | "option_group_id" | "option_role">> = {},
+): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source" | "option_group_id" | "option_role"> {
   return {
     name: "Copper pipe",
     confidence: 0.91,
@@ -51,6 +51,8 @@ function existingLine(
     unit: "foot",
     private_note: null,
     price_source: "catalog",
+    option_group_id: null,
+    option_role: null,
     ...overrides,
   };
 }
@@ -277,6 +279,40 @@ describe("parseLineItemInput", () => {
     );
   });
 
+  it("accepts a thin option pair and rejects a missing role", () => {
+    const groupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const parsed = parseLineItemInput({
+      name: "Walk-in shower",
+      quantity: 1,
+      unitPriceCents: 180000,
+      optionGroupId: groupId,
+      optionRole: "base",
+    });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.item.optionGroupId, groupId);
+    assert.equal(parsed.item.optionRole, "base");
+
+    assert.equal(
+      parseLineItemInput({
+        name: "Keep the tub",
+        quantity: 1,
+        unitPriceCents: 45000,
+        optionGroupId: groupId,
+      }).ok,
+      false,
+    );
+    assert.equal(
+      parseLineItemInput({
+        name: "Keep the tub",
+        quantity: 1,
+        unitPriceCents: 45000,
+        optionRole: "best",
+      }).ok,
+      false,
+    );
+  });
+
   it("rejects float unitPriceCents", () => {
     const parsed = parseLineItemInput({
       name: "Elbow",
@@ -335,6 +371,8 @@ describe("resolveReplacementLineItems", () => {
         unit: "foot",
         privateNote: null,
         priceSource: "catalog",
+        optionGroupId: null,
+        optionRole: null,
       },
     ]);
   });
@@ -440,6 +478,8 @@ describe("resolveReplacementLineItems", () => {
       unit: null,
       privateNote: null,
       priceSource: "known",
+      optionGroupId: null,
+      optionRole: null,
     });
   });
 
@@ -513,6 +553,38 @@ describe("resolveReplacementLineItems", () => {
       [],
     );
     assert.equal(resolved[0]!.priceSource, "unknown");
+  });
+
+  it("excludes the alt of a pair from the recomputed total (never sums both)", () => {
+    const groupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const resolved = resolveReplacementLineItems(
+      [
+        {
+          name: "Walk-in shower",
+          quantity: 1,
+          unitPriceCents: 180000,
+          confidence: undefined,
+          catalogItemId: undefined,
+          optionGroupId: groupId,
+          optionRole: "base",
+        },
+        {
+          name: "Keep the tub",
+          quantity: 1,
+          unitPriceCents: 45000,
+          confidence: undefined,
+          catalogItemId: undefined,
+          optionGroupId: groupId,
+          optionRole: "alt",
+        },
+      ],
+      [],
+    );
+    assert.equal(totalCentsFromLineItems(resolved), 180000);
+    assert.equal(resolved[0]!.optionRole, "base");
+    assert.equal(resolved[1]!.optionRole, "alt");
+    assert.equal(resolved[0]!.optionGroupId, groupId);
+    assert.equal(resolved[1]!.optionGroupId, groupId);
   });
 });
 
@@ -632,6 +704,8 @@ describe("applyQuotePut", () => {
         unit: "foot",
         private_note: null,
         price_source: "catalog",
+        option_group_id: null,
+        option_role: null,
       },
     ];
     for (const status of ["sent", "approved", "declined", "expired", "failed_send"]) {
@@ -752,6 +826,8 @@ describe("applyQuotePut", () => {
         unit: "foot",
         private_note: null,
         price_source: "catalog",
+        option_group_id: null,
+        option_role: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -782,7 +858,7 @@ describe("applyQuotePut", () => {
     assert.equal(update!.params?.[0], 4500);
 
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot", null, "catalog"]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot", null, "catalog", null, null]);
   });
 
   it("issues DELETE before INSERT on the same queryFn so a mid-loop failure can roll back", async () => {
@@ -821,6 +897,8 @@ describe("applyQuotePut", () => {
         unit: "foot",
         private_note: null,
         price_source: "catalog",
+        option_group_id: null,
+        option_role: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -840,7 +918,7 @@ describe("applyQuotePut", () => {
       },
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot", null, "catalog"]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot", null, "catalog", null, null]);
   });
 
   it("writes a quote-level privateNote without replacing line items", async () => {
@@ -873,6 +951,8 @@ describe("applyQuotePut", () => {
         unit: "foot",
         private_note: "moisture from neighbor",
         price_source: "catalog",
+        option_group_id: null,
+        option_role: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -901,6 +981,8 @@ describe("applyQuotePut", () => {
         unit: "foot",
         private_note: "moisture from neighbor",
         price_source: "catalog",
+        option_group_id: null,
+        option_role: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -920,5 +1002,73 @@ describe("applyQuotePut", () => {
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
     assert.equal(insert?.params?.[7], null);
+  });
+
+  it("persists a base+alt pair and totals the selected (base) option only", async () => {
+    const groupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const { calls, queryFn } = mockDb({ existingLines: [] });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [
+          {
+            name: "Walk-in shower",
+            quantity: 1,
+            unitPriceCents: 180000,
+            optionGroupId: groupId,
+            optionRole: "base",
+          },
+          {
+            name: "Keep the tub",
+            quantity: 1,
+            unitPriceCents: 45000,
+            optionGroupId: groupId,
+            optionRole: "alt",
+          },
+        ],
+      },
+    });
+    assert.equal(outcome.status, 200);
+    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.equal(update?.params?.[0], 180000);
+
+    const inserts = calls.filter((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.equal(inserts.length, 2);
+    assert.deepEqual(inserts[0]?.params?.slice(9), [groupId, "base"]);
+    assert.deepEqual(inserts[1]?.params?.slice(9), [groupId, "alt"]);
+    assert.equal(inserts[0]?.params?.[3], 180000);
+    assert.equal(inserts[1]?.params?.[3], 45000);
+  });
+
+  it("preserves option group linkage when the client omits it", async () => {
+    const groupId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const existing: QuoteLineItemRow[] = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        quote_id: QUOTE_ID,
+        name: "Walk-in shower",
+        quantity: 1,
+        unit_price_cents: 180000,
+        created_at: new Date("2026-09-01T12:01:00.000Z"),
+        confidence: null,
+        catalog_item_id: null,
+        unit: null,
+        private_note: null,
+        price_source: "known",
+        option_group_id: groupId,
+        option_role: "base",
+      },
+    ];
+    const { calls, queryFn } = mockDb({ existingLines: existing });
+    await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [{ name: "Walk-in shower", quantity: 1, unitPriceCents: 180000 }],
+      },
+    });
+    const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.deepEqual(insert?.params?.slice(9), [groupId, "base"]);
   });
 });

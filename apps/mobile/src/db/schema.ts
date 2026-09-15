@@ -43,7 +43,7 @@ export const schema = appSchema({
       columns: [
         { name: 'quote_id', type: 'string' },
         { name: 'line_items_json', type: 'string' },
-        // JSON: name, qty, unitPriceCents, optional unit/confidence/privateNote/priceSource.
+        // JSON: name, qty, unitPriceCents, optional unit/confidence/privateNote/priceSource/optionGroupId/optionRole.
         // Leftover unused v1 column. Do not store private notes here —
         // job notes live on quotes.private_note; line notes in line_items_json.
         { name: 'notes', type: 'string', isOptional: true },

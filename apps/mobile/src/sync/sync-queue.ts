@@ -203,6 +203,9 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           unitPriceCents: number;
           unit?: string | null;
           privateNote?: string | null;
+          priceSource?: string | null;
+          optionGroupId?: string | null;
+          optionRole?: string | null;
         }[] | undefined,
       });
       rememberServerRevision(serverId, updated.updatedAt);
@@ -230,6 +233,9 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         unitPriceCents: number;
         unit?: string | null;
         privateNote?: string | null;
+        priceSource?: string | null;
+        optionGroupId?: string | null;
+        optionRole?: string | null;
       }[];
       const payloadLines = lineItemsFromQueuePayload(payload) ?? [];
       const outcome = await fetchAndResolveDraftFork({
@@ -249,6 +255,9 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           unitPriceCents: number;
           unit?: string | null;
           privateNote?: string | null;
+          priceSource?: string | null;
+          optionGroupId?: string | null;
+          optionRole?: string | null;
         }[],
         totalCents: payload.totalCents as number | undefined,
       });
