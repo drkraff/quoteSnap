@@ -1,4 +1,4 @@
-import { schemaMigrations, addColumns } from '@nozbe/watermelondb/Schema/migrations';
+import { schemaMigrations, addColumns, createTable } from '@nozbe/watermelondb/Schema/migrations';
 
 export const migrations = schemaMigrations({
   migrations: [
@@ -42,6 +42,21 @@ export const migrations = schemaMigrations({
           table: 'quotes',
           columns: [
             { name: 'client_sentence', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
+    {
+      toVersion: 6,
+      steps: [
+        createTable({
+          name: 'resume_checkpoints',
+          columns: [
+            { name: 'contractor_id', type: 'string', isIndexed: true },
+            { name: 'kind', type: 'string' },
+            { name: 'quote_id', type: 'string', isOptional: true },
+            { name: 'audio_uri', type: 'string', isOptional: true },
+            { name: 'updated_at', type: 'number' },
           ],
         }),
       ],

@@ -27,6 +27,11 @@ import {
   shouldAlertOnVoiceStopError,
   voiceUploadEnqueueParams,
 } from '../../src/quotes/voice-upload-queue';
+import { RESUME_KIND_VOICE } from '../../src/quotes/resume-checkpoint';
+import {
+  clearResumeCheckpoints,
+  upsertResumeCheckpoint,
+} from '../../src/quotes/resume-checkpoint-store';
 
 type RecordingState = 'idle' | 'recording' | 'stopped';
 
@@ -55,6 +60,25 @@ export default function VoiceRecordScreen(): JSX.Element {
     useCallback(() => {
       setRecordingState('idle');
       setDurationSeconds(0);
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        const recording = recordingRef.current;
+        recordingRef.current = null;
+        if (recording) {
+          void recording.stopAndUnloadAsync().catch(() => {
+            // Intentional leave — discard the in-progress cache take.
+          });
+        }
+        const contractorId = useAuthStore.getState().contractor?.id ?? '';
+        if (contractorId) {
+          void clearResumeCheckpoints(contractorId, RESUME_KIND_VOICE).catch(() => {
+            // Leaving the recorder must not throw.
+          });
+        }
+      };
     }, [])
   );
 
@@ -89,10 +113,21 @@ export default function VoiceRecordScreen(): JSX.Element {
       intervalRef.current = setInterval(() => {
         setDurationSeconds((prev) => prev + 1);
       }, 1000);
+
+      const contractorId = useAuthStore.getState().contractor?.id ?? '';
+      const reuseId = parseReuseQuoteId(reuseQuoteId);
+      void upsertResumeCheckpoint({
+        contractorId,
+        kind: RESUME_KIND_VOICE,
+        quoteId: reuseId || null,
+        audioUri: recording.getURI(),
+      }).catch(() => {
+        // FAIL-07 must not block or Alert during a take.
+      });
     } catch {
       Alert.alert('Recording Error', 'Failed to start recording. Please try again.');
     }
-  }, []);
+  }, [reuseQuoteId]);
 
   const handleStopRecording = useCallback(async () => {
     const recording = recordingRef.current;
@@ -156,6 +191,21 @@ export default function VoiceRecordScreen(): JSX.Element {
 
       // Reset audio mode
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+
+      // Point the checkpoint at the new quote so a kill here is not a
+      // "reopen the mic" resume — pickResumeTarget treats ai_processing
+      // as already persisted (FAIL-03). Then drop the row on the happy path.
+      try {
+        await upsertResumeCheckpoint({
+          contractorId,
+          kind: RESUME_KIND_VOICE,
+          quoteId: newQuoteId,
+          audioUri: dest,
+        });
+        await clearResumeCheckpoints(contractorId, RESUME_KIND_VOICE);
+      } catch {
+        // Local quote + m4a already exist.
+      }
 
       // FAIL-03: local m4a + quote are already durable. Enqueue (or keep)
       // the voice job; never Alert if NetInfo is down or POST /voice/upload
