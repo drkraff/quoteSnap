@@ -89,8 +89,8 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 
 ### Failure and Edge Cases
 
-- [ ] **FAIL-01**: All 16 failure scenarios defined in WORKFLOW-failure-edge-cases.md have a defined detection method, UX state, and recovery path
-- [ ] **FAIL-02**: Mic permission denied: contractor sees an actionable in-app prompt (not a system crash)
+- [x] **FAIL-01**: All 16 failure scenarios defined in [docs/WORKFLOW-failure-edge-cases.md](../docs/WORKFLOW-failure-edge-cases.md) have a defined detection method, UX state, and recovery path
+- [x] **FAIL-02**: Mic permission denied: contractor sees an actionable in-app prompt (not a system crash)
 - [x] **FAIL-03**: Audio upload fails offline: item enters the sync queue; contractor is not shown an error mid-flow
 - [x] **FAIL-04**: Whisper transcription fails: contractor is shown a retry option with the original audio available
 - [x] **FAIL-05**: GPT-4o mapping timeout or failure: contractor is shown a partial draft with flagged items and a manual fallback
@@ -195,8 +195,8 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 | SYNC-04 | Phase 7 | Complete |
 | SYNC-05 | Phase 7 | Complete |
 | SYNC-06 | Phase 7 | Complete (thin: status guards, no snapshot table) |
-| FAIL-01 | Phase 7 | Pending |
-| FAIL-02 | Phase 7 | Pending |
+| FAIL-01 | Phase 7 | Complete (map; FAIL-06/08 remain not implemented) |
+| FAIL-02 | Phase 7 | Complete |
 | FAIL-03 | Phase 7 | Complete |
 | FAIL-04 | Phase 7 | Complete |
 | FAIL-05 | Phase 7 | Complete |
@@ -211,4 +211,4 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-15 — overnight ships through PR #61 (P0 rate card / adhoc / skippable seed, thin SYNC-06, FAIL-03/04/05/07, MVP adjuncts). SMS-01…10 and remaining FAIL-* stay pending. Status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-15 — overnight ships through PR #66 plus FAIL-01 map / FAIL-02 mic checkbox. SMS-01…10 and FAIL-06/08 stay pending. Status narrative lives in CONTEXT.md*
