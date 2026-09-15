@@ -55,6 +55,12 @@ describe('draftFailedLocalFields', () => {
       totalCents: 3000,
     });
   });
+
+  it('uses 0 cents when the draft is empty or invalid — never invents a SKU price', () => {
+    expect(draftFailedLocalFields('[]')).toEqual({ status: 'ai_failed', totalCents: 0 });
+    expect(draftFailedLocalFields('{')).toEqual({ status: 'ai_failed', totalCents: 0 });
+    expect(draftFailedLocalFields('')).toEqual({ status: 'ai_failed', totalCents: 0 });
+  });
 });
 
 describe('quoteListRenderKey', () => {

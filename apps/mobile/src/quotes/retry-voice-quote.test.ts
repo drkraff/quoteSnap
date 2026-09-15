@@ -49,6 +49,25 @@ describe('retryVoiceQuotePlan', () => {
       ok: false,
       reason: 'missing_audio',
     });
+    expect(retryVoiceQuotePlan({ ...base, filePath: '   ' })).toEqual({
+      ok: false,
+      reason: 'missing_audio',
+    });
+  });
+
+  it('is a no-op when there is no quote to recover — does not invent a draft or prices', () => {
+    expect(retryVoiceQuotePlan({ ...base, quoteId: '' })).toEqual({
+      ok: false,
+      reason: 'missing_quote',
+    });
+    expect(retryVoiceQuotePlan({ ...base, quoteId: '  ' })).toEqual({
+      ok: false,
+      reason: 'missing_quote',
+    });
+    const refused = retryVoiceQuotePlan({ ...base, quoteId: '' });
+    expect(JSON.stringify(refused)).not.toMatch(/unitPrice/);
+    expect(JSON.stringify(refused)).not.toMatch(/customerPhone/);
+    expect(refused).not.toHaveProperty('enqueue');
   });
 });
 
