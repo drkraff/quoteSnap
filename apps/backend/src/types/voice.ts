@@ -9,8 +9,14 @@ export interface AILineItem {
   name?: string;
   quantity?: number;
   unit?: string;
-  /** Integer cents the contractor said. Omit/null if they did not say a price. */
+  /** Integer cents the contractor said as a sell/charge price. Omit/null if they did not say a sell price. */
   spokenUnitPriceCents?: number | null;
+  /**
+   * Integer cents the contractor said (or typed in capture notes) as a
+   * supplier/material cost — not the sell price. Omit/null if they did not
+   * name a cost. Attach may compute sell = cost × (1 + markup/100).
+   */
+  spokenMaterialCostCents?: number | null;
   confidence?: number;
   /** Spoken room/zone for this line. Omit if they did not name a room. */
   room?: string | null;

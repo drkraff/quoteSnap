@@ -14,6 +14,32 @@ function isPositiveCents(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+/** Signup markup is 0–100 inclusive. Null/invalid means do not compute a material sell price. */
+export function parseSignupMarkupPercent(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
+    return null;
+  }
+  return value;
+}
+
+/**
+ * Sell cents from a known material cost and signup markup %. Integer cents,
+ * rounded. Markup 0 is a real rate (sell = cost). Does not invent a cost.
+ */
+export function computeMaterialSellCents(
+  costCents: number,
+  markupPercent: number,
+): number | null {
+  if (!isPositiveCents(costCents)) {
+    return null;
+  }
+  if (!Number.isInteger(markupPercent) || markupPercent < 0 || markupPercent > 100) {
+    return null;
+  }
+  const sell = Math.round(costCents * (1 + markupPercent / 100));
+  return sell > 0 ? sell : null;
+}
+
 export function parseSpokenHours(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
     return null;
@@ -21,7 +47,7 @@ export function parseSpokenHours(value: unknown): number | null {
   return value;
 }
 
-/** Labor is an hour-unit line. Materials/SKUs with other units are never computed. */
+/** Labor is an hour-unit line. Material cost × markup is never applied to hour lines. */
 export function isLaborVoiceLine(line: { unit: string | null }): boolean {
   return parseCatalogUnit(line.unit) === "hour";
 }
@@ -49,6 +75,7 @@ export function ensureLaborLineFromSpokenHours(
       quantity: hours,
       unit: "hour",
       spokenUnitPriceCents: null,
+      spokenMaterialCostCents: null,
       catalogUnitPriceCents: null,
       confidence: 0.8,
       roomName: null,
@@ -57,14 +84,18 @@ export function ensureLaborLineFromSpokenHours(
 }
 
 /**
- * Spoken wins; mapped SKU uses catalog cents; otherwise exact rate-card;
+ * Spoken sell wins; mapped SKU uses catalog cents; otherwise exact rate-card;
  * otherwise labor = hours × signup hourly (unit price = hourly cents);
+ * otherwise material = spoken/typed cost × (1 + signup markup/100);
  * otherwise blank. Never uses trade defaults or an LLM price field.
+ * Markup without a cost does not invent a SKU price. Cost without markup
+ * is not treated as a sell price.
  */
 export function attachOneVoicePrice(
   line: BuiltVoiceLine,
   rateCardCents: number | null,
   hourlyRateCents: number | null = null,
+  markupPercent: number | null = null,
 ): { unitPriceCents: number | null; priceSource: PriceSource } {
   if (isPositiveCents(line.spokenUnitPriceCents)) {
     return { unitPriceCents: line.spokenUnitPriceCents, priceSource: "spoken" };
@@ -77,6 +108,15 @@ export function attachOneVoicePrice(
   }
   if (isLaborVoiceLine(line) && isPositiveCents(hourlyRateCents)) {
     return { unitPriceCents: hourlyRateCents, priceSource: "computed" };
+  }
+  if (!isLaborVoiceLine(line)) {
+    const markup = parseSignupMarkupPercent(markupPercent);
+    if (markup != null && isPositiveCents(line.spokenMaterialCostCents)) {
+      const sell = computeMaterialSellCents(line.spokenMaterialCostCents, markup);
+      if (sell != null) {
+        return { unitPriceCents: sell, priceSource: "computed" };
+      }
+    }
   }
   return { unitPriceCents: null, priceSource: "unknown" };
 }
@@ -127,6 +167,7 @@ export async function attachVoiceLinePrices(
   lookupRateCard: RateCardCentsLookup,
   trade: string | null = null,
   hourlyRateCents: number | null = null,
+  markupPercent: number | null = null,
 ): Promise<ValidatedLineItem[]> {
   const priced: ValidatedLineItem[] = [];
   for (const line of lines) {
@@ -138,7 +179,12 @@ export async function attachVoiceLinePrices(
         trade,
       })) ?? null;
     }
-    const attached = attachOneVoicePrice(line, rateCardCents, hourlyRateCents);
+    const attached = attachOneVoicePrice(
+      line,
+      rateCardCents,
+      hourlyRateCents,
+      markupPercent,
+    );
     priced.push({
       catalogItemId: line.catalogItemId,
       name: line.name,

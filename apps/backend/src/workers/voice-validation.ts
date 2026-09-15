@@ -38,6 +38,7 @@ export interface BuiltVoiceLine {
   quantity: number;
   unit: string | null;
   spokenUnitPriceCents: number | null;
+  spokenMaterialCostCents: number | null;
   catalogUnitPriceCents: number | null;
   confidence: number;
   roomName: string | null;
@@ -123,6 +124,7 @@ export function buildVoiceLineItems(
       quantity: parseVoiceQuantity(item.quantity),
       unit: catalogUnit ?? spokenUnit,
       spokenUnitPriceCents: parseSpokenUnitPriceCents(item.spokenUnitPriceCents),
+      spokenMaterialCostCents: parseSpokenUnitPriceCents(item.spokenMaterialCostCents),
       catalogUnitPriceCents: catalogItem?.unit_price_cents ?? null,
       confidence: parseVoiceConfidence(item.confidence),
       roomName: normalizeRoomName(item.room),
@@ -135,8 +137,14 @@ function finalizeLine(
   line: BuiltVoiceLine,
   rateCardCents: number | null,
   hourlyRateCents: number | null,
+  markupPercent: number | null,
 ): ValidatedLineItem {
-  const attached = attachOneVoicePrice(line, rateCardCents, hourlyRateCents);
+  const attached = attachOneVoicePrice(
+    line,
+    rateCardCents,
+    hourlyRateCents,
+    markupPercent,
+  );
   return {
     catalogItemId: line.catalogItemId,
     name: line.name,
@@ -151,8 +159,8 @@ function finalizeLine(
 
 /**
  * Filters AI-returned items to catalog SKUs or adhoc spoken lines,
- * then attaches prices: spoken → catalog (mapped SKU) → exact rate-card →
- * computed labor (hours × hourly) → blank.
+ * then attaches prices: spoken sell → catalog (mapped SKU) → exact rate-card →
+ * computed labor (hours × hourly) → computed material (cost × markup) → blank.
  * Optional sync lookup so unit tests can inject learned cents without I/O.
  */
 export function validateAndBuildLineItems(
@@ -162,6 +170,7 @@ export function validateAndBuildLineItems(
     lookupRateCard?: RateCardCentsLookup;
     trade?: string | null;
     hourlyRateCents?: number | null;
+    markupPercent?: number | null;
     spokenHours?: number | null;
   },
 ): { lineItems: ValidatedLineItem[]; totalCents: number } {
@@ -172,6 +181,7 @@ export function validateAndBuildLineItems(
   const lookup = options?.lookupRateCard;
   const trade = options?.trade ?? null;
   const hourlyRateCents = options?.hourlyRateCents ?? null;
+  const markupPercent = options?.markupPercent ?? null;
 
   const lineItems = built.map((line) => {
     let rateCardCents: number | null = null;
@@ -181,7 +191,7 @@ export function validateAndBuildLineItems(
         rateCardCents = result;
       }
     }
-    return finalizeLine(line, rateCardCents, hourlyRateCents);
+    return finalizeLine(line, rateCardCents, hourlyRateCents, markupPercent);
   });
 
   return {
@@ -197,6 +207,7 @@ export async function validateAndBuildLineItemsAsync(
     lookupRateCard?: RateCardCentsLookup;
     trade?: string | null;
     hourlyRateCents?: number | null;
+    markupPercent?: number | null;
     spokenHours?: number | null;
   },
 ): Promise<{ lineItems: ValidatedLineItem[]; totalCents: number }> {
@@ -210,6 +221,7 @@ export async function validateAndBuildLineItemsAsync(
     lookup,
     options?.trade ?? null,
     options?.hourlyRateCents ?? null,
+    options?.markupPercent ?? null,
   );
   return {
     lineItems,

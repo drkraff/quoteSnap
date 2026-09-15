@@ -403,9 +403,11 @@ describe("rate card isolation", () => {
   it("does not put a guessed unitPriceCents field on the GPT extract schema", () => {
     const src = readFileSync(path.join(here, "../workers/voice-processor.ts"), "utf8");
     assert.match(src, /spokenUnitPriceCents/);
+    assert.match(src, /spokenMaterialCostCents/);
     assert.doesNotMatch(src, /catalogItemId: \{ type: 'string', description: 'ID from the provided catalog' \}/);
     const schemaSlice = src.slice(src.indexOf("create_quote_items"), src.indexOf("tool_choice"));
     assert.doesNotMatch(schemaSlice, /unitPriceCents: \{ type: 'integer'/);
+    assert.match(schemaSlice, /spokenMaterialCostCents/);
     assert.match(schemaSlice, /NEVER guess/);
   });
 });

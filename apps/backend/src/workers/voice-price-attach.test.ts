@@ -1,11 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "path";
+import { fileURLToPath } from "node:url";
 import {
   attachOneVoicePrice,
   attachVoiceLinePrices,
+  computeMaterialSellCents,
   ensureLaborLineFromSpokenHours,
   isLaborVoiceLine,
   lookupExactRateCardCents,
+  parseSignupMarkupPercent,
   parseSpokenHours,
   snapshotUnitPriceCents,
   voiceLineNeedsRateCard,
@@ -26,6 +31,7 @@ function line(overrides: Partial<BuiltVoiceLine> = {}): BuiltVoiceLine {
     quantity: 14,
     unit: "foot",
     spokenUnitPriceCents: null,
+    spokenMaterialCostCents: null,
     catalogUnitPriceCents: null,
     confidence: 0.8,
     roomName: null,
@@ -110,6 +116,108 @@ describe("attachOneVoicePrice", () => {
     );
   });
 
+  it("computes material sell from spoken cost × signup markup", () => {
+    assert.deepEqual(
+      attachOneVoicePrice(
+        line({ spokenMaterialCostCents: 4000, unit: "each" }),
+        null,
+        7500,
+        20,
+      ),
+      { unitPriceCents: 4800, priceSource: "computed" },
+    );
+  });
+
+  it("lets spoken sell price win over cost × markup", () => {
+    assert.deepEqual(
+      attachOneVoicePrice(
+        line({
+          spokenUnitPriceCents: 850,
+          spokenMaterialCostCents: 4000,
+        }),
+        5200,
+        7500,
+        20,
+      ),
+      { unitPriceCents: 850, priceSource: "spoken" },
+    );
+  });
+
+  it("lets catalog and learned beat cost × markup", () => {
+    assert.equal(
+      attachOneVoicePrice(
+        line({
+          catalogItemId: "cat-1",
+          catalogUnitPriceCents: 17500,
+          spokenMaterialCostCents: 4000,
+        }),
+        9900,
+        null,
+        20,
+      ).priceSource,
+      "catalog",
+    );
+    assert.equal(
+      attachOneVoicePrice(
+        line({ spokenMaterialCostCents: 4000 }),
+        5200,
+        null,
+        20,
+      ).priceSource,
+      "learned",
+    );
+  });
+
+  it("does not invent a material price from markup without a cost", () => {
+    assert.deepEqual(attachOneVoicePrice(line({ unit: "foot" }), null, 7500, 20), {
+      unitPriceCents: null,
+      priceSource: "unknown",
+    });
+  });
+
+  it("does not treat a spoken cost as a sell price when markup is missing", () => {
+    assert.deepEqual(
+      attachOneVoicePrice(line({ spokenMaterialCostCents: 4000 }), null, null, null),
+      { unitPriceCents: null, priceSource: "unknown" },
+    );
+  });
+
+  it("computes with markup 0 as sell = cost", () => {
+    assert.deepEqual(
+      attachOneVoicePrice(line({ spokenMaterialCostCents: 4000 }), null, null, 0),
+      { unitPriceCents: 4000, priceSource: "computed" },
+    );
+  });
+
+  it("does not apply material markup to labor hour lines", () => {
+    assert.deepEqual(
+      attachOneVoicePrice(
+        line({
+          name: "Labor",
+          unit: "hour",
+          spokenMaterialCostCents: 4000,
+        }),
+        null,
+        7500,
+        20,
+      ),
+      { unitPriceCents: 7500, priceSource: "computed" },
+    );
+    assert.deepEqual(
+      attachOneVoicePrice(
+        line({
+          name: "Labor",
+          unit: "hour",
+          spokenMaterialCostCents: 4000,
+        }),
+        null,
+        null,
+        20,
+      ),
+      { unitPriceCents: null, priceSource: "unknown" },
+    );
+  });
+
   it("does not treat a zero or negative lookup as a price", () => {
     assert.equal(attachOneVoicePrice(line(), 0).unitPriceCents, null);
     assert.equal(attachOneVoicePrice(line(), -100).unitPriceCents, null);
@@ -174,6 +282,18 @@ describe("attachVoiceLinePrices", () => {
     assert.equal(priced[0]?.catalogItemId, null);
     assert.equal(priced[0]?.unitPriceCents, 180000);
     assert.equal(priced[0]?.priceSource, "learned");
+  });
+
+  it("computes cost × markup on an unpriced adhoc line after rate-card miss", async () => {
+    const priced = await attachVoiceLinePrices(
+      [line({ spokenMaterialCostCents: 10000 })],
+      () => null,
+      "plumbing",
+      7500,
+      15,
+    );
+    assert.equal(priced[0]?.unitPriceCents, 11500);
+    assert.equal(priced[0]?.priceSource, "computed");
   });
 });
 
@@ -265,6 +385,30 @@ describe("lookupExactRateCardCents", () => {
   });
 });
 
+describe("computeMaterialSellCents / parseSignupMarkupPercent", () => {
+  it("rounds integer cents from cost × (1 + markup/100)", () => {
+    assert.equal(computeMaterialSellCents(4000, 20), 4800);
+    assert.equal(computeMaterialSellCents(333, 15), 383);
+    assert.equal(computeMaterialSellCents(1000, 0), 1000);
+  });
+
+  it("does not invent a sell price without a positive cost or a valid markup", () => {
+    assert.equal(computeMaterialSellCents(0, 20), null);
+    assert.equal(computeMaterialSellCents(4000, -1), null);
+    assert.equal(computeMaterialSellCents(4000, 101), null);
+    assert.equal(computeMaterialSellCents(4000, 20.5), null);
+  });
+
+  it("accepts signup markup 0-100 and rejects anything else", () => {
+    assert.equal(parseSignupMarkupPercent(0), 0);
+    assert.equal(parseSignupMarkupPercent(20), 20);
+    assert.equal(parseSignupMarkupPercent(100), 100);
+    assert.equal(parseSignupMarkupPercent(null), null);
+    assert.equal(parseSignupMarkupPercent(101), null);
+    assert.equal(parseSignupMarkupPercent(15.5), null);
+  });
+});
+
 describe("snapshotUnitPriceCents", () => {
   it("persists unknown as 0 so NOT NULL snapshots stay valid", () => {
     assert.equal(snapshotUnitPriceCents(null), 0);
@@ -289,11 +433,25 @@ describe("ensureLaborLineFromSpokenHours / parseSpokenHours", () => {
     assert.equal(added[1]?.unit, "hour");
     assert.equal(added[1]?.catalogItemId, null);
     assert.equal(added[1]?.spokenUnitPriceCents, null);
+    assert.equal(added[1]?.spokenMaterialCostCents, null);
     assert.equal(isLaborVoiceLine(added[1]!), true);
   });
 
   it("does not duplicate when an hour-unit line already exists", () => {
     const existing = [line({ name: "Labor", quantity: 2, unit: "hour" })];
     assert.equal(ensureLaborLineFromSpokenHours(existing, 2).length, 1);
+  });
+});
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+describe("voice-processor material markup wiring", () => {
+  it("loads signup markup_percent and extracts cost separately from sell price", () => {
+    const src = readFileSync(path.join(here, "voice-processor.ts"), "utf8");
+    assert.match(src, /SELECT trade, hourly_rate_cents, markup_percent FROM contractors/);
+    assert.match(src, /parseSignupMarkupPercent\(contractorRow\?\.markup_percent\)/);
+    assert.match(src, /markupPercent,/);
+    assert.match(src, /spokenMaterialCostCents/);
+    assert.match(src, /spokenUnitPriceCents is integer cents ONLY if the contractor stated a sell\/charge price/);
   });
 });

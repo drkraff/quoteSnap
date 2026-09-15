@@ -76,8 +76,9 @@ export function parseOnboardingProfileBody(body: unknown): ParsedOnboardingProfi
 }
 
 /**
- * Persist trade + hourly (and optional markup) without inserting catalog items.
- * First quote works with a zero catalog.
+ * Persist trade + hourly (and optional material markup %) without inserting catalog items.
+ * First quote works with a zero catalog. Voice attach uses markup_percent only as
+ * math: spoken/typed material cost × (1 + markup/100). It never invents a cost.
  */
 export async function applyOnboardingProfile(
   queryFn: SeedQueryFn,
