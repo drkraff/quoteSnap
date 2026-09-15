@@ -74,7 +74,9 @@ import { localVoiceAudioPath } from '../../../src/quotes/voice-audio';
 import {
   LINE_PRIVATE_NOTE_ADD,
   PRIVATE_NOTE_INTERNAL_HINT,
+  hasPrivateNote,
   normalizePrivateNote,
+  privateNoteFieldValue,
 } from '../../../src/quotes/private-notes';
 import { normalizeClientSentence } from '../../../src/quotes/client-sentence';
 import { toContractorLineItemSync } from '../../../src/quotes/customer-payload';
@@ -252,7 +254,7 @@ export default function DraftScreen(): JSX.Element {
         setQuote(q);
         setQuoteStatus(q.status);
         setPhone(q.customerPhone ?? '');
-        setPrivateNote(q.privateNote ?? '');
+        setPrivateNote(privateNoteFieldValue(q.privateNote));
         setClientSentence(q.clientSentence ?? '');
         setRooms(parseRoomsJson(q.roomsJson));
         setPhotos(parsePhotosJson(q.photosJson));
@@ -646,6 +648,11 @@ export default function DraftScreen(): JSX.Element {
     noteSync.schedule({ quoteId: q.id, privateNote: normalizePrivateNote(text) });
   }
 
+  function handlePrivateNoteBlur(): void {
+    setPrivateNote(privateNoteFieldValue(privateNote));
+    void noteSync.flush();
+  }
+
   async function persistPrivateNoteLocal(q: Quote, text: string): Promise<void> {
     await database.write(async () => {
       await q.update((r) => {
@@ -896,8 +903,12 @@ export default function DraftScreen(): JSX.Element {
   async function handleRoomNoteSave(raw: string | null): Promise<void> {
     if (!quote || roomNoteId === null) return;
     if (rejectFrozenMoneyWrite()) return;
-    await recoverFromAiFailed();
     const next = updateRoomPrivateNote(rooms, roomNoteId, normalizePrivateNote(raw));
+    if (next === rooms) {
+      setRoomNoteId(null);
+      return;
+    }
+    await recoverFromAiFailed();
     await persistRooms(next);
     setRoomNoteId(null);
   }
@@ -905,12 +916,16 @@ export default function DraftScreen(): JSX.Element {
   async function handleLineNoteSave(raw: string | null): Promise<void> {
     if (!draft || !quote || lineNoteIndex === null) return;
     if (rejectFrozenMoneyWrite()) return;
-    await recoverFromAiFailed();
     const newItems = updatePrivateNote(
       lineItems,
       lineNoteIndex,
       normalizePrivateNote(raw),
     );
+    if (newItems === lineItems) {
+      setLineNoteIndex(null);
+      return;
+    }
+    await recoverFromAiFailed();
     await database.write(async () => {
       await draft.update((r) => {
         r.lineItemsJson = serializeLineItems(newItems);
@@ -920,7 +935,7 @@ export default function DraftScreen(): JSX.Element {
       entityType: 'draft',
       entityId: draft.id,
       action: 'update',
-      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: recalculateTotal(newItems) },
+      payload: { lineItemsJson: serializeLineItems(newItems) },
     });
     setLineNoteIndex(null);
   }
@@ -1158,14 +1173,14 @@ export default function DraftScreen(): JSX.Element {
                     onPress={() => setRoomNoteId(row.room.id)}
                     accessibilityRole="button"
                     accessibilityLabel={
-                      row.room.privateNote
+                      hasPrivateNote(row.room.privateNote)
                         ? `Edit room note. ${PRIVATE_NOTE_INTERNAL_HINT}`
                         : `${ROOM_NOTE_ADD}. ${PRIVATE_NOTE_INTERNAL_HINT}`
                     }
                     style={styles.roomHeaderButton}
                   >
                     <Text style={styles.roomHeaderButtonText}>
-                      {row.room.privateNote ? 'Room note' : ROOM_NOTE_ADD}
+                      {hasPrivateNote(row.room.privateNote) ? 'Room note' : ROOM_NOTE_ADD}
                     </Text>
                   </Pressable>
                   <Pressable
@@ -1177,8 +1192,8 @@ export default function DraftScreen(): JSX.Element {
                     <Text style={styles.roomHeaderButtonText}>{ROOM_DELETE_LABEL}</Text>
                   </Pressable>
                 </View>
-                {row.room.privateNote ? (
-                  <Text style={styles.lineNoteHint}>{row.room.privateNote}</Text>
+                {hasPrivateNote(row.room.privateNote) ? (
+                  <Text style={styles.lineNoteHint}>{normalizePrivateNote(row.room.privateNote)}</Text>
                 ) : null}
                 <PhotoStrip
                   photos={photosForRoom(photos, row.room.id)}
@@ -1289,7 +1304,7 @@ export default function DraftScreen(): JSX.Element {
                 onPress={() => setLineNoteIndex(index)}
                 accessibilityRole="button"
                 accessibilityLabel={
-                  item.privateNote
+                  hasPrivateNote(item.privateNote)
                     ? `Edit private note. ${PRIVATE_NOTE_INTERNAL_HINT}`
                     : `${LINE_PRIVATE_NOTE_ADD}. ${PRIVATE_NOTE_INTERNAL_HINT}`
                 }
@@ -1297,11 +1312,11 @@ export default function DraftScreen(): JSX.Element {
                 <Text
                   style={[
                     styles.lineNoteText,
-                    !item.privateNote && styles.lineNotePlaceholder,
+                    !hasPrivateNote(item.privateNote) && styles.lineNotePlaceholder,
                   ]}
                   numberOfLines={2}
                 >
-                  {item.privateNote || LINE_PRIVATE_NOTE_ADD}
+                  {normalizePrivateNote(item.privateNote) || LINE_PRIVATE_NOTE_ADD}
                 </Text>
                 <Text style={styles.lineNoteHint}>{PRIVATE_NOTE_INTERNAL_HINT}</Text>
               </Pressable>
@@ -1407,7 +1422,7 @@ export default function DraftScreen(): JSX.Element {
             <PrivateNoteField
               value={privateNote}
               onChangeText={handlePrivateNoteChange}
-              onBlur={() => { void noteSync.flush(); }}
+              onBlur={handlePrivateNoteBlur}
             />
           </>
         }
@@ -1489,16 +1504,22 @@ export default function DraftScreen(): JSX.Element {
       <PrivateNoteSheet
         visible={lineNoteIndex !== null}
         lineName={lineNoteIndex !== null ? lineItems[lineNoteIndex]?.name ?? '' : ''}
-        currentNote={lineNoteIndex !== null ? lineItems[lineNoteIndex]?.privateNote ?? null : null}
-        onSave={(note) => { void handleLineNoteSave(note); }}
+        currentNote={
+          lineNoteIndex !== null
+            ? normalizePrivateNote(lineItems[lineNoteIndex]?.privateNote)
+            : null
+        }
+        onSave={(note) => { void handleLineNoteSave(normalizePrivateNote(note)); }}
         onDismiss={() => setLineNoteIndex(null)}
       />
 
       <PrivateNoteSheet
         visible={roomNoteId !== null}
         lineName={rooms.find((room) => room.id === roomNoteId)?.name ?? ''}
-        currentNote={rooms.find((room) => room.id === roomNoteId)?.privateNote ?? null}
-        onSave={(note) => { void handleRoomNoteSave(note); }}
+        currentNote={normalizePrivateNote(
+          rooms.find((room) => room.id === roomNoteId)?.privateNote,
+        )}
+        onSave={(note) => { void handleRoomNoteSave(normalizePrivateNote(note)); }}
         onDismiss={() => setRoomNoteId(null)}
       />
 

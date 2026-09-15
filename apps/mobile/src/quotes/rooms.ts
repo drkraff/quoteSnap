@@ -5,6 +5,7 @@
  */
 
 import type { LineItem } from '../utils/line-items';
+import { normalizePrivateNote } from './private-notes';
 
 export const ROOM_NAME_MAX_LENGTH = 80;
 
@@ -89,8 +90,9 @@ export function parseRoomsJson(json: string | null | undefined): QuoteRoom[] {
         continue;
       }
       const room: QuoteRoom = { id, name };
-      if (typeof raw.privateNote === 'string' && raw.privateNote.trim() !== '') {
-        room.privateNote = raw.privateNote.trim();
+      if (typeof raw.privateNote === 'string' || raw.privateNote === null) {
+        const note = normalizePrivateNote(raw.privateNote);
+        if (note) room.privateNote = note;
       }
       rooms.push(room);
     }
@@ -130,15 +132,15 @@ export function updateRoomPrivateNote(
   roomId: string,
   privateNote: string | null,
 ): QuoteRoom[] {
+  const note = normalizePrivateNote(privateNote);
+  const current = rooms.find((room) => room.id === roomId);
+  if (!current) return rooms;
+  if (normalizePrivateNote(current.privateNote) === note) {
+    if (note !== null || current.privateNote == null) return rooms;
+  }
   return rooms.map((room) => {
     if (room.id !== roomId) return room;
-    const next = { ...room };
-    if (privateNote == null || privateNote.trim() === '') {
-      delete next.privateNote;
-    } else {
-      next.privateNote = privateNote.trim();
-    }
-    return next;
+    return { ...room, privateNote: note };
   });
 }
 

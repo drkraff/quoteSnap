@@ -44,6 +44,8 @@ describe('frozen quote statuses (SYNC-06)', () => {
     expect(payloadMutatesQuoteMoney({ customerPhone: '+15555550100' })).toBe(false);
     expect(payloadMutatesQuoteMoney({ status: 'draft_queued' })).toBe(false);
     expect(payloadMutatesQuoteMoney({ privateNote: 'subcontractor check' })).toBe(false);
+    expect(payloadMutatesQuoteMoney({ privateNote: null })).toBe(false);
+    expect(payloadMutatesQuoteMoney({ privateNote: '' })).toBe(false);
     expect(
       payloadMutatesQuoteMoney({
         clientSentence: 'Appliances and decorative lighting not included.',

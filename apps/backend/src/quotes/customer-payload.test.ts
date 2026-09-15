@@ -211,4 +211,66 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(json.includes("secret.jpg"), false);
     assert.equal(payload.lineItems[0]!.unitPriceCents, null);
   });
+
+  it("omits private notes after clear and does not invent prices or placeholder copy", () => {
+    const source = {
+      customerPhone: "+15555550100",
+      totalCents: 25000,
+      privateNote: SECRET_JOB,
+      lineItems: [
+        {
+          name: "Replace outlet",
+          quantity: 1,
+          unitPriceCents: 25000,
+          unit: "each",
+          privateNote: SECRET_LINE,
+        },
+        {
+          name: "Cabinets",
+          quantity: 14,
+          unitPriceCents: null,
+          unit: "foot",
+          privateNote: "   ",
+        },
+      ],
+    };
+    const withNotes = toCustomerQuotePayload(source);
+    assert.equal(JSON.stringify(withNotes).includes(SECRET_JOB), false);
+    assert.equal(JSON.stringify(withNotes).includes(SECRET_LINE), false);
+
+    const cleared = toCustomerQuotePayload({
+      ...source,
+      privateNote: null,
+      lineItems: source.lineItems.map((item) => ({ ...item, privateNote: null })),
+    });
+    assert.equal(cleared.totalCents, 25000);
+    assert.equal(cleared.lineItems[0]!.unitPriceCents, 25000);
+    assert.equal(cleared.lineItems[1]!.unitPriceCents, null);
+    assert.equal(customerPayloadHasPrivateNoteKey(cleared), false);
+    const json = JSON.stringify(cleared);
+    assert.equal(json.includes("privateNote"), false);
+    assert.equal(json.includes("private_note"), false);
+    assert.equal(json.includes(SECRET_JOB), false);
+    assert.equal(json.includes(SECRET_LINE), false);
+    assert.equal(json.includes("Add private note"), false);
+    assert.equal(json.includes("Visible only to you"), false);
+
+    const whitespace = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 0,
+      privateNote: "   ",
+      lineItems: [
+        {
+          name: "Cabinets",
+          quantity: 14,
+          unitPriceCents: null,
+          unit: "foot",
+          privateNote: "",
+        },
+      ],
+    });
+    assert.equal(whitespace.lineItems[0]!.unitPriceCents, null);
+    assert.equal(whitespace.totalCents, 0);
+    assert.equal(JSON.stringify(whitespace).includes("privateNote"), false);
+  });
 });

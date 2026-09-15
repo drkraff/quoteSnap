@@ -4,7 +4,7 @@ import { formatRelativeDate } from '../../utils/format-relative-date';
 import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
 import { draftPriceFlag, draftPriceSourceLabel } from '../../utils/price-source';
 import { colors, spacing, typography } from '../../theme/tokens';
-import { PRIVATE_NOTE_INTERNAL_HINT, PRIVATE_NOTE_LABEL } from '../../quotes/private-notes';
+import { PRIVATE_NOTE_INTERNAL_HINT, PRIVATE_NOTE_LABEL, hasPrivateNote, normalizePrivateNote } from '../../quotes/private-notes';
 import {
   CLIENT_SENTENCE_HINT,
   CLIENT_SENTENCE_LABEL,
@@ -96,10 +96,10 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
             ) : null}
           </View>
         </View>
-        {item.privateNote ? (
+        {hasPrivateNote(item.privateNote) ? (
           <View style={styles.lineNote}>
             <Text style={styles.internalHint}>{PRIVATE_NOTE_INTERNAL_HINT}</Text>
-            <Text style={styles.noteBody}>{item.privateNote}</Text>
+            <Text style={styles.noteBody}>{normalizePrivateNote(item.privateNote)}</Text>
           </View>
         ) : null}
         <PhotoStrip photos={item.clientId ? photosForLine(photos, item.clientId) : []} />
@@ -129,11 +129,11 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
         </View>
       ) : null}
 
-      {quote.privateNote ? (
+      {hasPrivateNote(quote.privateNote) ? (
         <View style={styles.jobNote}>
           <Text style={styles.noteLabel}>{PRIVATE_NOTE_LABEL}</Text>
           <Text style={styles.internalHint}>{PRIVATE_NOTE_INTERNAL_HINT}</Text>
-          <Text style={styles.noteBody}>{quote.privateNote}</Text>
+          <Text style={styles.noteBody}>{normalizePrivateNote(quote.privateNote)}</Text>
         </View>
       ) : null}
 
@@ -150,8 +150,8 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
             return (
               <View style={styles.roomHeader}>
                 <Text style={styles.roomHeaderText}>{row.room.name}</Text>
-                {row.room.privateNote ? (
-                  <Text style={styles.internalHint}>{row.room.privateNote}</Text>
+                {hasPrivateNote(row.room.privateNote) ? (
+                  <Text style={styles.internalHint}>{normalizePrivateNote(row.room.privateNote)}</Text>
                 ) : null}
                 <PhotoStrip photos={photosForRoom(photos, row.room.id)} />
               </View>

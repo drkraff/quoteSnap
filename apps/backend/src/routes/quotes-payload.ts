@@ -1,4 +1,5 @@
 import { snapshotPriceSourceFromRow } from "../quotes/price-source.js";
+import { normalizePrivateNote } from "../quotes/private-note.js";
 import { roomsFromDb } from "../quotes/rooms.js";
 import type { QuoteLineItemResponse, QuoteListItemResponse, QuoteResponse } from "../types/quotes.js";
 
@@ -70,7 +71,7 @@ export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
     sentAt: row.sent_at ? row.sent_at.toISOString() : null,
     voiceJobId: row.voice_job_id,
     isArchived: row.is_archived,
-    privateNote: row.private_note,
+    privateNote: normalizePrivateNote(row.private_note),
     clientSentence: row.client_sentence,
     rooms: roomsFromDb(row.rooms),
   };
@@ -85,7 +86,7 @@ export function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemRespo
     unit: row.unit,
     confidence: row.confidence,
     catalogItemId: row.catalog_item_id,
-    privateNote: row.private_note,
+    privateNote: normalizePrivateNote(row.private_note),
     priceSource: snapshotPriceSourceFromRow(row.price_source, row.unit_price_cents),
     optionGroupId: row.option_group_id,
     optionRole: row.option_role,

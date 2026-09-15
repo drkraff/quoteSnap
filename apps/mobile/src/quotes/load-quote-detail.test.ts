@@ -111,6 +111,30 @@ describe('remoteLineItemsToDraftJson', () => {
     expect(lineItemsFromDraftJson(json)[0]!.privateNote).toBe('moisture from neighbor');
   });
 
+  it('normalizes empty / whitespace private notes to null without inventing a price', () => {
+    const json = remoteLineItemsToDraftJson([
+      {
+        id: 'li-1',
+        name: 'Pipe',
+        quantity: 2,
+        unitPriceCents: 1500,
+        privateNote: '   ',
+      },
+    ]);
+    expect(JSON.parse(json)[0].privateNote).toBeNull();
+    expect(JSON.parse(json)[0].unitPriceCents).toBe(1500);
+    expect(lineItemsFromDraftJson(json)[0]!.privateNote).toBeNull();
+
+    const local = resolveQuoteDetailView({
+      localQuote: localQuote({ privateNote: '   ', totalCents: 3000 }),
+      localDraftJson: json,
+      remote: { skipped: true },
+    });
+    expect(local.quote?.privateNote).toBeNull();
+    expect(local.quote?.totalCents).toBe(3000);
+    expect(local.lineItems[0]!.unitPriceCents).toBe(1500);
+  });
+
   it('keeps priceSource on draft JSON and detail rows', () => {
     const json = remoteLineItemsToDraftJson([
       {

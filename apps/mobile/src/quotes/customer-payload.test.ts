@@ -242,6 +242,70 @@ describe('toCustomerQuotePayload', () => {
     expect(json).not.toContain('secret.jpg');
     expect(payload.lineItems[0]!.unitPriceCents).toBeNull();
   });
+
+  it('omits private notes after clear and does not invent prices or placeholder copy', () => {
+    const source = {
+      customerPhone: '+15555550100',
+      totalCents: 25000,
+      privateNote: SECRET_JOB,
+      notes: 'leftover drafts.notes must not leak either',
+      lineItems: [
+        {
+          name: 'Replace outlet',
+          quantity: 1,
+          unitPriceCents: 25000,
+          unit: 'each',
+          privateNote: SECRET_LINE,
+        },
+        {
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          unit: 'foot',
+          privateNote: '   ',
+        },
+      ],
+    };
+    const withNotes = toCustomerQuotePayload(source);
+    expect(JSON.stringify(withNotes)).not.toContain(SECRET_JOB);
+    expect(JSON.stringify(withNotes)).not.toContain(SECRET_LINE);
+
+    const cleared = toCustomerQuotePayload({
+      ...source,
+      privateNote: null,
+      lineItems: source.lineItems.map((item) => ({ ...item, privateNote: null })),
+    });
+    expect(cleared.totalCents).toBe(25000);
+    expect(cleared.lineItems[0]!.unitPriceCents).toBe(25000);
+    expect(cleared.lineItems[1]!.unitPriceCents).toBeNull();
+    expect(customerPayloadHasPrivateNoteKey(cleared)).toBe(false);
+    const json = JSON.stringify(cleared);
+    expect(json).not.toContain('privateNote');
+    expect(json).not.toContain('private_note');
+    expect(json).not.toContain(SECRET_JOB);
+    expect(json).not.toContain(SECRET_LINE);
+    expect(json).not.toContain('Add private note');
+    expect(json).not.toContain('Visible only to you');
+    expect(json).not.toContain('Internal only');
+
+    const whitespace = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 0,
+      privateNote: '   ',
+      lineItems: [
+        {
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          unit: 'foot',
+          privateNote: '',
+        },
+      ],
+    });
+    expect(whitespace.lineItems[0]!.unitPriceCents).toBeNull();
+    expect(whitespace.totalCents).toBe(0);
+    expect(JSON.stringify(whitespace)).not.toContain('privateNote');
+  });
 });
 
 describe('toContractorLineItemSync', () => {
@@ -261,6 +325,35 @@ describe('toContractorLineItemSync', () => {
       unit: 'each',
       privateNote: SECRET_LINE,
     });
+  });
+
+  it('maps empty / whitespace privateNote to null on contractor PUT (clear)', () => {
+    expect(
+      toContractorLineItemSync({
+        name: 'Replace outlet',
+        quantity: 1,
+        unitPriceCents: 25000,
+        unit: 'each',
+        privateNote: '   ',
+      }).privateNote,
+    ).toBeNull();
+    expect(
+      toContractorLineItemSync({
+        name: 'Replace outlet',
+        quantity: 1,
+        unitPriceCents: 25000,
+        unit: 'each',
+        privateNote: '',
+      }).privateNote,
+    ).toBeNull();
+    expect(
+      toContractorLineItemSync({
+        name: 'Replace outlet',
+        quantity: 1,
+        unitPriceCents: 25000,
+        unit: 'each',
+      }).privateNote,
+    ).toBeNull();
   });
 
   it('keeps priceSource on the contractor PUT so flags can round-trip', () => {

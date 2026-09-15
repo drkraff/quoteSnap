@@ -25,6 +25,7 @@ import { canRetryDeadLetter, deadLetterRetryPatch, queueFailureMessage } from '.
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
 import { parseRoomsJson } from '../quotes/rooms';
+import { normalizePrivateNote } from '../quotes/private-notes';
 import {
   parsePhotosJson,
   serializePhotos,
@@ -277,18 +278,11 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       }
       const rooms = parseRoomsJson(quote.roomsJson);
       const updated = await updateQuoteOnServer(quote.serverId, {
-        lineItems: items as {
-          name: string;
-          quantity: number;
-          unitPriceCents: number;
-          unit?: string | null;
-          privateNote?: string | null;
-          priceSource?: string | null;
-          optionGroupId?: string | null;
-          optionRole?: string | null;
-          roomId?: string | null;
-          clientId?: string | null;
-        }[],
+        lineItems: items.map((line) =>
+          Object.prototype.hasOwnProperty.call(line, 'privateNote')
+            ? { ...line, privateNote: normalizePrivateNote(line.privateNote) }
+            : line,
+        ),
         totalCents: payload.totalCents as number | undefined,
         ...(quote.roomsJson != null && quote.roomsJson !== '' ? { rooms } : {}),
       });

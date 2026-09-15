@@ -23,6 +23,7 @@ import {
   type QuoteDetailSnapshot,
 } from '../../../src/quotes/load-quote-detail';
 import { serializeRooms } from '../../../src/quotes/rooms';
+import { normalizePrivateNote } from '../../../src/quotes/private-notes';
 import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos } from '../../../src/quotes/photos';
 import { useAuthStore } from '../../../src/store/auth-store';
 import {
@@ -92,7 +93,7 @@ export default function QuoteDetailScreen(): JSX.Element {
             const q = await database.get<Quote>('quotes').find(id);
             await database.write(async () => {
               await q.update((record) => {
-                record.privateNote = remoteQuote.privateNote ?? null;
+                record.privateNote = normalizePrivateNote(remoteQuote.privateNote);
                 record.clientSentence = remoteQuote.clientSentence ?? null;
                 record.roomsJson = serializeRooms(remoteQuote.rooms ?? []);
                 record.photosJson = serializePhotos(

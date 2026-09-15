@@ -15,6 +15,9 @@ import {
   PRIVATE_NOTE_INTERNAL_HINT,
   PRIVATE_NOTE_LABEL,
   PRIVATE_NOTE_MAX_LENGTH,
+  PRIVATE_NOTE_PLACEHOLDER,
+  normalizePrivateNote,
+  privateNoteFieldValue,
 } from '../../quotes/private-notes';
 
 interface PrivateNoteSheetProps {
@@ -36,7 +39,7 @@ export function PrivateNoteSheet({
 
   useEffect(() => {
     if (visible) {
-      setInputValue(currentNote ?? '');
+      setInputValue(privateNoteFieldValue(currentNote));
     }
   }, [visible, currentNote]);
 
@@ -67,7 +70,7 @@ export function PrivateNoteSheet({
               onChangeText={setInputValue}
               multiline
               maxLength={PRIVATE_NOTE_MAX_LENGTH}
-              placeholder="Visible only to you — never sent to the customer"
+              placeholder={PRIVATE_NOTE_PLACEHOLDER}
               placeholderTextColor={colors.mutedText}
               accessibilityLabel={`${PRIVATE_NOTE_LABEL}. ${PRIVATE_NOTE_INTERNAL_HINT}`}
             />
@@ -85,7 +88,7 @@ export function PrivateNoteSheet({
                   styles.saveButton,
                   pressed && styles.saveButtonPressed,
                 ]}
-                onPress={() => onSave(inputValue)}
+                onPress={() => onSave(normalizePrivateNote(inputValue))}
                 accessibilityRole="button"
                 accessibilityLabel="Save private note"
               >

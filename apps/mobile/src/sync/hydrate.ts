@@ -26,6 +26,7 @@ import { toDraftLineItems } from './draft-line-items';
 import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
+import { normalizePrivateNote } from '../quotes/private-notes';
 import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 import {
   hydrateArchivedFlag,
@@ -253,7 +254,7 @@ export async function upsertQuotes(
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
           record.isArchived = quote.isArchived === true;
-          record.privateNote = quote.privateNote ?? null;
+          record.privateNote = normalizePrivateNote(quote.privateNote);
           record.clientSentence = quote.clientSentence ?? null;
           record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
           record.photosJson = serializePhotos(
@@ -296,7 +297,7 @@ export async function upsertQuotes(
           record.totalCents = quote.totalCents;
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
-          record.privateNote = quote.privateNote ?? null;
+          record.privateNote = normalizePrivateNote(quote.privateNote);
           record.clientSentence = quote.clientSentence ?? null;
           record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
           record.photosJson = serializePhotos(

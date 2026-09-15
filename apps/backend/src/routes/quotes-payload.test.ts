@@ -90,6 +90,14 @@ describe("quoteRowToResponse", () => {
       quoteRowToResponse(quoteRow({ private_note: "subcontractor check" })).privateNote,
       "subcontractor check",
     );
+    assert.equal(
+      quoteRowToResponse(quoteRow({ private_note: "   " })).privateNote,
+      null,
+    );
+    assert.equal(
+      lineItemRowToResponse(lineItemRow({ private_note: "   " })).privateNote,
+      null,
+    );
   });
 
   it("maps client_sentence for contractor hydrate and the customer allowlist", () => {

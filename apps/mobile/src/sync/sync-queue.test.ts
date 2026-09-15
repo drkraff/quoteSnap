@@ -1062,6 +1062,73 @@ describe('processQueue', () => {
     });
   });
 
+  it('forwards a cleared line privateNote as null (does not omit the key)', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    rememberServerRevision('srv-q1', '2026-09-01T12:00:00.000Z');
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T12:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+      },
+      lineItems: [
+        {
+          id: 'li-1',
+          name: 'Pipe',
+          quantity: 2,
+          unitPriceCents: 1500,
+          privateNote: 'moisture from neighbor',
+        },
+      ],
+    });
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([
+          {
+            name: 'Pipe',
+            quantity: 2,
+            unitPriceCents: 1500,
+            privateNote: '   ',
+          },
+        ]),
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledWith('srv-q1', {
+      lineItems: [
+        {
+          name: 'Pipe',
+          quantity: 2,
+          unitPriceCents: 1500,
+          privateNote: null,
+        },
+      ],
+      totalCents: undefined,
+    });
+  });
+
   it('forwards quote-level clientSentence on a contractor PUT (customer-facing)', async () => {
     const quote = makeQuote({
       id: 'q1',
