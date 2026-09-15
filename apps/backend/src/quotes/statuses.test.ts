@@ -5,9 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TRADE_TEMPLATES } from "../data/trade-templates.js";
 import {
+  CLIENT_PUT_QUOTE_STATUSES,
   CLIENT_QUOTE_STATUSES,
   FROZEN_QUOTE_STATUSES,
   QUOTE_STATUSES,
+  isClientPutQuoteStatus,
   isClientQuoteStatus,
   isFrozenQuoteStatus,
   isQuoteStatus,
@@ -48,13 +50,20 @@ describe("QUOTE_STATUSES / isQuoteStatus", () => {
 
   it("keeps client writes a subset of the DB allow-list (A-06)", () => {
     assert.deepEqual([...CLIENT_QUOTE_STATUSES], ["draft_local", "draft_queued"]);
+    assert.deepEqual([...CLIENT_PUT_QUOTE_STATUSES], ["draft_local", "draft_queued", "sent"]);
     for (const status of CLIENT_QUOTE_STATUSES) {
       assert.equal(isQuoteStatus(status), true);
       assert.equal(isClientQuoteStatus(status), true);
+      assert.equal(isClientPutQuoteStatus(status), true);
     }
+    assert.equal(isClientQuoteStatus("sent"), false);
+    assert.equal(isClientPutQuoteStatus("sent"), true);
     for (const status of QUOTE_STATUSES) {
       if (status === "draft_local" || status === "draft_queued") continue;
       assert.equal(isClientQuoteStatus(status), false, status);
+    }
+    for (const status of ["approved", "declined", "expired", "failed_send", "ai_processing", "ai_failed"]) {
+      assert.equal(isClientPutQuoteStatus(status), false, status);
     }
   });
 
@@ -69,6 +78,10 @@ describe("QUOTE_STATUSES / isQuoteStatus", () => {
     for (const status of FROZEN_QUOTE_STATUSES) {
       assert.equal(isFrozenQuoteStatus(status), true, status);
       assert.equal(isClientQuoteStatus(status), false, status);
+    }
+    assert.equal(isClientPutQuoteStatus("sent"), true);
+    for (const status of ["approved", "declined", "expired", "failed_send"]) {
+      assert.equal(isClientPutQuoteStatus(status), false, status);
     }
     assert.equal(isFrozenQuoteStatus("draft_local"), false);
     assert.equal(isFrozenQuoteStatus("draft_queued"), false);

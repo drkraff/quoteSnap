@@ -9,10 +9,13 @@ import {
 } from "../routes/quotes-payload.js";
 import {
   CLIENT_QUOTE_STATUSES,
+  CLIENT_PUT_QUOTE_STATUSES,
   FROZEN_QUOTE_STATUSES,
   QUOTE_MONEY_FROZEN_ERROR,
+  isClientPutQuoteStatus,
   isClientQuoteStatus,
   isFrozenQuoteStatus,
+  type ClientPutQuoteStatus,
   type ClientQuoteStatus,
 } from "./statuses.js";
 import { parseOptionalPrivateNote } from "./private-note.js";
@@ -40,12 +43,14 @@ import { isUuid } from "./photos.js";
 
 export {
   CLIENT_QUOTE_STATUSES,
+  CLIENT_PUT_QUOTE_STATUSES,
   FROZEN_QUOTE_STATUSES,
   QUOTE_MONEY_FROZEN_ERROR,
+  isClientPutQuoteStatus,
   isClientQuoteStatus,
   isFrozenQuoteStatus,
 };
-export type { ClientQuoteStatus };
+export type { ClientPutQuoteStatus, ClientQuoteStatus };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -100,7 +105,7 @@ export type ParsedQuotePutBody =
   | { ok: false; error: string }
   | {
       ok: true;
-      status?: ClientQuoteStatus;
+      status?: ClientPutQuoteStatus;
       customerPhone?: string | null;
       totalCents?: number;
       privateNote?: string | null;
@@ -136,8 +141,9 @@ function putMutatesQuoteMoney(
 }
 
 /**
- * Client PUT/POST may only write draft_local / draft_queued.
- * Phase 6 statuses and ai_processing are rejected so a client cannot self-approve or spoof the voice pipeline.
+ * Client POST may only write draft_local / draft_queued.
+ * PUT may also write `sent` (share-without-SMS). Phase 6 statuses and
+ * ai_processing are rejected so a client cannot self-approve or spoof the voice pipeline.
  * ai_failed is writable so the contractor can recover into a manual draft (A-10).
  */
 export function parseClientQuoteStatus(value: unknown): { ok: true; status: ClientQuoteStatus } | { ok: false; error: string } {
@@ -150,9 +156,21 @@ export function parseClientQuoteStatus(value: unknown): { ok: true; status: Clie
   return { ok: true, status: value };
 }
 
+export function parseClientPutQuoteStatus(
+  value: unknown,
+): { ok: true; status: ClientPutQuoteStatus } | { ok: false; error: string } {
+  if (typeof value !== "string" || !isClientPutQuoteStatus(value)) {
+    return {
+      ok: false,
+      error: "status must be draft_local, draft_queued, or sent",
+    };
+  }
+  return { ok: true, status: value };
+}
+
 export function assertStatusTransition(
   from: string,
-  to: ClientQuoteStatus,
+  to: ClientPutQuoteStatus,
 ): { ok: true } | QuoteWriteErrorResult {
   if (!isQuoteEditable(from)) {
     return {
@@ -161,14 +179,22 @@ export function assertStatusTransition(
       error: "Quote cannot be updated in its current status",
     };
   }
-  if (!isClientQuoteStatus(to)) {
+  if (!isClientPutQuoteStatus(to)) {
     return {
       ok: false,
       status: 400,
-      error: "status must be draft_local or draft_queued",
+      error: "status must be draft_local, draft_queued, or sent",
     };
   }
   return { ok: true };
+}
+
+/** Already-sent share retry: status→sent without money is a no-op 200. */
+export function isIdempotentShareSentPut(
+  currentStatus: string,
+  parsed: Extract<ParsedQuotePutBody, { ok: true }>,
+): boolean {
+  return currentStatus === "sent" && parsed.status === "sent" && !putMutatesQuoteMoney(parsed);
 }
 
 /** Integer cents, including 0 (empty quote / free line). Rejects floats and negatives. */
@@ -559,7 +585,7 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
   const parsed: Extract<ParsedQuotePutBody, { ok: true }> = { ok: true };
 
   if (hasOwn(raw, "status") && raw.status !== undefined) {
-    const status = parseClientQuoteStatus(raw.status);
+    const status = parseClientPutQuoteStatus(raw.status);
     if (!status.ok) {
       return status;
     }
@@ -675,6 +701,11 @@ export async function applyQuotePut(
     return { status: 409, json: { error: QUOTE_MONEY_FROZEN_ERROR } };
   }
 
+  // Share-again on an already-sent quote: no error, do not rewrite sent_at.
+  if (isIdempotentShareSentPut(current.status, parsed)) {
+    return { status: 200, json: { quote: quoteRowToResponse(current) } };
+  }
+
   if (!isQuoteEditable(current.status)) {
     return { status: 409, json: { error: "Quote cannot be updated in its current status" } };
   }
@@ -704,6 +735,9 @@ export async function applyQuotePut(
   if (parsed.status !== undefined) {
     params.push(parsed.status);
     setClauses.push(`status = $${params.length}`);
+    if (parsed.status === "sent" && current.sent_at == null) {
+      setClauses.push("sent_at = NOW()");
+    }
   }
   if (parsed.customerPhone !== undefined) {
     params.push(parsed.customerPhone);

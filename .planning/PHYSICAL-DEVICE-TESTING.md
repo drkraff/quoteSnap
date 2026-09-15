@@ -266,10 +266,12 @@ These are the three tests from `.planning/phases/05-voice-to-quote-pipeline/05-H
 2. Tap **Share quote**. The OS share sheet opens with a PDF (or HTML if print-to-PDF fails). Open the file in Drive / Files / a PDF viewer — do not send it to a real customer yet.
 3. Confirm the file shows the client sentence, contractor name/trade if set, room grouping, and the selected (base) line. Blank price stays blank (not `$0.00` on that line). Total excludes the unselected alternate.
 4. Confirm the file does **not** contain the private notes, the alternate line, or any photo URI.
-5. Open the same quote from history. **Share quote** still works. Send Quote still only queues `draft_queued` (no SMS).
+5. Open the same quote from history — status should be **Sent**. **Share quote** still works (no error). Send Quote without sharing still only queues `draft_queued` (no SMS). After share, line items / totals cannot be edited (thin SYNC-06).
 
 **Expected**:
 - Share does not require a customer phone (Send still does)
+- After a successful share of a draft, history shows **Sent** (`sent_at` set)
+- Sharing again on an already-sent quote does not error
 - Private notes never appear in the shared file
 - Unselected alt is omitted; selected-only total
 - Unknown prices stay blank; no invented SKU price

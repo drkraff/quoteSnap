@@ -6,6 +6,7 @@ import {
   assertStatusTransition,
   DELETE_LINE_ITEMS_SQL,
   INSERT_LINE_ITEM_SQL,
+  parseClientPutQuoteStatus,
   parseClientQuoteStatus,
   parseLineItemInput,
   parseNonNegativeCents,
@@ -96,6 +97,44 @@ describe("parseClientQuoteStatus", () => {
   });
 });
 
+describe("parseClientPutQuoteStatus", () => {
+  it("allows draft_local, draft_queued, and sent (share-without-SMS)", () => {
+    assert.deepEqual(parseClientPutQuoteStatus("draft_local"), {
+      ok: true,
+      status: "draft_local",
+    });
+    assert.deepEqual(parseClientPutQuoteStatus("draft_queued"), {
+      ok: true,
+      status: "draft_queued",
+    });
+    assert.deepEqual(parseClientPutQuoteStatus("sent"), {
+      ok: true,
+      status: "sent",
+    });
+  });
+
+  it("still rejects self-approve and voice-pipeline statuses", () => {
+    for (const status of [
+      "approved",
+      "declined",
+      "expired",
+      "failed_send",
+      "ai_processing",
+      "ai_failed",
+      "nope",
+      "",
+      1,
+      null,
+    ]) {
+      const parsed = parseClientPutQuoteStatus(status);
+      assert.equal(parsed.ok, false, `expected reject for ${String(status)}`);
+      if (!parsed.ok) {
+        assert.equal(parsed.error, "status must be draft_local, draft_queued, or sent");
+      }
+    }
+  });
+});
+
 describe("assertStatusTransition", () => {
   it("allows draft_local ↔ draft_queued", () => {
     assert.deepEqual(assertStatusTransition("draft_local", "draft_queued"), { ok: true });
@@ -106,6 +145,12 @@ describe("assertStatusTransition", () => {
   it("allows recovering ai_failed into a manual draft or queued send (A-10)", () => {
     assert.deepEqual(assertStatusTransition("ai_failed", "draft_local"), { ok: true });
     assert.deepEqual(assertStatusTransition("ai_failed", "draft_queued"), { ok: true });
+  });
+
+  it("allows draft_local / draft_queued / ai_failed → sent without a phone (share path)", () => {
+    assert.deepEqual(assertStatusTransition("draft_local", "sent"), { ok: true });
+    assert.deepEqual(assertStatusTransition("draft_queued", "sent"), { ok: true });
+    assert.deepEqual(assertStatusTransition("ai_failed", "sent"), { ok: true });
   });
 
   it("rejects transitions off ai_processing / sent (voice worker and Phase 6 own those)", () => {
@@ -161,8 +206,17 @@ describe("parseQuotePutBody", () => {
     const parsed = parseQuotePutBody({ status: "approved" });
     assert.deepEqual(parsed, {
       ok: false,
-      error: "status must be draft_local or draft_queued",
+      error: "status must be draft_local, draft_queued, or sent",
     });
+  });
+
+  it("parses status sent on PUT without requiring customerPhone", () => {
+    const parsed = parseQuotePutBody({ status: "sent" });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.status, "sent");
+    assert.equal(parsed.customerPhone, undefined);
+    assert.equal(parsed.lineItems, undefined);
   });
 
   it("rejects float totalCents", () => {
@@ -698,7 +752,7 @@ describe("applyQuotePut", () => {
     assert.equal(queried, false);
     assert.deepEqual(outcome, {
       status: 400,
-      json: { error: "status must be draft_local or draft_queued" },
+      json: { error: "status must be draft_local, draft_queued, or sent" },
     });
   });
 
@@ -827,6 +881,68 @@ describe("applyQuotePut", () => {
       status: 409,
       json: { error: "Quote cannot be updated in its current status" },
     });
+    assert.equal(calls.some((c) => c.sql.startsWith("UPDATE quotes")), false);
+  });
+
+  it("marks a draft sent without requiring or inventing customerPhone", async () => {
+    for (const status of ["draft_local", "draft_queued", "ai_failed"]) {
+      const { queryFn, calls } = mockDb({
+        quote: quoteRow({ status, customer_phone: null, sent_at: null }),
+      });
+      const outcome = await applyQuotePut(queryFn, {
+        quoteId: QUOTE_ID,
+        contractorId: CONTRACTOR_ID,
+        body: { status: "sent" },
+      });
+      assert.equal(outcome.status, 200, `expected 200 for ${status} → sent`);
+      if (outcome.status !== 200) return;
+      assert.equal(outcome.json.quote.status, "sent");
+      const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+      assert.ok(update, `${status} must UPDATE status`);
+      assert.match(update!.sql, /status = \$/);
+      assert.match(update!.sql, /sent_at = NOW\(\)/);
+      assert.equal(update!.params?.[0], "sent");
+      assert.equal(
+        update!.sql.includes("customer_phone"),
+        false,
+        `${status} must not invent customer_phone`,
+      );
+      assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+    }
+  });
+
+  it("no-ops status→sent on an already-sent quote without rewriting sent_at", async () => {
+    const sentAt = new Date("2026-09-01T13:00:00.000Z");
+    const { queryFn, calls } = mockDb({
+      quote: quoteRow({ status: "sent", sent_at: sentAt, customer_phone: null }),
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { status: "sent" },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.quote.status, "sent");
+    assert.equal(outcome.json.quote.sentAt, sentAt.toISOString());
+    assert.equal(
+      calls.some((c) => c.sql.startsWith("UPDATE quotes")),
+      false,
+      "already-sent share must not UPDATE",
+    );
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+  });
+
+  it("still freezes money writes after a share-sent quote", async () => {
+    const { queryFn, calls } = mockDb({
+      quote: quoteRow({ status: "sent", sent_at: new Date("2026-09-01T13:00:00.000Z") }),
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { status: "sent", totalCents: 1 },
+    });
+    assert.deepEqual(outcome, { status: 409, json: { error: QUOTE_MONEY_FROZEN_ERROR } });
     assert.equal(calls.some((c) => c.sql.startsWith("UPDATE quotes")), false);
   });
 
