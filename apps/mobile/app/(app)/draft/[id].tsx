@@ -68,7 +68,7 @@ import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
 import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review-before-sending-banner';
-import { aiFailedRecoveryView } from '../../../src/quotes/ai-failed-recovery';
+import { aiFailedRecoveryView, recoverAiFailedPlan } from '../../../src/quotes/ai-failed-recovery';
 import { retryVoiceQuotePlan } from '../../../src/quotes/retry-voice-quote';
 import { localVoiceAudioPath } from '../../../src/quotes/voice-audio';
 import {
@@ -427,19 +427,18 @@ export default function DraftScreen(): JSX.Element {
 
   /** Local + queued recovery so A-06 PUT can accept line items / send. */
   async function recoverFromAiFailed(): Promise<void> {
-    if (!quote || quote.status !== 'ai_failed') return;
+    const plan = recoverAiFailedPlan({
+      quoteId: quote?.id,
+      status: quote?.status,
+    });
+    if (!plan.ok || !quote) return;
     await database.write(async () => {
       await quote.update((r) => {
-        r.status = 'draft_local';
+        r.status = plan.nextStatus;
       });
     });
-    setQuoteStatus('draft_local');
-    await enqueue({
-      entityType: 'quote',
-      entityId: quote.id,
-      action: 'update',
-      payload: { status: 'draft_local' },
-    });
+    setQuoteStatus(plan.nextStatus);
+    await enqueue(plan.enqueue);
   }
 
   async function handleRetryVoice(): Promise<void> {
@@ -452,7 +451,9 @@ export default function DraftScreen(): JSX.Element {
       audioExists,
     });
     if (!plan.ok) {
-      Alert.alert('Retry unavailable', 'The original recording is no longer on this device.');
+      if (plan.reason === 'missing_audio') {
+        Alert.alert('Retry unavailable', 'The original recording is no longer on this device.');
+      }
       return;
     }
     setRetryingVoice(true);
@@ -1400,6 +1401,7 @@ export default function DraftScreen(): JSX.Element {
                 view={aiFailedRecoveryView({
                   audioExists,
                   lineCount: lineItems.length,
+                  lineItemsJson: draft?.lineItemsJson,
                 })}
                 retryDisabled={retryingVoice}
                 onRetry={() => {

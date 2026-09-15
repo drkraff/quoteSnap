@@ -1,7 +1,8 @@
 /**
  * FAIL-04: re-queue the original local recording onto the same quote.
- * Does not create a new quote. Voice job id is cleared so the poller waits
- * for the new upload instead of latching onto the failed job.
+ * Does not create a new quote or invent prices. Missing quote / audio is a
+ * no-op. Voice job id is cleared so the poller waits for the new upload
+ * instead of latching onto the failed job.
  */
 
 import {
@@ -10,7 +11,7 @@ import {
 } from './voice-upload-queue';
 
 export type RetryVoiceQuotePlan =
-  | { ok: false; reason: 'not_ai_failed' | 'missing_audio' }
+  | { ok: false; reason: 'not_ai_failed' | 'missing_audio' | 'missing_quote' }
   | {
       ok: true;
       nextStatus: 'ai_processing';
@@ -27,6 +28,10 @@ export function retryVoiceQuotePlan(input: {
   if (input.status !== 'ai_failed') {
     return { ok: false, reason: 'not_ai_failed' };
   }
+  const quoteId = input.quoteId.trim();
+  if (!quoteId) {
+    return { ok: false, reason: 'missing_quote' };
+  }
   if (!input.audioExists || input.filePath.trim() === '') {
     return { ok: false, reason: 'missing_audio' };
   }
@@ -34,7 +39,7 @@ export function retryVoiceQuotePlan(input: {
     ok: true,
     nextStatus: 'ai_processing',
     clearVoiceJobId: true,
-    enqueue: voiceUploadEnqueueParams(input.quoteId, input.filePath),
+    enqueue: voiceUploadEnqueueParams(quoteId, input.filePath),
   };
 }
 
