@@ -77,7 +77,7 @@ export async function importRateCardFromText(body: {
   return apiClient.post<ImportRateCardResponse>('/rate-card/import', body);
 }
 
-/** Omit `name` so GET /rate-card stays a list, not exact lookup. Optional `q` is substring filter. */
+/** Omit `name` so GET /rate-card stays a list, not exact lookup. Optional `q` / `unit` are list filters. */
 export async function listRateCardEntries(query?: {
   limit?: number;
   offset?: number;

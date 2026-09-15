@@ -5,7 +5,11 @@ export const MY_RATES_INTRO =
 
 export const MY_RATES_SEARCH_PLACEHOLDER = 'Search rates';
 
-export const MY_RATES_NO_MATCHES = 'No rates match that name.';
+export const MY_RATES_UNIT_FILTER_LABEL = 'Unit';
+
+export const MY_RATES_UNIT_ALL_LABEL = 'All';
+
+export const MY_RATES_NO_MATCHES = 'No rates match';
 
 export const MY_RATES_EMPTY_HEADING = 'No rates yet';
 
