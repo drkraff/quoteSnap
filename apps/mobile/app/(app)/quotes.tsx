@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Text,
   FlatList,
@@ -61,6 +61,7 @@ import {
   shouldRunQuotesAiPoller,
 } from '../../src/quotes/poll-ai-processing';
 import { audioRetryInFlight } from '../../src/quotes/retry-voice-quote';
+import { useResumeAfterCrashPrompt } from '../../src/quotes/use-resume-prompt';
 
 // Tab bar height constant (safe default for both iOS/Android)
 const TAB_BAR_HEIGHT = 56;
@@ -77,6 +78,11 @@ export default function QuotesScreen(): JSX.Element {
   const deadLetterItems = useDeadLetterItems();
   const online = useIsOnline();
   const showArchived = listMode === 'archived';
+  const navigateResume = useCallback((href: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    router.push(href as any);
+  }, [router]);
+  useResumeAfterCrashPrompt(navigateResume);
 
   useEffect(() => {
     navigation.setOptions({

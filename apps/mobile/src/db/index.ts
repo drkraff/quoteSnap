@@ -6,6 +6,7 @@ import { Quote } from './models/quote';
 import { CatalogItem } from './models/catalog-item';
 import { Draft } from './models/draft';
 import { SyncQueueItem } from './models/sync-queue-item';
+import { ResumeCheckpoint } from './models/resume-checkpoint';
 
 const adapter = new SQLiteAdapter({
   schema,
@@ -19,5 +20,5 @@ const adapter = new SQLiteAdapter({
 
 export const database = new Database({
   adapter,
-  modelClasses: [Quote, CatalogItem, Draft, SyncQueueItem],
+  modelClasses: [Quote, CatalogItem, Draft, SyncQueueItem, ResumeCheckpoint],
 });

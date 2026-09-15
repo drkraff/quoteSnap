@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 5,
+  version: 6,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -67,6 +67,19 @@ export const schema = appSchema({
         { name: 'last_error', type: 'string', isOptional: true },
         { name: 'created_at', type: 'number' },
         { name: 'next_retry_at', type: 'number', isOptional: true },
+      ],
+    }),
+    tableSchema({
+      name: 'resume_checkpoints',
+      columns: [
+        // FAIL-07: one local row per contractor while recording or editing a draft.
+        // Not synced. Hydrate must not touch this table.
+        { name: 'contractor_id', type: 'string', isIndexed: true },
+        { name: 'kind', type: 'string' },
+        // kind: voice_recording | draft_edit
+        { name: 'quote_id', type: 'string', isOptional: true },
+        { name: 'audio_uri', type: 'string', isOptional: true },
+        { name: 'updated_at', type: 'number' },
       ],
     }),
   ],

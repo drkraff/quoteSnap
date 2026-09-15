@@ -93,7 +93,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 - [x] **FAIL-04**: Whisper transcription fails: contractor is shown a retry option with the original audio available
 - [x] **FAIL-05**: GPT-4o mapping timeout or failure: contractor is shown a partial draft with flagged items and a manual fallback
 - [ ] **FAIL-06**: Twilio SMS delivery failure: quote enters failed_send state; contractor can retry from the history screen
-- [ ] **FAIL-07**: App crash during voice recording or draft editing: state is recovered from local SQLite on next launch with a "Resume where you left off" prompt
+- [x] **FAIL-07**: App crash during voice recording or draft editing: state is recovered from local SQLite on next launch with a "Resume where you left off" prompt
 - [ ] **FAIL-08**: FCM token rotation: `contractors.fcm_token` is updated on each login to prevent stale tokens on Samsung/battery-optimized devices
 
 ---
@@ -199,7 +199,7 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 | FAIL-04 | Phase 7 | Complete |
 | FAIL-05 | Phase 7 | Complete |
 | FAIL-06 | Phase 7 | Pending |
-| FAIL-07 | Phase 7 | Pending |
+| FAIL-07 | Phase 7 | Complete |
 | FAIL-08 | Phase 7 | Pending |
 
 **Coverage:**
@@ -209,4 +209,4 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-15 — FAIL-03 offline voice upload queues without mid-flow error; status narrative lives in CONTEXT.md*
+*Last updated: 2026-09-15 — FAIL-07 resume after crash from local SQLite; status narrative lives in CONTEXT.md*

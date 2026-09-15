@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { confidenceTier } from '../../../src/utils/confidence';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
 import * as FileSystem from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -83,6 +83,11 @@ import {
 } from '../../../src/quotes/option-groups';
 import { typedPriceSource } from '../../../src/utils/price-source';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
+import { RESUME_KIND_DRAFT } from '../../../src/quotes/resume-checkpoint';
+import {
+  clearResumeCheckpoints,
+  upsertResumeCheckpoint,
+} from '../../../src/quotes/resume-checkpoint-store';
 
 export default function DraftScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -206,6 +211,28 @@ export default function DraftScreen(): JSX.Element {
       cancelled = true;
     };
   }, [id, phoneSync]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (loading || loadError || !quote) {
+        return;
+      }
+      const contractorId = useAuthStore.getState().contractor?.id ?? '';
+      if (!contractorId) return;
+      void upsertResumeCheckpoint({
+        contractorId,
+        kind: RESUME_KIND_DRAFT,
+        quoteId: quote.id,
+      }).catch(() => {
+        // FAIL-07 must not block editing.
+      });
+      return () => {
+        void clearResumeCheckpoints(contractorId, RESUME_KIND_DRAFT).catch(() => {
+          // Leaving the editor must not throw.
+        });
+      };
+    }, [loading, loadError, quote]),
+  );
 
   useEffect(() => {
     let cancelled = false;
