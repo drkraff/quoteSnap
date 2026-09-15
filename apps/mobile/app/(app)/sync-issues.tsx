@@ -34,13 +34,7 @@ export default function SyncIssuesScreen(): JSX.Element {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <DeadLetterRow
-            item={toDeadLetterListItem({
-              id: item.id,
-              entityType: item.entityType,
-              action: item.action,
-              payloadJson: item.payloadJson,
-              lastError: item.lastError,
-            })}
+            item={toDeadLetterListItem(item)}
             retrying={retryingId === item.id}
             onRetry={() => {
               void handleRetry(item);

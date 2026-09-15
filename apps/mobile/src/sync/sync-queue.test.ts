@@ -365,6 +365,34 @@ describe('processQueue', () => {
     expect(mockedCreateCatalogItem).not.toHaveBeenCalled();
   });
 
+  it('does not rewrite stored line items or totals when retrying a dead-letter quote', async () => {
+    mockedIsOnline.mockReturnValue(false);
+    const payload = {
+      lineItems: [{ name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+      totalCents: 1500,
+    };
+    const payloadJson = JSON.stringify(payload);
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      status: 'dead_letter',
+      retryCount: 6,
+      lastError: QUOTE_MONEY_FROZEN_ERROR,
+      nextRetryAt: null,
+      payloadJson,
+    });
+    queueItems = [item];
+
+    await retryDeadLetterItem(item as never);
+
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(0);
+    expect(item.payloadJson).toBe(payloadJson);
+    expect(JSON.parse(item.payloadJson)).toEqual(payload);
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+  });
+
   it('lists dead-letter rows from getDeadLetterItems (SYNC-04)', async () => {
     const dead = makeQueueItem({
       status: 'dead_letter',
@@ -1522,6 +1550,69 @@ describe('processQueue', () => {
     expect(item.lastError).toBe(QUOTE_MONEY_FROZEN_ERROR);
     expect(item.nextRetryAt).toBeNull();
     expect(item.retryCount).toBe(0);
+  });
+
+  it('stores the ApiError reason instead of Unknown error', async () => {
+    quotes = [
+      makeQuote({
+        id: 'q1',
+        status: 'draft_queued',
+        serverId: 'srv-q1',
+      }),
+    ];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      payloadJson: JSON.stringify({ status: 'draft_queued' }),
+    });
+    queueItems = [item];
+    mockedUpdateQuoteOnServer.mockRejectedValue({
+      status: 409,
+      error: 'Quote cannot be updated in its current status',
+    });
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(item.status).toBe('pending');
+    expect(item.lastError).toBe('Quote cannot be updated in its current status');
+    expect(item.lastError).not.toBe('Unknown error');
+  });
+
+  it('retrying a frozen money PUT does not rewrite totals or invent a price', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'sent',
+      serverId: 'srv-q1',
+      totalCents: 1500,
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    mockedFetchQuote.mockRejectedValue(new Error('offline'));
+    const payloadJson = JSON.stringify({
+      lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 9, unitPriceCents: 9999 }]),
+      totalCents: 89991,
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      status: 'dead_letter',
+      retryCount: 6,
+      lastError: QUOTE_MONEY_FROZEN_ERROR,
+      nextRetryAt: null,
+      payloadJson,
+    });
+    queueItems = [item];
+
+    await retryDeadLetterItem(item as never);
+
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(item.payloadJson).toBe(payloadJson);
+    expect(quote.totalCents).toBe(1500);
+    expect(item.status).toBe('dead_letter');
+    expect(item.lastError).toBe(QUOTE_MONEY_FROZEN_ERROR);
   });
 
   it('PUTs status sent without inventing customerPhone (share-mark-sent)', async () => {
