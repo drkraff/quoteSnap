@@ -21,7 +21,7 @@ IDs stay as they are in REQUIREMENTS. This file does **not** invent FAIL-09…FA
 
 | Status | Meaning |
 |--------|---------|
-| **done** | Detection, UX, and recovery exist in code on `master` (through PR #66). Physical UAT may still be open. |
+| **done** | Detection, UX, and recovery exist in code on `master` (through PR #70). Physical UAT may still be open. |
 | **partial** | Detection and a UX/recovery exist, with a documented gap. |
 | **not started** | Defined here only. No product path yet (usually Phase 6). |
 
