@@ -4,18 +4,18 @@
  * for the new upload instead of latching onto the failed job.
  */
 
+import {
+  voiceUploadEnqueueParams,
+  type VoiceUploadEnqueueParams,
+} from './voice-upload-queue';
+
 export type RetryVoiceQuotePlan =
   | { ok: false; reason: 'not_ai_failed' | 'missing_audio' }
   | {
       ok: true;
       nextStatus: 'ai_processing';
       clearVoiceJobId: true;
-      enqueue: {
-        entityType: 'audio';
-        entityId: string;
-        action: 'create';
-        payload: { filePath: string; quoteLocalId: string };
-      };
+      enqueue: VoiceUploadEnqueueParams;
     };
 
 export function retryVoiceQuotePlan(input: {
@@ -34,12 +34,7 @@ export function retryVoiceQuotePlan(input: {
     ok: true,
     nextStatus: 'ai_processing',
     clearVoiceJobId: true,
-    enqueue: {
-      entityType: 'audio',
-      entityId: input.quoteId,
-      action: 'create',
-      payload: { filePath: input.filePath, quoteLocalId: input.quoteId },
-    },
+    enqueue: voiceUploadEnqueueParams(input.quoteId, input.filePath),
   };
 }
 

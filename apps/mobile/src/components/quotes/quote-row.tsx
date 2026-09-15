@@ -44,6 +44,7 @@ export function QuoteRow({
     status: quote.status,
     totalCents: quote.totalCents,
     customerPhone: quote.customerPhone,
+    voiceJobId: quote.voiceJobId,
     online,
   });
   const relativeDate = formatRelativeDate(quote.createdAt);

@@ -15,12 +15,26 @@ describe('quoteRowDisplay', () => {
     expect(view.accessibilityLabel).toBe('Quote queued, will upload when online');
   });
 
-  it('shows Processing when an ai_processing row is online', () => {
+  it('shows Queued while online until the upload is accepted (FAIL-03)', () => {
     const view = quoteRowDisplay({
       status: 'ai_processing',
       totalCents: 0,
       customerPhone: null,
       online: true,
+      voiceJobId: null,
+    });
+
+    expect(view.processingCaption).toBe('Queued');
+    expect(view.accessibilityLabel).toBe('Quote queued, will retry');
+  });
+
+  it('shows Processing when an ai_processing row is online and has a job id', () => {
+    const view = quoteRowDisplay({
+      status: 'ai_processing',
+      totalCents: 0,
+      customerPhone: null,
+      online: true,
+      voiceJobId: 'job-1',
     });
 
     expect(view.processingCaption).toBe('Processing...');
@@ -63,6 +77,7 @@ describe('quoteRowDisplay', () => {
       totalCents: 0,
       customerPhone: null,
       online: true,
+      voiceJobId: 'job-1',
     });
     const afterReady = quoteRowDisplay({
       status: 'draft_local',

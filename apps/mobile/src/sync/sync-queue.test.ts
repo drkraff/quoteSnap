@@ -9,7 +9,7 @@ import { seedCatalog, saveOnboardingProfile } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
-import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems } from './sync-queue';
+import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue } from './sync-queue';
 import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer } from '../api/quotes';
 import { upsertRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
@@ -511,6 +511,57 @@ describe('processQueue', () => {
     );
     expect(quote.voiceJobId).toBe('job-2');
     expect(item.status).toBe('destroyed');
+  });
+
+  it('FAIL-03: enqueues voice audio while offline without uploading or erroring', async () => {
+    mockedIsOnline.mockReturnValue(false);
+    const quote = makeQuote({ status: 'ai_processing', serverId: null });
+    quotes = [quote];
+
+    await expect(
+      enqueue({
+        entityType: 'audio',
+        entityId: quote.id,
+        action: 'create',
+        payload: { filePath: '/tmp/a.m4a', quoteLocalId: quote.id },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(queueItems).toHaveLength(1);
+    expect(queueItems[0]!.entityType).toBe('audio');
+    expect(queueItems[0]!.entityId).toBe(quote.id);
+    expect(queueItems[0]!.status).toBe('pending');
+    expect(queueItems[0]!.retryCount).toBe(0);
+    expect(JSON.parse(queueItems[0]!.payloadJson)).toEqual({
+      filePath: '/tmp/a.m4a',
+      quoteLocalId: quote.id,
+    });
+    expect(mockedUploadAudio).not.toHaveBeenCalled();
+    expect(quote.status).toBe('ai_processing');
+    expect(quote.voiceJobId).toBeNull();
+  });
+
+  it('FAIL-03: a failed online upload stays queued for SYNC-03 retry, not ai_failed', async () => {
+    const quote = makeQuote({ status: 'ai_processing', serverId: null });
+    quotes = [quote];
+    mockedUploadAudio.mockRejectedValue(new Error('Network request failed'));
+
+    await expect(
+      enqueue({
+        entityType: 'audio',
+        entityId: quote.id,
+        action: 'create',
+        payload: { filePath: '/tmp/a.m4a', quoteLocalId: quote.id },
+      }),
+    ).resolves.toBeUndefined();
+    await processQueue();
+
+    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
+    expect(queueItems[0]!.status).toBe('pending');
+    expect(queueItems[0]!.retryCount).toBe(1);
+    expect(queueItems[0]!.lastError).toMatch(/network/i);
+    expect(quote.status).toBe('ai_processing');
+    expect(quote.voiceJobId).toBeNull();
   });
 
   it('processes an onboarding seed job and stamps local catalog ids', async () => {

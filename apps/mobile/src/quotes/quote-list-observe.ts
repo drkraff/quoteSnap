@@ -49,13 +49,20 @@ export function draftFailedLocalFields(lineItemsJson: string): {
  * the fields the row displays so a status/total write re-renders in place.
  */
 export function quoteListRenderKey(
-  quotes: { id: string; status: string; totalCents: number; serverId?: string | null }[],
+  quotes: {
+    id: string;
+    status: string;
+    totalCents: number;
+    serverId?: string | null;
+    voiceJobId?: string | null;
+  }[],
   online: boolean,
 ): string {
   const rows = quotes
     .map((quote) => {
       const synced = quote.serverId?.trim() ? '1' : '0';
-      return `${quote.id}:${quote.status}:${quote.totalCents}:${synced}`;
+      const job = quote.voiceJobId?.trim() ? '1' : '0';
+      return `${quote.id}:${quote.status}:${quote.totalCents}:${synced}:${job}`;
     })
     .join('|');
   return `${online ? '1' : '0'}:${rows}`;
