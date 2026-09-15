@@ -8,6 +8,33 @@ export const DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE =
 
 export type QuoteRowSwipeAction = 'archive' | 'unarchive' | 'delete';
 
+export type HardDeleteLocalQuoteResult = 'deleted' | 'refused';
+
+export type HardDeleteQuoteRecord = {
+  id: string;
+  serverId: string | null | undefined;
+  status: string;
+  totalCents?: number;
+  destroyPermanently: () => Promise<void>;
+};
+
+export type HardDeleteDraftRecord = {
+  id: string;
+  lineItemsJson?: string | null;
+  destroyPermanently: () => Promise<void>;
+};
+
+export type HardDeleteQueueRecord = {
+  entityType: string;
+  entityId: string;
+  status?: string | null;
+  destroyPermanently: () => Promise<void>;
+};
+
+/**
+ * Customer-facing emptiness for junk Manual Quotes: no name, qty, or cents.
+ * Blank placeholder JSON is empty. Does not invent a price.
+ */
 export function hasMeaningfulLineItems(lineItemsJson: string | null | undefined): boolean {
   if (lineItemsJson == null || lineItemsJson.trim() === '') return false;
   return parseLineItems(lineItemsJson).some((item) => {
@@ -67,4 +94,48 @@ export function shouldDropQueueItemForDeletedLocalQuote(
     return true;
   }
   return item.entityType === 'draft' && draftIds.includes(item.entityId);
+}
+
+/** Drop one list row. Does not mint a replacement Manual Quote or prices. */
+export function removeQuoteListEntry<T extends { id: string }>(
+  quotes: readonly T[],
+  id: string,
+): T[] {
+  return quotes.filter((quote) => quote.id !== id);
+}
+
+/**
+ * Confirm already happened. Destroy quote + drafts + pending queue rows
+ * locally only when the row is a never-synced empty draft. No server delete.
+ */
+export async function hardDeleteEmptyLocalQuote(input: {
+  quote: HardDeleteQuoteRecord;
+  drafts: readonly HardDeleteDraftRecord[];
+  queueItems: readonly HardDeleteQueueRecord[];
+  write: (work: () => Promise<void>) => Promise<unknown>;
+}): Promise<HardDeleteLocalQuoteResult> {
+  const { quote, drafts, queueItems, write } = input;
+  if (
+    !canHardDeleteLocalQuote({
+      serverId: quote.serverId,
+      status: quote.status,
+      totalCents: quote.totalCents,
+      lineItemsJson: drafts[0]?.lineItemsJson ?? '[]',
+    })
+  ) {
+    return 'refused';
+  }
+  const draftIds = drafts.map((draft) => draft.id);
+  await write(async () => {
+    for (const item of queueItems) {
+      if (shouldDropQueueItemForDeletedLocalQuote(item, quote.id, draftIds)) {
+        await item.destroyPermanently();
+      }
+    }
+    for (const draft of drafts) {
+      await draft.destroyPermanently();
+    }
+    await quote.destroyPermanently();
+  });
+  return 'deleted';
 }

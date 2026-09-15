@@ -41,8 +41,8 @@ import {
   DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE,
   DELETE_LOCAL_QUOTE_CONFIRM_TITLE,
   canHardDeleteLocalQuote,
+  hardDeleteEmptyLocalQuote,
   quoteRowSwipeAction,
-  shouldDropQueueItemForDeletedLocalQuote,
 } from '../../src/quotes/delete-local-quote';
 import {
   ACTIVE_QUOTES_HEADER_TITLE,
@@ -288,40 +288,23 @@ export default function QuotesScreen(): JSX.Element {
   async function handleDeleteLocalQuote(quote: Quote): Promise<void> {
     try {
       const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', quote.id)).fetch();
-      if (
-        !canHardDeleteLocalQuote({
-          serverId: quote.serverId,
-          status: quote.status,
-          totalCents: quote.totalCents,
-          lineItemsJson: drafts[0]?.lineItemsJson ?? '[]',
-        })
-      ) {
-        return;
-      }
-      const draftIds = drafts.map((draft) => draft.id);
       const queueByQuoteId = await database
         .get<SyncQueueItem>('sync_queue_items')
         .query(Q.where('entity_id', quote.id))
         .fetch();
       const queueByDraftId: SyncQueueItem[] = [];
-      for (const draftId of draftIds) {
+      for (const draft of drafts) {
         const items = await database
           .get<SyncQueueItem>('sync_queue_items')
-          .query(Q.where('entity_id', draftId))
+          .query(Q.where('entity_id', draft.id))
           .fetch();
         queueByDraftId.push(...items);
       }
-      const queueItems = [...queueByQuoteId, ...queueByDraftId];
-      await database.write(async () => {
-        for (const item of queueItems) {
-          if (shouldDropQueueItemForDeletedLocalQuote(item, quote.id, draftIds)) {
-            await item.destroyPermanently();
-          }
-        }
-        for (const draft of drafts) {
-          await draft.destroyPermanently();
-        }
-        await quote.destroyPermanently();
+      await hardDeleteEmptyLocalQuote({
+        quote,
+        drafts,
+        queueItems: [...queueByQuoteId, ...queueByDraftId],
+        write: (work) => database.write(work),
       });
     } catch {
       // Stay on the list; swipe again to retry
