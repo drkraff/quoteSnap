@@ -1521,6 +1521,34 @@ describe('processQueue', () => {
     expect(item.retryCount).toBe(0);
   });
 
+  it('forwards imported source on rate-card upsert', async () => {
+    const item = makeQueueItem({
+      entityType: 'rate_card',
+      entityId: 'rate-card:copper pipe|foot|plumbing',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        name: 'Copper Pipe',
+        unit: 'foot',
+        unitPriceCents: 5200,
+        trade: 'plumbing',
+        source: 'imported',
+      }),
+    });
+    queueItems = [item];
+    mockedUpsertRateCardEntry.mockResolvedValue({ id: 'rc-1', useCount: 1 });
+
+    await processQueue();
+
+    expect(mockedUpsertRateCardEntry).toHaveBeenCalledWith({
+      name: 'Copper Pipe',
+      unit: 'foot',
+      unitPriceCents: 5200,
+      trade: 'plumbing',
+      source: 'imported',
+    });
+    expect(item.status).toBe('destroyed');
+  });
+
   it('posts a typed rate-card upsert and maps alias units', async () => {
     const item = makeQueueItem({
       entityType: 'rate_card',

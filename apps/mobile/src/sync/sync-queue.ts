@@ -375,7 +375,12 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       unit,
       unitPriceCents: payload.unitPriceCents as number,
       trade: typeof payload.trade === 'string' ? payload.trade : undefined,
-      source: payload.source === 'confirmed' ? 'confirmed' : 'typed',
+      source:
+        payload.source === 'confirmed'
+          ? 'confirmed'
+          : payload.source === 'imported'
+            ? 'imported'
+            : 'typed',
     });
     return;
   }

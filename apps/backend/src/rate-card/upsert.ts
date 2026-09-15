@@ -100,10 +100,10 @@ function parseSource(value: unknown): { ok: true; source: RateCardSource } | { o
   if (value === undefined || value === null) {
     return { ok: true, source: "typed" };
   }
-  if (value === "typed" || value === "confirmed") {
+  if (value === "typed" || value === "confirmed" || value === "imported") {
     return { ok: true, source: value };
   }
-  return { ok: false, error: "source must be typed or confirmed" };
+  return { ok: false, error: "source must be typed, confirmed, or imported" };
 }
 
 export function parseHistoryEntry(value: unknown): RateCardHistoryEntry | null {
@@ -159,7 +159,8 @@ export function historyToJsonb(entries: RateCardHistoryEntry[]): string {
 }
 
 export function rateCardRowToResponse(row: RateCardRow): RateCardEntryResponse {
-  const source: RateCardSource = row.source === "confirmed" ? "confirmed" : "typed";
+  const source: RateCardSource =
+    row.source === "confirmed" || row.source === "imported" ? row.source : "typed";
   return {
     id: row.id,
     normalizedName: row.normalized_name,

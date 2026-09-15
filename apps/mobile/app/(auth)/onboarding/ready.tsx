@@ -39,6 +39,19 @@ export default function ReadyScreen(): JSX.Element {
       >
         <Text style={styles.ctaText}>Start Quoting</Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.secondary}
+        onPress={() => {
+          router.push({
+            pathname: '/(auth)/onboarding/import-quotes',
+            params: { trade: trade ?? '', itemCount: itemCount ?? '0' },
+          });
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Import old quotes"
+      >
+        <Text style={styles.secondaryText}>Import old quotes</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -76,6 +89,17 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondary: {
+    padding: 16,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryText: {
+    color: '#0066cc',
     fontSize: 16,
     fontWeight: '600',
   },

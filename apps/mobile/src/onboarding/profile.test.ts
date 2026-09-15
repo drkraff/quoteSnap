@@ -57,5 +57,10 @@ describe('canFinishOnboarding / skip catalog', () => {
       kind: 'seed',
       trade: 'electrical',
     });
+    expect(onboardingAfterProfile('import_quotes', 'hvac')).toEqual({
+      kind: 'import',
+      trade: 'hvac',
+      itemCount: 0,
+    });
   });
 });

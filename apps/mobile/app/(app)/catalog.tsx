@@ -4,6 +4,8 @@ import {
   SectionList,
   StyleSheet,
   SafeAreaView,
+  Pressable,
+  Text,
 } from 'react-native';
 import { Q } from '@nozbe/watermelondb';
 import { useRouter } from 'expo-router';
@@ -229,16 +231,35 @@ export default function CatalogScreen(): JSX.Element {
           />
         )}
         ListEmptyComponent={
-          <EmptyState onAddItem={handleFabPress} />
-        }
-        ListHeaderComponent={
-          <DeadLetterBanner
-            count={deadLetterItems.length}
-            onPress={() => {
+          <EmptyState
+            onAddItem={handleFabPress}
+            onImportOldQuotes={() => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              router.push('/sync-issues' as any);
+              router.push('/import-quotes' as any);
             }}
           />
+        }
+        ListHeaderComponent={
+          <>
+            <DeadLetterBanner
+              count={deadLetterItems.length}
+              onPress={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                router.push('/sync-issues' as any);
+              }}
+            />
+            <Pressable
+              onPress={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                router.push('/import-quotes' as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Import old quotes"
+              style={styles.importLink}
+            >
+              <Text style={styles.importLinkText}>Import old quotes</Text>
+            </Pressable>
+          </>
         }
         stickySectionHeadersEnabled={true}
         contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
@@ -266,6 +287,17 @@ const styles = StyleSheet.create({
   },
   emptyContent: {
     flex: 1,
+  },
+  importLink: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  importLinkText: {
+    color: colors.accent,
+    fontSize: 16,
+    fontWeight: '600',
   },
   syncDot: {
     position: 'absolute',

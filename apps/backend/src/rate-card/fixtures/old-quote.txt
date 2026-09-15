@@ -1,0 +1,22 @@
+ACME Plumbing
+Quote #1042
+Date: 2026-03-01
+Customer: Miller residence
+Qty  Description                     Unit        Price
+
+Replace standard outlet              each        $85.00
+Replace outlet + back box            each        $145.00
+Copper pipe                          per foot    $12.50
+Kitchen tear-out + haul-away         job         $1,800.00
+Labor                                hour        $75.00
+3 extra outlets  @ $85
+Labor 2 hours $150/h
+Laminate cabinets                    14 lin ft
+Mystery line with no price
+Labor 2 hours $300
+
+Subtotal                             $2,197.50
+Tax                                  $0.00
+Total due                            $2,197.50
+
+Thanks for your business

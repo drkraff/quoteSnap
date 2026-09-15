@@ -1,6 +1,6 @@
 import type { Trade } from '../api/onboarding';
 
-export type OnboardingContinueAction = 'skip_catalog' | 'load_catalog';
+export type OnboardingContinueAction = 'skip_catalog' | 'load_catalog' | 'import_quotes';
 
 export function dollarsToCents(text: string): number | null {
   const stripped = text.trim().replace(/^\$/, '').replace(/,/g, '');
@@ -49,9 +49,15 @@ export function canFinishOnboarding(args: {
 export function onboardingAfterProfile(
   action: OnboardingContinueAction,
   trade: Trade,
-): { kind: 'ready'; trade: Trade; itemCount: 0 } | { kind: 'seed'; trade: Trade } {
+):
+  | { kind: 'ready'; trade: Trade; itemCount: 0 }
+  | { kind: 'seed'; trade: Trade }
+  | { kind: 'import'; trade: Trade; itemCount: 0 } {
   if (action === 'skip_catalog') {
     return { kind: 'ready', trade, itemCount: 0 };
+  }
+  if (action === 'import_quotes') {
+    return { kind: 'import', trade, itemCount: 0 };
   }
   return { kind: 'seed', trade };
 }

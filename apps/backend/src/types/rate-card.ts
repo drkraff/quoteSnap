@@ -1,4 +1,4 @@
-export type RateCardSource = "typed" | "confirmed";
+export type RateCardSource = "typed" | "confirmed" | "imported";
 
 export type RateCardHistoryEntry = {
   unitPriceCents: number;

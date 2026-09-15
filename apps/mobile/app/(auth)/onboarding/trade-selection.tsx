@@ -103,7 +103,9 @@ export default function TradeSelectionScreen(): JSX.Element {
     }
   }
 
-  async function handleContinue(action: 'skip_catalog' | 'load_catalog'): Promise<void> {
+  async function handleContinue(
+    action: 'skip_catalog' | 'load_catalog' | 'import_quotes',
+  ): Promise<void> {
     if (selectedTrade === null || hourlyRateCents === null || !markupParsed.ok) return;
     setError(null);
     setSaving(true);
@@ -113,6 +115,13 @@ export default function TradeSelectionScreen(): JSX.Element {
       if (next.kind === 'ready') {
         router.replace({
           pathname: '/(auth)/onboarding/ready',
+          params: { trade: next.trade, itemCount: String(next.itemCount) },
+        });
+        return;
+      }
+      if (next.kind === 'import') {
+        router.push({
+          pathname: '/(auth)/onboarding/import-quotes',
           params: { trade: next.trade, itemCount: String(next.itemCount) },
         });
         return;
@@ -189,6 +198,19 @@ export default function TradeSelectionScreen(): JSX.Element {
           <Text style={styles.ctaText}>
             {saving ? 'Saving...' : 'Start quoting'}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondary}
+          onPress={() => {
+            void handleContinue('import_quotes');
+          }}
+          disabled={!canContinue || saving}
+          accessibilityRole="button"
+          accessibilityLabel="Import old quotes"
+          accessibilityState={{ disabled: !canContinue || saving }}
+        >
+          <Text style={styles.secondaryText}>Import old quotes</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
