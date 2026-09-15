@@ -187,6 +187,35 @@ describe('toCustomerQuotePayload', () => {
     expect(json).toContain('Kitchen');
   });
 
+  it('keeps roomName when present and stays null for ungrouped lines', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 15000,
+      rooms: [],
+      lineItems: [
+        {
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          unit: 'foot',
+        },
+        {
+          name: 'Labor',
+          quantity: 2,
+          unitPriceCents: 7500,
+          unit: 'hour',
+          roomName: 'Kitchen',
+        },
+      ],
+    });
+    expect(payload.lineItems[0]!.roomName).toBeNull();
+    expect(payload.lineItems[1]!.roomName).toBe('Kitchen');
+    expect(payload.totalCents).toBe(15000);
+    expect(payload.lineItems[0]!.unitPriceCents).toBeNull();
+    expect(customerPayloadHasPrivateNoteKey(payload)).toBe(false);
+    expect(JSON.stringify(payload)).not.toContain('privateNote');
+  });
+
   it('drops photos, local URIs, and r2 keys from the customer payload', () => {
     const payload = toCustomerQuotePayload({
       customerPhone: '+15555550100',

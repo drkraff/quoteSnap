@@ -95,15 +95,24 @@ import {
   ADD_ROOM_LABEL,
   ADD_ROOM_PLACEHOLDER,
   ROOM_ADD_ITEM_LABEL,
+  ROOM_DELETE_CONFIRM_ACTION,
+  ROOM_DELETE_CONFIRM_MESSAGE,
+  ROOM_DELETE_CONFIRM_TITLE,
+  ROOM_DELETE_LABEL,
   ROOM_MOVE_LABEL,
+  ROOM_NAME_MAX_LENGTH,
   ROOM_NOTE_ADD,
+  ROOM_RENAME_LABEL,
   ROOM_UNGROUPED_CHOICE,
   UNGROUPED_ROOM_LABEL,
   addRoom,
   assignLineRoom,
   draftListRows,
   parseRoomsJson,
+  removeRoom,
+  renameRoom,
   rowIndexForLineIndex,
+  sanitizeLineRooms,
   serializeRooms,
   updateRoomPrivateNote,
   type QuoteRoom,
@@ -155,6 +164,8 @@ export default function DraftScreen(): JSX.Element {
   const [addToRoomId, setAddToRoomId] = useState<string | null>(null);
   const [roomPickerIndex, setRoomPickerIndex] = useState<number | null>(null);
   const [roomNoteId, setRoomNoteId] = useState<string | null>(null);
+  const [roomRenameId, setRoomRenameId] = useState<string | null>(null);
+  const [roomRenameDraft, setRoomRenameDraft] = useState('');
   const [priceEditIndex, setPriceEditIndex] = useState<number | null>(null);
   const [lineNoteIndex, setLineNoteIndex] = useState<number | null>(null);
   const [alternateForIndex, setAlternateForIndex] = useState<number | null>(null);
@@ -824,11 +835,60 @@ export default function DraftScreen(): JSX.Element {
     await persistRooms(next);
   }
 
+  async function handleRenameRoom(roomId: string, name: string): Promise<void> {
+    if (!quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const next = renameRoom(rooms, roomId, name);
+    setRoomRenameId(null);
+    setRoomRenameDraft('');
+    if (next === rooms) return;
+    await persistRooms(next);
+  }
+
+  function handleDeleteRoom(roomId: string): void {
+    if (!quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    Alert.alert(ROOM_DELETE_CONFIRM_TITLE, ROOM_DELETE_CONFIRM_MESSAGE, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: ROOM_DELETE_CONFIRM_ACTION,
+        style: 'destructive',
+        onPress: () => { void confirmDeleteRoom(roomId); },
+      },
+    ]);
+  }
+
+  async function confirmDeleteRoom(roomId: string): Promise<void> {
+    if (!quote) return;
+    await recoverFromAiFailed();
+    const removed = removeRoom(rooms, lineItems, roomId);
+    if (removed.rooms === rooms) return;
+    await persistRooms(removed.rooms);
+    if (removed.items !== lineItems) {
+      await persistLineItems(removed.items);
+    }
+    const nextPhotos = sanitizeLineRooms(removed.rooms, photos);
+    if (nextPhotos !== photos) {
+      await persistPhotos(nextPhotos);
+    }
+    if (roomNoteId === roomId) setRoomNoteId(null);
+    if (roomRenameId === roomId) {
+      setRoomRenameId(null);
+      setRoomRenameDraft('');
+    }
+    if (addToRoomId === roomId) setAddToRoomId(null);
+  }
+
   async function handleAssignRoom(index: number, roomId: string | null): Promise<void> {
     if (!draft || !quote) return;
     if (rejectFrozenMoneyWrite()) return;
     await recoverFromAiFailed();
     const newItems = assignLineRoom(lineItems, index, roomId);
+    if (newItems === lineItems) {
+      setRoomPickerIndex(null);
+      return;
+    }
     await persistLineItems(newItems);
     setRoomPickerIndex(null);
   }
@@ -1047,9 +1107,33 @@ export default function DraftScreen(): JSX.Element {
         }
         renderItem={({ item: row }) => {
           if (row.kind === 'room') {
+            const renaming = roomRenameId === row.room.id;
             return (
               <View style={styles.roomHeader}>
-                <Text style={styles.roomHeaderTitle}>{row.room.name}</Text>
+                {renaming ? (
+                  <TextInput
+                    style={styles.roomHeaderTitle}
+                    value={roomRenameDraft}
+                    onChangeText={setRoomRenameDraft}
+                    maxLength={ROOM_NAME_MAX_LENGTH}
+                    autoFocus
+                    returnKeyType="done"
+                    onSubmitEditing={() => { void handleRenameRoom(row.room.id, roomRenameDraft); }}
+                    onBlur={() => { void handleRenameRoom(row.room.id, roomRenameDraft); }}
+                    accessibilityLabel={`${ROOM_RENAME_LABEL} ${row.room.name}`}
+                  />
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      setRoomRenameId(row.room.id);
+                      setRoomRenameDraft(row.room.name);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${ROOM_RENAME_LABEL} ${row.room.name}`}
+                  >
+                    <Text style={styles.roomHeaderTitle}>{row.room.name}</Text>
+                  </Pressable>
+                )}
                 <View style={styles.roomHeaderActions}>
                   <Pressable
                     onPress={() => {
@@ -1083,6 +1167,14 @@ export default function DraftScreen(): JSX.Element {
                     <Text style={styles.roomHeaderButtonText}>
                       {row.room.privateNote ? 'Room note' : ROOM_NOTE_ADD}
                     </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleDeleteRoom(row.room.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${ROOM_DELETE_LABEL} ${row.room.name}`}
+                    style={styles.roomHeaderButton}
+                  >
+                    <Text style={styles.roomHeaderButtonText}>{ROOM_DELETE_LABEL}</Text>
                   </Pressable>
                 </View>
                 {row.room.privateNote ? (

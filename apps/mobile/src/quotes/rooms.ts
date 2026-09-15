@@ -15,6 +15,12 @@ export const ROOM_MOVE_LABEL = 'Move to';
 export const ROOM_UNGROUPED_CHOICE = 'Ungrouped';
 export const ROOM_ADD_ITEM_LABEL = 'Add item';
 export const ROOM_NOTE_ADD = 'Add room note';
+export const ROOM_RENAME_LABEL = 'Rename';
+export const ROOM_DELETE_LABEL = 'Remove';
+export const ROOM_DELETE_CONFIRM_TITLE = 'Remove this room?';
+export const ROOM_DELETE_CONFIRM_MESSAGE =
+  'Items stay on the quote as ungrouped. Totals do not change.';
+export const ROOM_DELETE_CONFIRM_ACTION = 'Remove';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -141,16 +147,99 @@ export function assignLineRoom(
   index: number,
   roomId: string | null,
 ): LineItem[] {
+  if (!Array.isArray(items) || index < 0 || index >= items.length) {
+    return items;
+  }
+  const current = items[index];
+  if (!current) {
+    return items;
+  }
+  const nextId = roomId == null || roomId === '' ? undefined : roomId;
+  if (current.roomId === nextId) {
+    return items;
+  }
   return items.map((item, i) => {
     if (i !== index) return item;
     const next = { ...item };
-    if (roomId == null || roomId === '') {
+    if (nextId == null) {
       delete next.roomId;
     } else {
-      next.roomId = roomId;
+      next.roomId = nextId;
     }
     return next;
   });
+}
+
+/**
+ * Drop roomIds that no longer match a room. Empty rooms → every line
+ * ungrouped (single-memo). Does not rewrite prices.
+ */
+export function sanitizeLineRooms<T extends { roomId?: string | null }>(
+  rooms: QuoteRoom[],
+  items: readonly T[] | null | undefined,
+): T[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  if (items.length === 0) {
+    return items as T[];
+  }
+  const known = new Set(rooms.map((room) => room.id));
+  let changed = false;
+  const next = items.map((item) => {
+    if (!item.roomId || known.has(item.roomId)) {
+      return item;
+    }
+    changed = true;
+    const copy = { ...item };
+    delete copy.roomId;
+    return copy;
+  });
+  return changed ? next : (items as T[]);
+}
+
+/**
+ * Change a room's display name. Keeps the id so lines stay grouped.
+ * Does not stamp a spoken room name onto lines — voice extract only
+ * groups names the contractor actually said.
+ */
+export function renameRoom(
+  rooms: QuoteRoom[],
+  roomId: string,
+  name: string,
+): QuoteRoom[] {
+  const normalized = normalizeRoomName(name);
+  if (!normalized || rooms.length === 0) {
+    return rooms;
+  }
+  let changed = false;
+  const next = rooms.map((room) => {
+    if (room.id !== roomId || room.name === normalized) {
+      return room;
+    }
+    changed = true;
+    return { ...room, name: normalized };
+  });
+  return changed ? next : rooms;
+}
+
+/**
+ * Remove a room and ungroup its lines (null roomId). Missing room / empty
+ * list is a no-op. Totals are unchanged because prices are not rewritten.
+ */
+export function removeRoom(
+  rooms: QuoteRoom[],
+  items: LineItem[],
+  roomId: string,
+): { rooms: QuoteRoom[]; items: LineItem[] } {
+  if (!Array.isArray(rooms) || rooms.length === 0) {
+    return { rooms, items: sanitizeLineRooms([], items) };
+  }
+  const nextRooms = rooms.filter((room) => room.id !== roomId);
+  if (nextRooms.length === rooms.length) {
+    return { rooms, items };
+  }
+  return { rooms: nextRooms, items: sanitizeLineRooms(nextRooms, items) };
 }
 
 export function roomNameForLine(

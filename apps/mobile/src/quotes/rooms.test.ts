@@ -1,6 +1,11 @@
 import {
   ADD_ROOM_LABEL,
   ADD_ROOM_PLACEHOLDER,
+  ROOM_DELETE_CONFIRM_ACTION,
+  ROOM_DELETE_CONFIRM_MESSAGE,
+  ROOM_DELETE_CONFIRM_TITLE,
+  ROOM_DELETE_LABEL,
+  ROOM_RENAME_LABEL,
   UNGROUPED_ROOM_LABEL,
   addRoom,
   assignLineRoom,
@@ -8,11 +13,14 @@ import {
   normalizeRoomName,
   parseRoomId,
   parseRoomsJson,
+  removeRoom,
+  renameRoom,
   rowIndexForLineIndex,
+  sanitizeLineRooms,
   serializeRooms,
   updateRoomPrivateNote,
 } from './rooms';
-import type { LineItem } from '../utils/line-items';
+import { recalculateTotal, type LineItem } from '../utils/line-items';
 
 const KITCHEN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const BATH = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
@@ -60,6 +68,16 @@ describe('addRoom / assignLineRoom', () => {
     expect(assigned[0]!.roomId).toBe(KITCHEN);
     expect(assigned[0]!.unitPriceCents).toBeNull();
     expect(assignLineRoom(assigned, 0, null)[0]!.roomId).toBeUndefined();
+  });
+
+  it('treats empty lists and out-of-range selection as a no-op', () => {
+    const items: LineItem[] = [
+      { catalogItemId: '', name: 'Labor', quantity: 2, unitPriceCents: 7500 },
+    ];
+    expect(assignLineRoom([], 0, KITCHEN)).toEqual([]);
+    expect(assignLineRoom(items, 99, KITCHEN)).toBe(items);
+    expect(assignLineRoom(items, -1, KITCHEN)).toBe(items);
+    expect(assignLineRoom(items, 0, null)).toBe(items);
   });
 });
 
@@ -109,6 +127,126 @@ describe('draftListRows', () => {
   });
 });
 
+describe('empty room list / single-memo', () => {
+  it('stays a valid ungrouped memo and clears stale roomIds without inventing a price', () => {
+    const items: LineItem[] = [
+      { catalogItemId: '', name: 'Labor', quantity: 2, unitPriceCents: 7500 },
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        roomId: KITCHEN,
+      },
+    ];
+    const rows = draftListRows([], items);
+    expect(rows).toEqual([
+      { kind: 'line', index: 0, item: items[0] },
+      { kind: 'line', index: 1, item: items[1] },
+    ]);
+    expect(sanitizeLineRooms([], null)).toEqual([]);
+    expect(sanitizeLineRooms([], [])).toEqual([]);
+    const sanitized = sanitizeLineRooms([], items);
+    expect(sanitized[0]!.roomId).toBeUndefined();
+    expect(sanitized[1]!.roomId).toBeUndefined();
+    expect(sanitized[1]!.unitPriceCents).toBeNull();
+    expect(recalculateTotal(sanitized)).toBe(15000);
+    expect(recalculateTotal(sanitized)).toBe(recalculateTotal(items));
+  });
+});
+
+describe('removeRoom', () => {
+  it('ungroups lines and leaves totals unchanged', () => {
+    const rooms = [
+      { id: KITCHEN, name: 'Kitchen' },
+      { id: BATH, name: 'Bath' },
+    ];
+    const items: LineItem[] = [
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        roomId: KITCHEN,
+      },
+      {
+        catalogItemId: '',
+        name: 'Labor',
+        quantity: 2,
+        unitPriceCents: 7500,
+        roomId: KITCHEN,
+      },
+      {
+        catalogItemId: '',
+        name: 'Vanity',
+        quantity: 1,
+        unitPriceCents: 80000,
+        roomId: BATH,
+      },
+    ];
+    const beforeTotal = recalculateTotal(items);
+    const removed = removeRoom(rooms, items, KITCHEN);
+    expect(removed.rooms).toEqual([{ id: BATH, name: 'Bath' }]);
+    expect(removed.items[0]!.roomId).toBeUndefined();
+    expect(removed.items[1]!.roomId).toBeUndefined();
+    expect(removed.items[2]!.roomId).toBe(BATH);
+    expect(removed.items[0]!.unitPriceCents).toBeNull();
+    expect(recalculateTotal(removed.items)).toBe(beforeTotal);
+    expect(recalculateTotal(removed.items)).toBe(95000);
+
+    const rows = draftListRows(removed.rooms, removed.items);
+    expect(rows.map((row) => row.kind)).toEqual(['room', 'line', 'ungrouped', 'line', 'line']);
+  });
+
+  it('deleting the last room returns a single-memo list without crashing', () => {
+    const rooms = [{ id: KITCHEN, name: 'Kitchen' }];
+    const items: LineItem[] = [
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        roomId: KITCHEN,
+      },
+    ];
+    const removed = removeRoom(rooms, items, KITCHEN);
+    expect(removed.rooms).toEqual([]);
+    expect(removed.items[0]!.roomId).toBeUndefined();
+    expect(draftListRows(removed.rooms, removed.items)).toEqual([
+      { kind: 'line', index: 0, item: removed.items[0] },
+    ]);
+    expect(removeRoom([], items, KITCHEN).rooms).toEqual([]);
+    expect(removeRoom([], items, KITCHEN).items[0]!.roomId).toBeUndefined();
+    expect(removeRoom(rooms, [], BATH)).toEqual({ rooms, items: [] });
+    expect(removeRoom(rooms, items, BATH)).toEqual({ rooms, items });
+  });
+});
+
+describe('renameRoom', () => {
+  it('renames in place and does not invent a spoken room on lines', () => {
+    const rooms = addRoom([{ id: BATH, name: 'Bath' }], 'Kitchen', KITCHEN);
+    const items: LineItem[] = [
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        roomId: KITCHEN,
+      },
+    ];
+    const renamed = renameRoom(rooms, KITCHEN, '  Kitchen upstairs  ');
+    expect(renamed[1]!.id).toBe(KITCHEN);
+    expect(renamed[1]!.name).toBe('Kitchen upstairs');
+    expect(renamed[0]!.name).toBe('Bath');
+    expect(items[0]!.roomId).toBe(KITCHEN);
+    expect((items[0] as { roomName?: string }).roomName).toBeUndefined();
+    expect(items[0]!.unitPriceCents).toBeNull();
+    expect(renameRoom(rooms, KITCHEN, '   ')).toBe(rooms);
+    expect(renameRoom([], KITCHEN, 'Kitchen')).toEqual([]);
+    expect(renameRoom(rooms, BATH, 'Bath')).toBe(rooms);
+  });
+});
+
 describe('updateRoomPrivateNote / copy', () => {
   it('stores a contractor-only room note and English labels', () => {
     const rooms = addRoom([], 'Kitchen', KITCHEN);
@@ -118,6 +256,12 @@ describe('updateRoomPrivateNote / copy', () => {
     expect(ADD_ROOM_LABEL).toBe('Add room');
     expect(ADD_ROOM_PLACEHOLDER.toLowerCase()).toContain('room');
     expect(UNGROUPED_ROOM_LABEL).toBe('Job');
+    expect(ROOM_DELETE_LABEL).toBe('Remove');
+    expect(ROOM_DELETE_CONFIRM_TITLE).toBe('Remove this room?');
+    expect(ROOM_DELETE_CONFIRM_MESSAGE.toLowerCase()).toContain('ungrouped');
+    expect(ROOM_DELETE_CONFIRM_MESSAGE.toLowerCase()).toContain('total');
+    expect(ROOM_DELETE_CONFIRM_ACTION).toBe('Remove');
+    expect(ROOM_RENAME_LABEL).toBe('Rename');
     expect(normalizeRoomName('Bath')).toBe('Bath');
     expect(parseRoomId(KITCHEN)).toBe(KITCHEN);
     expect(parseRoomId('Kitchen')).toBeUndefined();
