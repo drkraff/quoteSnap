@@ -83,6 +83,7 @@ import {
   SHARE_QUOTE_LABEL,
   shareCustomerQuote,
 } from '../../../src/quotes/share-customer-quote';
+import { markQuoteSentAfterShare } from '../../../src/quotes/mark-quote-sent';
 import {
   ADD_ALTERNATE_LABEL,
   OPTION_ALTERNATE_LABEL,
@@ -867,6 +868,10 @@ export default function DraftScreen(): JSX.Element {
     }
     setSharing(true);
     try {
+      await phoneSync.flush();
+      await noteSync.flush();
+      await sentenceSync.flush();
+      await roomsSync.flush();
       const contractor = useAuthStore.getState().contractor;
       const result = await shareCustomerQuote(
         {
@@ -885,6 +890,10 @@ export default function DraftScreen(): JSX.Element {
       );
       if (!result.ok) {
         Alert.alert('Cannot share', result.message);
+        return;
+      }
+      if (quote) {
+        await markQuoteSentAfterShare(quote);
       }
     } finally {
       setSharing(false);

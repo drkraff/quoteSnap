@@ -2,9 +2,11 @@
  * HIST-01 quote statuses. Keep in sync with CHECK quotes_status_allowed
  * in 007_money_status_checks.sql and the Watermelon `quotes.status` comment.
  *
- * Client POST/PUT may only write CLIENT_QUOTE_STATUSES (A-06). The voice
- * worker/reaper own ai_processing / ai_failed. Phase 6 owns
- * sent / approved / declined / expired / failed_send.
+ * Client POST may only write CLIENT_QUOTE_STATUSES (A-06). Client PUT may
+ * also write `sent` after a successful customer PDF/HTML share (no Twilio,
+ * phone optional). The voice worker/reaper own ai_processing / ai_failed.
+ * Phase 6 still owns approved / declined / expired / failed_send — a client
+ * cannot self-approve.
  *
  * SYNC-06 (thin): FROZEN_QUOTE_STATUSES cannot have line items or totals
  * rewritten by client PUT. There is no quote_snapshots table (SMS-02/04).
@@ -28,6 +30,10 @@ export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
 export const CLIENT_QUOTE_STATUSES = ["draft_local", "draft_queued"] as const;
 export type ClientQuoteStatus = (typeof CLIENT_QUOTE_STATUSES)[number];
 
+/** PUT /quotes/:id may write drafts or mark sent after share. POST create stays drafts-only. */
+export const CLIENT_PUT_QUOTE_STATUSES = ["draft_local", "draft_queued", "sent"] as const;
+export type ClientPutQuoteStatus = (typeof CLIENT_PUT_QUOTE_STATUSES)[number];
+
 /** Customer-facing terminal statuses. Line items and totals are write-once. */
 export const FROZEN_QUOTE_STATUSES = [
   "sent",
@@ -44,6 +50,7 @@ export const QUOTE_MONEY_FROZEN_ERROR =
 
 const QUOTE_STATUS_SET: ReadonlySet<string> = new Set(QUOTE_STATUSES);
 const CLIENT_QUOTE_STATUS_SET: ReadonlySet<string> = new Set(CLIENT_QUOTE_STATUSES);
+const CLIENT_PUT_QUOTE_STATUS_SET: ReadonlySet<string> = new Set(CLIENT_PUT_QUOTE_STATUSES);
 const FROZEN_QUOTE_STATUS_SET: ReadonlySet<string> = new Set(FROZEN_QUOTE_STATUSES);
 
 export function isQuoteStatus(value: string): value is QuoteStatus {
@@ -52,6 +59,10 @@ export function isQuoteStatus(value: string): value is QuoteStatus {
 
 export function isClientQuoteStatus(value: string): value is ClientQuoteStatus {
   return CLIENT_QUOTE_STATUS_SET.has(value);
+}
+
+export function isClientPutQuoteStatus(value: string): value is ClientPutQuoteStatus {
+  return CLIENT_PUT_QUOTE_STATUS_SET.has(value);
 }
 
 export function isFrozenQuoteStatus(value: string): value is FrozenQuoteStatus {

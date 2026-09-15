@@ -30,6 +30,8 @@ import {
   SHARE_QUOTE_LABEL,
   shareCustomerQuote,
 } from '../../../src/quotes/share-customer-quote';
+import { markQuoteSentAfterShare } from '../../../src/quotes/mark-quote-sent';
+import { findQuoteRecord } from '../../../src/quotes/find-quote';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
@@ -149,6 +151,23 @@ export default function QuoteDetailScreen(): JSX.Element {
       );
       if (!result.ok) {
         Alert.alert('Cannot share', result.message);
+        return;
+      }
+      const found = await findQuoteRecord(() =>
+        database.get<Quote>('quotes').find(id),
+      );
+      if (!found.ok) return;
+      const outcome = await markQuoteSentAfterShare(found.record);
+      if (outcome === 'sent') {
+        setQuote((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: found.record.status,
+                sentAt: found.record.sentAt?.toISOString() ?? prev.sentAt,
+              }
+            : prev,
+        );
       }
     } finally {
       setSharing(false);
