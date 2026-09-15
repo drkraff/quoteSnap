@@ -20,6 +20,8 @@ export interface LineItem {
   privateNote?: string | null;
   /** Snapshot provenance: spoken | catalog | learned | computed | unknown | known. */
   priceSource?: PriceSource;
+  /** Spoken/typed material cost (cents). Input to cost × markup — not a sell price. */
+  materialCostCents?: number | null;
   /** Shared UUID for a thin base+alternate pair. */
   optionGroupId?: string;
   /** base = in the quote total; alt = visible, excluded from total. */
@@ -88,6 +90,10 @@ function coerceLineItem(value: unknown): LineItem {
   const priceSource = parsePriceSource(raw.priceSource);
   if (priceSource) {
     line.priceSource = priceSource;
+  }
+  const materialCost = raw.materialCostCents;
+  if (Number.isInteger(materialCost) && (materialCost as number) > 0) {
+    line.materialCostCents = materialCost as number;
   }
   const optionGroupId = parseOptionGroupId(raw.optionGroupId);
   const optionRole = parseOptionRole(raw.optionRole);
@@ -240,18 +246,31 @@ export function updateQuantity(
 export function updatePrice(
   items: LineItem[],
   index: number,
-  newPriceCents: number,
+  newPriceCents: number | null,
+  extras?: {
+    priceSource?: PriceSource;
+    materialCostCents?: number | null;
+  },
 ): LineItem[] {
-  return items.map((item, i) =>
-    i === index
-      ? {
-          ...item,
-          unitPriceCents: newPriceCents,
-          confidence: undefined,
-          priceSource: typedPriceSource(newPriceCents),
-        }
-      : item,
-  );
+  return items.map((item, i) => {
+    if (i !== index) {
+      return item;
+    }
+    const next: LineItem = {
+      ...item,
+      unitPriceCents: newPriceCents,
+      confidence: undefined,
+      priceSource: extras?.priceSource ?? typedPriceSource(newPriceCents),
+    };
+    if (extras && Object.prototype.hasOwnProperty.call(extras, 'materialCostCents')) {
+      if (extras.materialCostCents != null && extras.materialCostCents > 0) {
+        next.materialCostCents = extras.materialCostCents;
+      } else {
+        delete next.materialCostCents;
+      }
+    }
+    return next;
+  });
 }
 
 export function updatePrivateNote(

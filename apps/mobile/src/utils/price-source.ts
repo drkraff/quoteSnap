@@ -49,7 +49,7 @@ export function draftPriceSourceLabel(flag: DraftPriceFlag): string | null {
   }
 }
 
-/** Contractor typed/confirmed a number on review. */
-export function typedPriceSource(unitPriceCents: number): PriceSource {
-  return unitPriceCents > 0 ? 'known' : 'unknown';
+/** Contractor typed/confirmed a number on review. Blank stays unknown — never invent. */
+export function typedPriceSource(unitPriceCents: number | null | undefined): PriceSource {
+  return unitPriceCents != null && unitPriceCents > 0 ? 'known' : 'unknown';
 }

@@ -123,6 +123,34 @@ describe('updatePrice', () => {
     const result = updatePrice(items, 0, 2500);
     expect(result[1].unitPriceCents).toBe(500);
   });
+
+  it('keeps computed when extras pass priceSource and stores material cost', () => {
+    const items: LineItem[] = [
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: null, priceSource: 'unknown' },
+    ];
+    const computed = updatePrice(items, 0, 4800, {
+      priceSource: 'computed',
+      materialCostCents: 4000,
+    });
+    expect(computed[0]!.unitPriceCents).toBe(4800);
+    expect(computed[0]!.priceSource).toBe('computed');
+    expect(computed[0]!.materialCostCents).toBe(4000);
+
+    const manual = updatePrice(computed, 0, 5000);
+    expect(manual[0]!.priceSource).toBe('known');
+    expect(manual[0]!.unitPriceCents).toBe(5000);
+    expect(manual[0]!.materialCostCents).toBe(4000);
+  });
+
+  it('clears unit price to unknown without inventing cents', () => {
+    const items: LineItem[] = [
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 4800, priceSource: 'computed' },
+    ];
+    const result = updatePrice(items, 0, null, { priceSource: 'unknown', materialCostCents: null });
+    expect(result[0]!.unitPriceCents).toBeNull();
+    expect(result[0]!.priceSource).toBe('unknown');
+    expect(result[0]!.materialCostCents).toBeUndefined();
+  });
 });
 
 describe('updatePrivateNote', () => {
@@ -265,6 +293,28 @@ describe('adhoc / unknown prices', () => {
     expect(parsed[0]!.priceSource).toBe('computed');
     expect(parsed[1]!.priceSource).toBe('unknown');
     expect(parseLineItems(JSON.stringify([{ name: 'X', quantity: 1, unitPriceCents: 1, priceSource: 'guessed' }]))[0]!.priceSource).toBeUndefined();
+  });
+
+  it('round-trips materialCostCents and does not treat it as unit price', () => {
+    const json = JSON.stringify([
+      {
+        catalogItemId: '',
+        name: 'Copper pipe',
+        quantity: 1,
+        unit: 'foot',
+        unitPriceCents: 4800,
+        priceSource: 'computed',
+        materialCostCents: 4000,
+      },
+    ]);
+    const parsed = parseLineItems(json);
+    expect(parsed[0]!.materialCostCents).toBe(4000);
+    expect(parsed[0]!.unitPriceCents).toBe(4800);
+    expect(JSON.parse(serializeLineItems(parsed))[0].materialCostCents).toBe(4000);
+    expect(
+      parseLineItems(JSON.stringify([{ name: 'X', quantity: 1, unitPriceCents: 1, materialCostCents: 0 }]))[0]!
+        .materialCostCents,
+    ).toBeUndefined();
   });
 
   it('round-trips optionGroupId + optionRole on draft JSON', () => {

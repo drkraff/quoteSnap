@@ -55,5 +55,6 @@ describe('typedPriceSource', () => {
   it('marks contractor-typed cents as known and blank as unknown', () => {
     expect(typedPriceSource(180000)).toBe('known');
     expect(typedPriceSource(0)).toBe('unknown');
+    expect(typedPriceSource(null)).toBe('unknown');
   });
 });

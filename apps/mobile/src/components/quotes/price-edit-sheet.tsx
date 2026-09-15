@@ -9,50 +9,109 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ScrollView,
 } from 'react-native';
+import { dollarsToCents, parseMarkupPercentInput } from '../../onboarding/profile';
+import {
+  centsToDollarText,
+  isLaborLine,
+  resolveDraftPriceEdit,
+} from '../../quotes/material-markup';
+import { draftPriceFlag, draftPriceSourceLabel, type PriceSource } from '../../utils/price-source';
 import { colors, spacing, typography } from '../../theme/tokens';
+
+export type PriceEditSave = {
+  unitPriceCents: number | null;
+  priceSource: PriceSource;
+  materialCostCents: number | null;
+};
 
 interface PriceEditSheetProps {
   visible: boolean;
   currentPriceCents: number | null;
-  onSave: (newPriceCents: number) => void;
+  currentPriceSource?: PriceSource | null;
+  currentMaterialCostCents?: number | null;
+  markupPercent?: number | null;
+  unit?: string | null;
+  onSave: (result: PriceEditSave) => void;
   onDismiss: () => void;
 }
 
 export function PriceEditSheet({
   visible,
   currentPriceCents,
+  currentPriceSource,
+  currentMaterialCostCents,
+  markupPercent,
+  unit,
   onSave,
   onDismiss,
 }: PriceEditSheetProps): JSX.Element {
-  const [inputValue, setInputValue] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
+  const labor = isLaborLine(unit);
+  const [costText, setCostText] = useState('');
+  const [markupText, setMarkupText] = useState('');
+  const [unitPriceText, setUnitPriceText] = useState('');
+  const [costOrMarkupEdited, setCostOrMarkupEdited] = useState(false);
+  const [unitPriceManuallyEdited, setUnitPriceManuallyEdited] = useState(false);
+  const [isFocused, setIsFocused] = useState<'cost' | 'markup' | 'price' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Pre-fill when sheet opens
   useEffect(() => {
     if (visible) {
-      setInputValue(
-        currentPriceCents == null || currentPriceCents === 0
-          ? ''
-          : (currentPriceCents / 100).toFixed(2),
+      setCostText(centsToDollarText(currentMaterialCostCents));
+      setMarkupText(
+        markupPercent != null && Number.isInteger(markupPercent) ? String(markupPercent) : '',
       );
+      setUnitPriceText(centsToDollarText(currentPriceCents));
+      setCostOrMarkupEdited(false);
+      setUnitPriceManuallyEdited(false);
       setError(null);
+      setIsFocused(null);
     }
-  }, [visible, currentPriceCents]);
+  }, [visible, currentPriceCents, currentMaterialCostCents, markupPercent]);
+
+  const markupParsed = parseMarkupPercentInput(markupText);
+  const parsedCost = costText.trim() === '' ? null : dollarsToCents(costText);
+  const parsedManualPrice = unitPriceText.trim() === '' ? null : dollarsToCents(unitPriceText);
+
+  const resolved = resolveDraftPriceEdit({
+    costCents: parsedCost,
+    markupPercent: markupParsed.ok ? markupParsed.value : null,
+    unitPriceCents: unitPriceManuallyEdited ? parsedManualPrice : currentPriceCents,
+    unitPriceManuallyEdited,
+    costOrMarkupEdited,
+    existingPriceSource: currentPriceSource,
+    isLabor: labor,
+  });
+
+  const unitPriceDisplay = unitPriceManuallyEdited
+    ? unitPriceText
+    : centsToDollarText(resolved.unitPriceCents);
+
+  const sourceLabel = draftPriceSourceLabel(
+    draftPriceFlag(resolved.priceSource, resolved.unitPriceCents),
+  );
 
   function handleSave(): void {
-    const stripped = inputValue.replace(/[$,]/g, '');
-    const parsed = parseFloat(stripped);
-    const newCents = Math.round(parsed * 100);
-
-    if (isNaN(parsed) || newCents <= 0) {
+    if (costText.trim() !== '' && parsedCost == null) {
+      setError('Cost must be greater than $0.00');
+      return;
+    }
+    if (!markupParsed.ok) {
+      setError('Markup must be an integer from 0 to 100');
+      return;
+    }
+    if (unitPriceManuallyEdited && unitPriceText.trim() !== '' && parsedManualPrice == null) {
       setError('Price must be greater than $0.00');
       return;
     }
 
     setError(null);
-    onSave(newCents);
+    onSave({
+      unitPriceCents: resolved.unitPriceCents,
+      priceSource: resolved.priceSource,
+      materialCostCents: parsedCost,
+    });
   }
 
   const screenHeight = Dimensions.get('window').height;
@@ -70,38 +129,84 @@ export function PriceEditSheet({
           style={styles.keyboardAvoid}
         >
           <View style={[styles.sheet, { maxHeight: screenHeight * 0.8 }]}>
-            {/* Drag handle */}
             <View style={styles.handle} />
-
-            {/* Title */}
             <Text style={styles.title}>Edit Price</Text>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {!labor ? (
+                <>
+                  <Text style={styles.fieldLabel}>Material cost (optional)</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      isFocused === 'cost' && styles.inputFocused,
+                    ]}
+                    keyboardType="decimal-pad"
+                    value={costText}
+                    onChangeText={(text) => {
+                      setCostText(text);
+                      setCostOrMarkupEdited(true);
+                      setUnitPriceManuallyEdited(false);
+                      if (error) setError(null);
+                    }}
+                    onFocus={() => setIsFocused('cost')}
+                    onBlur={() => setIsFocused(null)}
+                    placeholderTextColor={colors.mutedText}
+                    placeholder="0.00"
+                    accessibilityLabel="Material cost in dollars"
+                  />
 
-            {/* Price input */}
-            <TextInput
-              style={[
-                styles.input,
-                isFocused && styles.inputFocused,
-                error !== null && styles.inputError,
-              ]}
-              keyboardType="decimal-pad"
-              value={inputValue}
-              onChangeText={(text) => {
-                setInputValue(text);
-                if (error) setError(null);
-              }}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholderTextColor={colors.mutedText}
-              placeholder="0.00"
-              accessibilityLabel="Price in dollars"
-            />
+                  <Text style={styles.fieldLabel}>Markup %</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      isFocused === 'markup' && styles.inputFocused,
+                    ]}
+                    keyboardType="number-pad"
+                    value={markupText}
+                    onChangeText={(text) => {
+                      setMarkupText(text);
+                      setCostOrMarkupEdited(true);
+                      setUnitPriceManuallyEdited(false);
+                      if (error) setError(null);
+                    }}
+                    onFocus={() => setIsFocused('markup')}
+                    onBlur={() => setIsFocused(null)}
+                    placeholderTextColor={colors.mutedText}
+                    placeholder="from your rate"
+                    accessibilityLabel="Material markup percent"
+                  />
+                </>
+              ) : null}
 
-            {/* Inline error */}
-            {error !== null && (
-              <Text style={styles.errorText}>{error}</Text>
-            )}
+              <Text style={styles.fieldLabel}>Unit price</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  isFocused === 'price' && styles.inputFocused,
+                  error !== null && styles.inputError,
+                ]}
+                keyboardType="decimal-pad"
+                value={unitPriceDisplay}
+                onChangeText={(text) => {
+                  setUnitPriceText(text);
+                  setUnitPriceManuallyEdited(true);
+                  if (error) setError(null);
+                }}
+                onFocus={() => setIsFocused('price')}
+                onBlur={() => setIsFocused(null)}
+                placeholderTextColor={colors.mutedText}
+                placeholder="0.00"
+                accessibilityLabel="Price in dollars"
+              />
+              {sourceLabel ? (
+                <Text style={styles.sourceLabel}>{sourceLabel}</Text>
+              ) : null}
 
-            {/* Buttons row */}
+              {error !== null && (
+                <Text style={styles.errorText}>{error}</Text>
+              )}
+            </ScrollView>
+
             <View style={styles.buttonRow}>
               <Pressable
                 style={styles.discardButton}
@@ -161,6 +266,13 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginBottom: spacing.md,
   },
+  fieldLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
+    marginBottom: spacing.xs,
+  },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -178,6 +290,13 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: colors.errorText,
+  },
+  sourceLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '400',
+    lineHeight: 18,
+    color: colors.mutedText,
+    marginBottom: spacing.sm,
   },
   errorText: {
     fontSize: typography.label.fontSize,
