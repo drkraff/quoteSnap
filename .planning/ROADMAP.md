@@ -6,7 +6,7 @@ This file is no longer a live GSD dashboard. Checkboxes and “Plans: TBD” bel
 
 ## Snapshot
 
-Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-15 against `master` through **PR #66**. Overnight 2026-09-14/15 landed the P0 thin vertical (rate card, adhoc voice, skippable seed + hourly, markup compute) plus MVP adjuncts (thin SYNC-06, FAIL-02/03/04/05/07, private notes, price_source, option groups, client sentence, rooms, photos, PDF share, paste→rate card, My rates list, mark-sent on share). FAIL-01 is the [16-scenario map](../docs/WORKFLOW-failure-edge-cases.md). Phase 6 SMS/Twilio/approval page, FAIL-06/08, GPT-4o Vision (`PHOTO-01`), and OCR image import are **not** done. Draft **Import from photo** is a blank-price stub (#63).
+Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-15 against `master` through **PR #70**. Overnight 2026-09-14/15 (through **#62**) landed the P0 thin vertical (rate card, adhoc voice, skippable seed + hourly, markup compute) plus MVP adjuncts (thin SYNC-06, FAIL-02/03/04/05/07, private notes, price_source, option groups, client sentence, rooms, photos, PDF share, paste→rate card, My rates list, mark-sent on share). Day session **#63–#70**: Import from photo stub, My rates `q` filter, FAIL-01 map, P0 attach tests, share cancel/empty edges, PDF Assumptions, cost×markup keypad, option-group selection. FAIL-01 is the [16-scenario map](../docs/WORKFLOW-failure-edge-cases.md). Phase 6 SMS/Twilio/approval page, FAIL-06/08, GPT-4o Vision (`PHOTO-01`), and OCR image import are **not** done. Draft **Import from photo** is a blank-price stub (#63).
 
 | Phase | Requirements | In code | Notes |
 |-------|--------------|---------|-------|
