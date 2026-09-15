@@ -1,4 +1,4 @@
-import { persistStillPlan, photoQueuePayload } from './persist-photo';
+import { persistStillPlan, photoQueuePayload, shouldDropPhotoQueueItem } from './persist-photo';
 
 const PHOTO_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
@@ -28,5 +28,56 @@ describe('persistStillPlan / photoQueuePayload', () => {
         mime: 'image/jpeg',
       },
     });
+  });
+});
+
+describe('shouldDropPhotoQueueItem', () => {
+  it('drops a pending upload for the removed still and leaves other work alone', () => {
+    expect(
+      shouldDropPhotoQueueItem(
+        {
+          entityType: 'photo',
+          status: 'pending',
+          payload: { photoId: PHOTO_A },
+        },
+        PHOTO_A,
+      ),
+    ).toBe(true);
+    expect(
+      shouldDropPhotoQueueItem(
+        {
+          entityType: 'photo',
+          status: 'dead_letter',
+          payloadJson: JSON.stringify({ photoId: PHOTO_A, quoteLocalId: 'q1' }),
+        },
+        PHOTO_A,
+      ),
+    ).toBe(true);
+    expect(
+      shouldDropPhotoQueueItem(
+        {
+          entityType: 'photo',
+          status: 'in_progress',
+          payload: { photoId: PHOTO_A },
+        },
+        PHOTO_A,
+      ),
+    ).toBe(false);
+    expect(
+      shouldDropPhotoQueueItem(
+        {
+          entityType: 'photo',
+          status: 'pending',
+          payload: { photoId: PHOTO_A },
+        },
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ),
+    ).toBe(false);
+    expect(
+      shouldDropPhotoQueueItem(
+        { entityType: 'quote', status: 'pending', payload: { photoId: PHOTO_A } },
+        PHOTO_A,
+      ),
+    ).toBe(false);
   });
 });

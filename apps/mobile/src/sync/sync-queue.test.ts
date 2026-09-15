@@ -1893,4 +1893,32 @@ describe('processQueue', () => {
     expect(item.status).toBe('pending');
     expect(item.lastError).toMatch(/parent quote has no server ID yet/);
   });
+
+  it('does not upload a still after it was removed from the local strip', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+      photosJson: '[]',
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'photo',
+      entityId: 'q1',
+      action: 'create',
+      payloadJson: JSON.stringify({
+        quoteLocalId: 'q1',
+        photoId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        filePath: 'file:///docs/photos/q1/a.jpg',
+        mime: 'image/jpeg',
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedUploadQuotePhoto).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
+    expect(JSON.parse(quote.photosJson ?? '[]')).toEqual([]);
+  });
 });

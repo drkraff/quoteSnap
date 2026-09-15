@@ -29,6 +29,7 @@ import { normalizePrivateNote } from '../quotes/private-notes';
 import {
   parsePhotosJson,
   serializePhotos,
+  shouldUploadQueuedPhoto,
   stampPhotoUploaded,
 } from '../quotes/photos';
 import {
@@ -345,12 +346,15 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     }
     const current = parsePhotosJson(quote.photosJson);
     const photo = current.find((entry) => entry.id === photoId);
+    if (!shouldUploadQueuedPhoto(current, photoId) || !photo) {
+      return;
+    }
     const uploaded = await uploadQuotePhoto(quoteServerId, {
       filePath,
       clientId: photoId,
-      mime: photo?.mime ?? mime ?? 'image/jpeg',
-      roomId: photo?.roomId ?? null,
-      lineClientId: photo?.lineClientId ?? null,
+      mime: photo.mime ?? mime ?? 'image/jpeg',
+      roomId: photo.roomId ?? null,
+      lineClientId: photo.lineClientId ?? null,
     });
     await database.write(async () => {
       await quote.update((r) => {
