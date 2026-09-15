@@ -68,3 +68,35 @@ export function photoQueuePayload(input: {
     },
   };
 }
+
+/**
+ * Drop a pending photo upload after the still was removed from the strip.
+ * Leave in-progress items; processQueue already skips if photos_json is empty.
+ */
+export function shouldDropPhotoQueueItem(
+  item: {
+    entityType: string;
+    status?: string | null;
+    payloadJson?: string | null;
+    payload?: { photoId?: unknown };
+  },
+  photoId: string,
+): boolean {
+  if (item.entityType !== 'photo') return false;
+  if (item.status === 'in_progress') return false;
+  if (typeof item.payload?.photoId === 'string') {
+    return item.payload.photoId === photoId;
+  }
+  if (typeof item.payloadJson !== 'string' || item.payloadJson === '') {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(item.payloadJson);
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return false;
+    }
+    return (parsed as { photoId?: unknown }).photoId === photoId;
+  } catch {
+    return false;
+  }
+}

@@ -14,6 +14,12 @@ export const PHOTO_UPLOADED_LABEL = 'Saved';
 export const PHOTO_MISSING_LOCAL_LABEL = 'On server';
 export const PHOTO_CAMERA_LABEL = 'Camera';
 export const PHOTO_LIBRARY_LABEL = 'Photo library';
+export const PHOTO_EMPTY_LABEL = 'No photos';
+export const PHOTO_REMOVE_LABEL = 'Remove';
+export const PHOTO_REMOVE_CONFIRM_TITLE = 'Remove this photo?';
+export const PHOTO_REMOVE_CONFIRM_MESSAGE =
+  'It leaves this quote. Line prices do not change.';
+export const PHOTO_REMOVE_CONFIRM_ACTION = 'Remove';
 
 export const PHOTO_MIME_JPEG = 'image/jpeg';
 export const PHOTO_MIME_PNG = 'image/png';
@@ -191,6 +197,29 @@ export function addPhoto(
     photo.lineClientId = lineClientId;
   }
   return [...photos, photo];
+}
+
+/**
+ * Drop one still from the strip. Missing id / empty list are no-ops.
+ * Removing the last photo returns [] — never a replacement still or price.
+ */
+export function removePhoto(photos: QuotePhoto[], photoId: string): QuotePhoto[] {
+  if (!Array.isArray(photos) || photos.length === 0) {
+    return photos;
+  }
+  const next = photos.filter((photo) => photo.id !== photoId);
+  return next.length === photos.length ? photos : next;
+}
+
+/** Pending upload is skipped when the still is no longer on the quote. */
+export function shouldUploadQueuedPhoto(
+  photos: QuotePhoto[],
+  photoId: string,
+): boolean {
+  if (!photoId || !Array.isArray(photos) || photos.length === 0) {
+    return false;
+  }
+  return photos.some((photo) => photo.id === photoId);
 }
 
 export function stampPhotoUploaded(

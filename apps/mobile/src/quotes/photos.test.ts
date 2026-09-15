@@ -1,7 +1,13 @@
 import {
   ADD_PHOTO_LABEL,
+  PHOTO_EMPTY_LABEL,
+  PHOTO_MISSING_LOCAL_LABEL,
   PHOTO_PENDING_LABEL,
   PHOTO_PRIVATE_HINT,
+  PHOTO_REMOVE_CONFIRM_ACTION,
+  PHOTO_REMOVE_CONFIRM_MESSAGE,
+  PHOTO_REMOVE_CONFIRM_TITLE,
+  PHOTO_REMOVE_LABEL,
   addPhoto,
   assignRoomPhotosToNearestLine,
   ensureLineClientId,
@@ -13,10 +19,12 @@ import {
   photosForLine,
   photosForQuote,
   photosForRoom,
+  removePhoto,
   serializePhotos,
+  shouldUploadQueuedPhoto,
   type QuotePhoto,
 } from './photos';
-import type { LineItem } from '../utils/line-items';
+import { recalculateTotal, type LineItem } from '../utils/line-items';
 
 const PHOTO_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PHOTO_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -191,5 +199,113 @@ describe('local path / labels', () => {
       mime: 'image/jpeg',
       status: 'pending',
     })).toBe(PHOTO_PENDING_LABEL);
+  });
+});
+
+function assertHonestPhotoCopy(text: string): void {
+  expect(text).not.toMatch(/\$/);
+  expect(text).not.toMatch(/\d+\.\d{2}/);
+  expect(text.toLowerCase()).not.toContain('sku');
+  expect(text.toLowerCase()).not.toContain('ocr');
+  expect(text.toLowerCase()).not.toMatch(/caption/);
+}
+
+describe('empty strip / grouping', () => {
+  it('keeps quote, room, and line strips honestly empty — no placeholder stills', () => {
+    expect(photosForQuote([])).toEqual([]);
+    expect(photosForRoom([], ROOM)).toEqual([]);
+    expect(photosForLine([], LINE)).toEqual([]);
+    expect(PHOTO_EMPTY_LABEL).toBe('No photos');
+    assertHonestPhotoCopy(`${PHOTO_EMPTY_LABEL} ${PHOTO_PRIVATE_HINT}`);
+  });
+});
+
+describe('removePhoto', () => {
+  it('returns an empty strip when the last still is removed and does not invent a replacement', () => {
+    const photos = addPhoto([], { id: PHOTO_A, localUri: 'file:///a.jpg' });
+    expect(removePhoto(photos, PHOTO_A)).toEqual([]);
+    expect(photosForQuote(removePhoto(photos, PHOTO_A))).toEqual([]);
+    expect(JSON.stringify(removePhoto(photos, PHOTO_A))).not.toContain('unitPrice');
+  });
+
+  it('treats empty lists and missing ids as no-ops', () => {
+    const photos = addPhoto([], { id: PHOTO_A, localUri: 'file:///a.jpg' });
+    expect(removePhoto([], PHOTO_A)).toEqual([]);
+    expect(removePhoto(photos, PHOTO_B)).toBe(photos);
+    expect(removePhoto(photos, PHOTO_A)).not.toBe(photos);
+  });
+
+  it('drops the last room or line still without touching other scopes or prices', () => {
+    const photos = addPhoto(
+      addPhoto(
+        addPhoto([], { id: PHOTO_A, localUri: 'file:///job.jpg' }),
+        { id: PHOTO_B, localUri: 'file:///room.jpg', roomId: ROOM },
+      ),
+      {
+        id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        localUri: 'file:///line.jpg',
+        lineClientId: LINE,
+      },
+    );
+    const items: LineItem[] = [
+      {
+        catalogItemId: '',
+        name: 'Cabinets',
+        quantity: 14,
+        unitPriceCents: null,
+        clientId: LINE,
+      },
+    ];
+    const withoutRoom = removePhoto(photos, PHOTO_B);
+    expect(photosForRoom(withoutRoom, ROOM)).toEqual([]);
+    expect(photosForQuote(withoutRoom).map((p) => p.id)).toEqual([PHOTO_A]);
+    expect(photosForLine(withoutRoom, LINE)).toHaveLength(1);
+    expect(items[0]!.unitPriceCents).toBeNull();
+    expect(recalculateTotal(items)).toBe(0);
+
+    const withoutLine = removePhoto(withoutRoom, 'ffffffff-ffff-4fff-8fff-ffffffffffff');
+    expect(photosForLine(withoutLine, LINE)).toEqual([]);
+    expect(photosForQuote(withoutLine).map((p) => p.id)).toEqual([PHOTO_A]);
+    expect(items[0]!.unitPriceCents).toBeNull();
+
+    const empty = removePhoto(withoutLine, PHOTO_A);
+    expect(empty).toEqual([]);
+    expect(photosForQuote(empty)).toEqual([]);
+    expect(photosForRoom(empty, ROOM)).toEqual([]);
+    expect(photosForLine(empty, LINE)).toEqual([]);
+    expect(recalculateTotal(items)).toBe(0);
+  });
+
+  it('uses confirm copy that does not invent a price, caption, or SKU', () => {
+    expect(PHOTO_REMOVE_LABEL).toBe('Remove');
+    expect(PHOTO_REMOVE_CONFIRM_TITLE).toBe('Remove this photo?');
+    expect(PHOTO_REMOVE_CONFIRM_ACTION).toBe('Remove');
+    expect(PHOTO_REMOVE_CONFIRM_MESSAGE.toLowerCase()).toContain('price');
+    assertHonestPhotoCopy(
+      `${PHOTO_REMOVE_CONFIRM_TITLE} ${PHOTO_REMOVE_CONFIRM_MESSAGE} ${PHOTO_REMOVE_LABEL}`,
+    );
+  });
+});
+
+describe('shouldUploadQueuedPhoto / missing local URI', () => {
+  it('skips a queued upload after the still was removed from the strip', () => {
+    const photos = addPhoto([], { id: PHOTO_A, localUri: 'file:///a.jpg' });
+    expect(shouldUploadQueuedPhoto(photos, PHOTO_A)).toBe(true);
+    expect(shouldUploadQueuedPhoto(removePhoto(photos, PHOTO_A), PHOTO_A)).toBe(false);
+    expect(shouldUploadQueuedPhoto([], PHOTO_A)).toBe(false);
+  });
+
+  it('labels a stale local URI as On server and does not invent a download path', () => {
+    const onServer: QuotePhoto = {
+      id: PHOTO_A,
+      localUri: '   ',
+      mime: 'image/jpeg',
+      status: 'uploaded',
+      serverId: SERVER,
+    };
+    expect(photoDisplayUri(onServer)).toBeNull();
+    expect(photoStatusLabel(onServer)).toBe(PHOTO_MISSING_LOCAL_LABEL);
+    expect(photoDisplayUri(onServer)).not.toMatch(/^https?:\/\//);
+    expect(JSON.stringify(onServer)).not.toContain('unitPrice');
   });
 });

@@ -2,7 +2,9 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import {
   ADD_PHOTO_LABEL,
+  PHOTO_EMPTY_LABEL,
   PHOTO_PRIVATE_HINT,
+  PHOTO_REMOVE_LABEL,
   photoDisplayUri,
   photoStatusLabel,
   type QuotePhoto,
@@ -12,15 +14,24 @@ interface PhotoStripProps {
   photos: QuotePhoto[];
   onAdd?: () => void;
   addLabel?: string;
+  onRemove?: (photo: QuotePhoto) => void;
 }
 
 export function PhotoStrip({
   photos,
   onAdd,
   addLabel = ADD_PHOTO_LABEL,
-}: PhotoStripProps): JSX.Element {
+  onRemove,
+}: PhotoStripProps): JSX.Element | null {
+  if (photos.length === 0 && !onAdd) {
+    return null;
+  }
+
   return (
     <View style={styles.wrap}>
+      {photos.length === 0 ? (
+        <Text style={styles.empty}>{PHOTO_EMPTY_LABEL}</Text>
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {photos.map((photo) => {
           const uri = photoDisplayUri(photo);
@@ -33,13 +44,26 @@ export function PhotoStrip({
                   accessibilityLabel="Job photo"
                 />
               ) : (
-                <View style={[styles.thumb, styles.placeholder]}>
-                  <Text style={styles.placeholderText}>Photo</Text>
+                <View
+                  style={[styles.thumb, styles.placeholder]}
+                  accessibilityLabel={photoStatusLabel(photo)}
+                >
+                  <Text style={styles.placeholderText}>{photoStatusLabel(photo)}</Text>
                 </View>
               )}
               <Text style={styles.status} numberOfLines={1}>
                 {photoStatusLabel(photo)}
               </Text>
+              {onRemove ? (
+                <Pressable
+                  onPress={() => onRemove(photo)}
+                  style={styles.removeButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${PHOTO_REMOVE_LABEL} photo`}
+                >
+                  <Text style={styles.removeText}>{PHOTO_REMOVE_LABEL}</Text>
+                </Pressable>
+              ) : null}
             </View>
           );
         })}
@@ -72,6 +96,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  empty: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
+  },
   thumbWrap: {
     width: 72,
     alignItems: 'center',
@@ -88,10 +118,12 @@ const styles = StyleSheet.create({
   placeholder: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   placeholderText: {
     fontSize: typography.label.fontSize,
     color: colors.mutedText,
+    textAlign: 'center',
   },
   status: {
     fontSize: 11,
@@ -113,6 +145,18 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: '700',
     color: colors.accent,
+  },
+  removeButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+    color: colors.destructive,
   },
   hint: {
     fontSize: typography.label.fontSize,

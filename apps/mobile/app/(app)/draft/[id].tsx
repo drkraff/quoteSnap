@@ -124,16 +124,24 @@ import {
   PHOTO_CAMERA_LABEL,
   PHOTO_LIBRARY_LABEL,
   PHOTO_PRIVATE_HINT,
+  PHOTO_REMOVE_CONFIRM_ACTION,
+  PHOTO_REMOVE_CONFIRM_MESSAGE,
+  PHOTO_REMOVE_CONFIRM_TITLE,
   addPhoto,
   ensureLineClientId,
   parsePhotosJson,
   photosForLine,
   photosForQuote,
   photosForRoom,
+  removePhoto,
   serializePhotos,
   type QuotePhoto,
 } from '../../../src/quotes/photos';
-import { persistStillPlan, photoQueuePayload } from '../../../src/quotes/persist-photo';
+import {
+  persistStillPlan,
+  photoQueuePayload,
+  shouldDropPhotoQueueItem,
+} from '../../../src/quotes/persist-photo';
 import {
   IMPORT_FROM_PHOTO_LABEL,
   PHOTO_IMPORT_BLANK_PRICE_HINT,
@@ -698,6 +706,47 @@ export default function DraftScreen(): JSX.Element {
     });
   }
 
+  function handleRemovePhoto(photo: QuotePhoto): void {
+    if (!quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    Alert.alert(PHOTO_REMOVE_CONFIRM_TITLE, PHOTO_REMOVE_CONFIRM_MESSAGE, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: PHOTO_REMOVE_CONFIRM_ACTION,
+        style: 'destructive',
+        onPress: () => { void confirmRemovePhoto(photo.id); },
+      },
+    ]);
+  }
+
+  async function confirmRemovePhoto(photoId: string): Promise<void> {
+    if (!quote) return;
+    await recoverFromAiFailed();
+    const next = removePhoto(photos, photoId);
+    if (next === photos) return;
+    await persistPhotos(next);
+    const queued = await database
+      .get<SyncQueueItem>('sync_queue_items')
+      .query(Q.where('entity_id', quote.id))
+      .fetch();
+    const drop = queued.filter((item) =>
+      shouldDropPhotoQueueItem(
+        {
+          entityType: item.entityType,
+          status: item.status,
+          payloadJson: item.payloadJson,
+        },
+        photoId,
+      ),
+    );
+    if (drop.length === 0) return;
+    await database.write(async () => {
+      for (const item of drop) {
+        await item.destroyPermanently();
+      }
+    });
+  }
+
   async function handleAddPhoto(target: {
     roomId?: string | null;
     lineIndex?: number;
@@ -1198,6 +1247,7 @@ export default function DraftScreen(): JSX.Element {
                 <PhotoStrip
                   photos={photosForRoom(photos, row.room.id)}
                   onAdd={() => { void handleAddPhoto({ roomId: row.room.id }); }}
+                  onRemove={handleRemovePhoto}
                 />
               </View>
             );
@@ -1323,6 +1373,7 @@ export default function DraftScreen(): JSX.Element {
               <PhotoStrip
                 photos={item.clientId ? photosForLine(photos, item.clientId) : []}
                 onAdd={() => { void handleAddPhoto({ lineIndex: index, roomId: item.roomId }); }}
+                onRemove={handleRemovePhoto}
               />
             </View>
           );
@@ -1369,6 +1420,7 @@ export default function DraftScreen(): JSX.Element {
             <PhotoStrip
               photos={photosForQuote(photos)}
               onAdd={() => { void handleAddPhoto({}); }}
+              onRemove={handleRemovePhoto}
             />
             <View style={styles.addRoomRow}>
               <TextInput
