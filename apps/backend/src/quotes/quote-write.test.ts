@@ -257,6 +257,17 @@ describe("parseQuotePutBody", () => {
     assert.equal(parsed.totalCents, undefined);
   });
 
+  it("maps empty / whitespace privateNote to null (clear, not a money write)", () => {
+    for (const privateNote of [null, "", "   "]) {
+      const parsed = parseQuotePutBody({ privateNote });
+      assert.equal(parsed.ok, true, `expected ok for ${String(privateNote)}`);
+      if (!parsed.ok) return;
+      assert.equal(parsed.privateNote, null);
+      assert.equal(parsed.lineItems, undefined);
+      assert.equal(parsed.totalCents, undefined);
+    }
+  });
+
   it("accepts a clientSentence-only body (not a money write)", () => {
     const parsed = parseQuotePutBody({
       clientSentence: "Appliances and decorative lighting not included.",
@@ -1159,6 +1170,37 @@ describe("applyQuotePut", () => {
     assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), false);
   });
 
+  it("clears a quote-level privateNote from empty/whitespace without replacing line items or totals", async () => {
+    const { calls, queryFn } = mockDb({
+      quote: quoteRow({ private_note: "subcontractor check", total_cents: 3000 }),
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { privateNote: "   " },
+    });
+    assert.equal(outcome.status, 200);
+    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.ok(update);
+    assert.match(update!.sql, /private_note = \$/);
+    assert.equal(update!.sql.includes("total_cents ="), false);
+    assert.equal(update!.params?.[0], null);
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+    assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), false);
+
+    const explicit = mockDb({
+      quote: quoteRow({ private_note: "subcontractor check", total_cents: 3000 }),
+    });
+    await applyQuotePut(explicit.queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { privateNote: null },
+    });
+    const explicitUpdate = explicit.calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.equal(explicitUpdate?.params?.[0], null);
+    assert.equal(explicit.calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+  });
+
   it("writes a quote-level clientSentence without replacing line items", async () => {
     const { calls, queryFn } = mockDb();
     const outcome = await applyQuotePut(queryFn, {
@@ -1243,6 +1285,46 @@ describe("applyQuotePut", () => {
       },
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.equal(insert?.params?.[7], null);
+  });
+
+  it("clears a line private_note from whitespace without inventing a price", async () => {
+    const existing: QuoteLineItemRow[] = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        quote_id: QUOTE_ID,
+        name: "Copper pipe",
+        quantity: 2,
+        unit_price_cents: 1500,
+        created_at: new Date("2026-09-01T12:01:00.000Z"),
+        confidence: 0.91,
+        catalog_item_id: CATALOG_ID,
+        unit: "foot",
+        private_note: "moisture from neighbor",
+        price_source: "catalog",
+        option_group_id: null,
+        option_role: null,
+        room_id: null,
+        client_id: null,
+      },
+    ];
+    const { calls, queryFn } = mockDb({ existingLines: existing });
+    await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [
+          {
+            name: "Copper pipe",
+            quantity: 2,
+            unitPriceCents: 1500,
+            privateNote: "   ",
+          },
+        ],
+      },
+    });
+    const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.equal(insert?.params?.[3], 1500);
     assert.equal(insert?.params?.[7], null);
   });
 

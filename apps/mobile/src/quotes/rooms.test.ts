@@ -252,7 +252,11 @@ describe('updateRoomPrivateNote / copy', () => {
     const rooms = addRoom([], 'Kitchen', KITCHEN);
     const noted = updateRoomPrivateNote(rooms, KITCHEN, '  third floor  ');
     expect(noted[0]!.privateNote).toBe('third floor');
-    expect(updateRoomPrivateNote(noted, KITCHEN, '')[0]!.privateNote).toBeUndefined();
+    const cleared = updateRoomPrivateNote(noted, KITCHEN, '');
+    expect(cleared[0]!.privateNote).toBeNull();
+    expect(JSON.parse(serializeRooms(cleared))[0].privateNote).toBeNull();
+    expect(updateRoomPrivateNote(cleared, KITCHEN, '   ')).toBe(cleared);
+    expect(updateRoomPrivateNote(noted, BATH, 'nope')).toBe(noted);
     expect(ADD_ROOM_LABEL).toBe('Add room');
     expect(ADD_ROOM_PLACEHOLDER.toLowerCase()).toContain('room');
     expect(UNGROUPED_ROOM_LABEL).toBe('Job');

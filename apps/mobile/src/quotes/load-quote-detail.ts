@@ -2,6 +2,7 @@ import type { QuoteLineItemResponse, QuoteResponse } from '../api/quotes';
 import { parseLineItems, serializeLineItems, type LineItem } from '../utils/line-items';
 import { parseOptionGroupId, parseOptionRole } from './option-groups';
 import { parsePriceSource } from '../utils/price-source';
+import { normalizePrivateNote, assignNormalizedPrivateNote } from './private-notes';
 import { parseRoomId, parseRoomsJson, type QuoteRoom } from './rooms';
 import { mergePhotosOnHydrate, parsePhotosJson, type QuotePhoto, type ServerQuotePhoto } from './photos';
 
@@ -76,9 +77,7 @@ export function lineItemsFromDraftJson(json: string): QuoteLineItemResponse[] {
     if (item.unit) {
       row.unit = item.unit;
     }
-    if (item.privateNote) {
-      row.privateNote = item.privateNote;
-    }
+    assignNormalizedPrivateNote(row, item.privateNote);
     if (item.priceSource) {
       row.priceSource = item.priceSource;
     }
@@ -113,9 +112,7 @@ export function remoteLineItemsToDraftJson(
     if (item.unit) {
       line.unit = item.unit;
     }
-    if (item.privateNote) {
-      line.privateNote = item.privateNote;
-    }
+    assignNormalizedPrivateNote(line, item.privateNote);
     const priceSource = parsePriceSource(item.priceSource);
     if (priceSource) {
       line.priceSource = priceSource;
@@ -146,7 +143,7 @@ function snapshotFromLocal(quote: LocalQuoteRecord): QuoteDetailSnapshot {
     totalCents: quote.totalCents,
     createdAt: quote.createdAt.toISOString(),
     sentAt: quote.sentAt?.toISOString() ?? null,
-    privateNote: quote.privateNote ?? null,
+    privateNote: normalizePrivateNote(quote.privateNote),
     clientSentence: quote.clientSentence ?? null,
     rooms: parseRoomsJson(quote.roomsJson),
     photos: parsePhotosJson(quote.photosJson),
@@ -160,7 +157,7 @@ function snapshotFromRemote(quote: QuoteResponse): QuoteDetailSnapshot {
     totalCents: quote.totalCents,
     createdAt: quote.createdAt,
     sentAt: quote.sentAt,
-    privateNote: quote.privateNote ?? null,
+    privateNote: normalizePrivateNote(quote.privateNote),
     clientSentence: quote.clientSentence ?? null,
     rooms: quote.rooms ?? [],
     photos: mergePhotosOnHydrate([], (quote.photos ?? []) as ServerQuotePhoto[]),

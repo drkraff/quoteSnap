@@ -154,16 +154,67 @@ describe('updatePrice', () => {
 });
 
 describe('updatePrivateNote', () => {
-  it('sets and clears a line private note without changing price', () => {
+  it('sets and clears a line private note without changing price, rooms, or options', () => {
+    const groupId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const kitchenId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
     const items: LineItem[] = [
-      { catalogItemId: 'a', name: 'Item', quantity: 1, unitPriceCents: 1000 },
+      {
+        catalogItemId: 'a',
+        name: 'Item',
+        quantity: 1,
+        unitPriceCents: 1000,
+        priceSource: 'known',
+        optionGroupId: groupId,
+        optionRole: 'base',
+        roomId: kitchenId,
+      },
     ];
     const withNote = updatePrivateNote(items, 0, '  subcontractor check  ');
     expect(withNote[0]!.privateNote).toBe('subcontractor check');
     expect(withNote[0]!.unitPriceCents).toBe(1000);
+    expect(withNote[0]!.priceSource).toBe('known');
+    expect(withNote[0]!.optionGroupId).toBe(groupId);
+    expect(withNote[0]!.optionRole).toBe('base');
+    expect(withNote[0]!.roomId).toBe(kitchenId);
     const cleared = updatePrivateNote(withNote, 0, '  ');
-    expect(cleared[0]!.privateNote).toBeUndefined();
+    expect(cleared[0]!.privateNote).toBeNull();
+    expect(JSON.parse(serializeLineItems(cleared))[0].privateNote).toBeNull();
     expect(cleared[0]!.unitPriceCents).toBe(1000);
+    expect(cleared[0]!.priceSource).toBe('known');
+    expect(cleared[0]!.optionGroupId).toBe(groupId);
+    expect(cleared[0]!.roomId).toBe(kitchenId);
+    expect(recalculateTotal(cleared)).toBe(1000);
+    expect(updatePrivateNote(cleared, 0, null)).toBe(cleared);
+    expect(updatePrivateNote(items, 9, 'nope')).toBe(items);
+  });
+
+  it('drops whitespace-only notes on parse and keeps explicit null after clear', () => {
+    const parsed = parseLineItems(
+      JSON.stringify([
+        {
+          catalogItemId: '',
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          privateNote: '   ',
+        },
+      ]),
+    );
+    expect(parsed[0]!.privateNote).toBeNull();
+    expect(parsed[0]!.unitPriceCents).toBeNull();
+    const explicitNull = parseLineItems(
+      JSON.stringify([
+        {
+          catalogItemId: '',
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          privateNote: null,
+        },
+      ]),
+    );
+    expect(explicitNull[0]!.privateNote).toBeNull();
+    expect(JSON.parse(serializeLineItems(explicitNull))[0].privateNote).toBeNull();
   });
 });
 

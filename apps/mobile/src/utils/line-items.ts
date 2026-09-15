@@ -8,6 +8,7 @@ import {
   selectedOptionTotalCents,
   type OptionRole,
 } from '../quotes/option-groups';
+import { normalizePrivateNote } from '../quotes/private-notes';
 import { parseRoomId } from '../quotes/rooms';
 import { parsePriceSource, typedPriceSource, type PriceSource } from './price-source';
 
@@ -86,8 +87,11 @@ function coerceLineItem(value: unknown): LineItem {
   if (typeof raw.confidence === 'number') {
     line.confidence = raw.confidence;
   }
-  if (typeof raw.privateNote === 'string' && raw.privateNote.trim() !== '') {
-    line.privateNote = raw.privateNote.trim();
+  if (Object.prototype.hasOwnProperty.call(raw, 'privateNote')) {
+    const rawNote = raw.privateNote;
+    line.privateNote = normalizePrivateNote(
+      rawNote === null || typeof rawNote === 'string' ? rawNote : undefined,
+    );
   }
   const priceSource = parsePriceSource(raw.priceSource);
   if (priceSource) {
@@ -269,15 +273,15 @@ export function updatePrivateNote(
   index: number,
   privateNote: string | null,
 ): LineItem[] {
+  if (index < 0 || index >= items.length) return items;
+  const note = normalizePrivateNote(privateNote);
+  const current = items[index]!;
+  if (normalizePrivateNote(current.privateNote) === note) {
+    if (note !== null || current.privateNote == null) return items;
+  }
   return items.map((item, i) => {
     if (i !== index) return item;
-    const next = { ...item };
-    if (privateNote == null || privateNote.trim() === '') {
-      delete next.privateNote;
-    } else {
-      next.privateNote = privateNote.trim();
-    }
-    return next;
+    return { ...item, privateNote: note };
   });
 }
 

@@ -7,6 +7,7 @@ import { Quote } from '../db/models/quote';
 import { serializeLineItems } from '../utils/line-items';
 import { toDraftLineItems } from './draft-line-items';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
+import { normalizePrivateNote } from '../quotes/private-notes';
 import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 
 export function parseServerDate(iso: string): Date {
@@ -46,7 +47,7 @@ export async function applyServerQuoteInWrite(
     record.sentAt = serverQuote.sentAt ? parseServerDate(serverQuote.sentAt) : null;
     record.voiceJobId = serverQuote.voiceJobId;
     record.isArchived = serverQuote.isArchived === true;
-    record.privateNote = serverQuote.privateNote ?? null;
+    record.privateNote = normalizePrivateNote(serverQuote.privateNote);
     record.clientSentence = serverQuote.clientSentence ?? null;
     record.roomsJson = serializeRooms((serverQuote.rooms ?? []) as QuoteRoom[]);
     record.photosJson = serializePhotos(

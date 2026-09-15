@@ -9,6 +9,7 @@
  */
 
 import { normalizeClientSentence } from './client-sentence';
+import { normalizePrivateNote } from './private-notes';
 
 export type CustomerLineItemPayload = {
   name: string;
@@ -128,7 +129,7 @@ export function toContractorLineItemSync(item: {
     quantity: item.quantity,
     unitPriceCents: item.unitPriceCents ?? 0,
     unit: item.unit ?? null,
-    privateNote: item.privateNote ?? null,
+    privateNote: normalizePrivateNote(item.privateNote),
     ...(item.priceSource ? { priceSource: item.priceSource } : {}),
     ...(item.optionGroupId && item.optionRole
       ? { optionGroupId: item.optionGroupId, optionRole: item.optionRole }

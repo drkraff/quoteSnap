@@ -4,6 +4,7 @@ import {
   PRIVATE_NOTE_INTERNAL_HINT,
   PRIVATE_NOTE_LABEL,
   PRIVATE_NOTE_MAX_LENGTH,
+  PRIVATE_NOTE_PLACEHOLDER,
 } from '../../quotes/private-notes';
 
 interface PrivateNoteFieldProps {
@@ -31,7 +32,7 @@ export function PrivateNoteField({
         editable={editable}
         multiline
         maxLength={PRIVATE_NOTE_MAX_LENGTH}
-        placeholder="Visible only to you — never sent to the customer"
+        placeholder={PRIVATE_NOTE_PLACEHOLDER}
         placeholderTextColor={colors.mutedText}
         accessibilityLabel={`${PRIVATE_NOTE_LABEL}. ${PRIVATE_NOTE_INTERNAL_HINT}`}
       />
