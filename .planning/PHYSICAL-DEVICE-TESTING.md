@@ -4,6 +4,8 @@ Procedure for QuoteSnap on a real Android device. Product/status briefing: [CONT
 
 **Phase 5 UAT:** [docs/UAT-PHASE5.md](../docs/UAT-PHASE5.md) — the three pending human tests, preconditions, and hosted-proof slots.
 
+**Metro morning (first-win quoting, after 14:00, physical device / Metro, no emulator):** [docs/METRO-UAT-CHECKLIST.md](../docs/METRO-UAT-CHECKLIST.md) — skip-catalog account, adhoc voice prices, My rates, rooms/photos, Share quote. Not SMS, not an EAS APK.
+
 This guide assumes a Windows host (where this repo lives), an Android phone with developer mode on, and both connected to the same Wi-Fi network.
 
 **Shareable APK (no USB, no Metro):** to install a standalone preview build that talks to the Railway HTTPS API, see [docs/EAS-ANDROID.md](../docs/EAS-ANDROID.md). The USB + Metro steps below remain the path for local debugging.
