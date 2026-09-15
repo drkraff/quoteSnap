@@ -20,6 +20,12 @@ import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { RecordingWaveform } from '../../src/components/voice/recording-waveform';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../src/theme/tokens';
+import {
+  MIC_PERMISSION_BODY,
+  MIC_PERMISSION_CANCEL,
+  MIC_PERMISSION_OPEN_SETTINGS,
+  MIC_PERMISSION_TITLE,
+} from '../../src/quotes/mic-permission';
 import { localVoiceAudioPath } from '../../src/quotes/voice-audio';
 import { findQuoteRecord } from '../../src/quotes/find-quote';
 import { parseReuseQuoteId } from '../../src/quotes/retry-voice-quote';
@@ -87,11 +93,11 @@ export default function VoiceRecordScreen(): JSX.Element {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         Alert.alert(
-          'Microphone Access Required',
-          'Microphone access is required to record voice quotes. Open Settings to allow.',
+          MIC_PERMISSION_TITLE,
+          MIC_PERMISSION_BODY,
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+            { text: MIC_PERMISSION_CANCEL, style: 'cancel' },
+            { text: MIC_PERMISSION_OPEN_SETTINGS, onPress: () => { void Linking.openSettings(); } },
           ],
         );
         return;
