@@ -3,6 +3,7 @@ import path from 'path';
 import {
   importedLinesToUpsertBodies,
   parseImportedQuoteText,
+  skippedLinesForDisplay,
 } from './import-parse';
 
 const fixture = readFileSync(
@@ -60,6 +61,41 @@ describe('parseImportedQuoteText', () => {
     const parsed = parseImportedQuoteText('Laminate cabinets    14 lin ft\n');
     expect(parsed.lines).toEqual([]);
     expect(parsed.skipped[0]?.reason).toBe('no_price');
+  });
+
+  it('returns empty for blank input instead of guessing prices or SKUs', () => {
+    expect(parseImportedQuoteText('')).toEqual({ lines: [], skipped: [] });
+    expect(parseImportedQuoteText('   \n\n  ')).toEqual({ lines: [], skipped: [] });
+    expect(parseImportedQuoteText(null)).toEqual({ lines: [], skipped: [] });
+  });
+
+  it('keeps partial paste failures as skipped lines without inventing dollars', () => {
+    const parsed = parseImportedQuoteText(
+      'Replace outlet    each    $85\nLaminate cabinets    14 lin ft\nMystery line with no price\n',
+    );
+    expect(parsed.lines).toEqual([
+      { name: 'Replace outlet', unit: 'each', unitPriceCents: 8500 },
+    ]);
+    expect(parsed.skipped.map((line) => line.raw)).toEqual([
+      'Laminate cabinets    14 lin ft',
+      'Mystery line with no price',
+    ]);
+    expect(parsed.skipped.every((line) => !('unitPriceCents' in line))).toBe(true);
+    expect(parsed.lines.some((line) => line.name.toLowerCase().includes('laminate'))).toBe(
+      false,
+    );
+    expect(parsed.lines.some((line) => line.name.toLowerCase().includes('mystery'))).toBe(
+      false,
+    );
+  });
+
+  it('lists item-like skipped lines for display and omits headers', () => {
+    const parsed = parseImportedQuoteText(
+      'Quote #1042\nReplace outlet    each    $85\nLaminate cabinets    14 lin ft\n',
+    );
+    expect(skippedLinesForDisplay(parsed.skipped)).toEqual([
+      { raw: 'Laminate cabinets    14 lin ft', reason: 'no_price' },
+    ]);
   });
 
   it('maps @ and /h as unit prices, not line totals', () => {

@@ -82,6 +82,15 @@ describe("importOldQuotes", () => {
       true,
     );
     assert.match(outcome.json.message, /Added 6 prices/);
+    assert.match(outcome.json.message, /Laminate cabinets 14 lin ft \(no price\)/);
+    assert.equal(
+      outcome.json.skippedLines.some((line) => line.raw.includes("Laminate cabinets")),
+      true,
+    );
+    assert.equal(
+      outcome.json.entries.some((entry) => /laminate/i.test(entry.displayName)),
+      false,
+    );
   });
 
   it("stays 200 and calm when images cannot be read yet", async () => {
@@ -98,6 +107,44 @@ describe("importOldQuotes", () => {
       { filename: "scan.jpg", reason: "image_ocr_stub" },
     ]);
     assert.equal(outcome.json.message, IMPORT_PASTE_HINT);
+    assert.match(outcome.json.message, /not read yet/i);
+    assert.equal(/added/i.test(outcome.json.message), false);
+  });
+
+  it("stays 200 and invents nothing when paste is empty", async () => {
+    const outcome = await importOldQuotes(mockDb(), {
+      contractorId: CONTRACTOR_ID,
+      body: { text: "   \n  " },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.imported, 0);
+    assert.deepEqual(outcome.json.entries, []);
+    assert.deepEqual(outcome.json.skippedLines, []);
+    assert.match(outcome.json.message, /skip/i);
+    assert.match(outcome.json.message, /not invent/i);
+  });
+
+  it("lists skipped lines on a partial paste without inventing dollars", async () => {
+    const outcome = await importOldQuotes(mockDb(), {
+      contractorId: CONTRACTOR_ID,
+      recordedAtIso: RECORDED_AT,
+      body: {
+        text: "Replace outlet    each    $85\nLaminate cabinets    14 lin ft\nMystery line with no price\n",
+      },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.imported, 1);
+    assert.equal(outcome.json.entries[0]?.displayName, "Replace outlet");
+    assert.equal(outcome.json.entries[0]?.unitPriceCents, 8500);
+    assert.equal(
+      outcome.json.entries.some((entry) => /laminate|mystery/i.test(entry.displayName)),
+      false,
+    );
+    assert.match(outcome.json.message, /Laminate cabinets 14 lin ft \(no price\)/);
+    assert.match(outcome.json.message, /Mystery line with no price \(no price\)/);
+    assert.equal(/\$0/.test(outcome.json.message), false);
   });
 
   it("imports text documents and still reports unread image slots", async () => {
@@ -122,6 +169,8 @@ describe("importOldQuotes", () => {
     assert.equal(outcome.json.entries[0]?.source, "imported");
     assert.equal(outcome.json.unreadableFiles[0]?.reason, "image_ocr_stub");
     assert.match(outcome.json.message, /Paste priced lines/);
+    assert.match(outcome.json.message, /not from photos/);
+    assert.equal(/scanned/i.test(outcome.json.message), false);
   });
 });
 
@@ -132,5 +181,17 @@ describe("importResultMessage", () => {
       importResultMessage({ imported: 0, skipped: 2, unreadableFiles: [] }),
       /quote with blanks/i,
     );
+  });
+
+  it("names skipped item lines without inventing a dollar amount", () => {
+    const message = importResultMessage({
+      imported: 1,
+      skipped: 1,
+      unreadableFiles: [],
+      skippedLines: [{ raw: "Laminate cabinets    14 lin ft", reason: "no_price" }],
+    });
+    assert.match(message, /Added 1 price/);
+    assert.match(message, /Laminate cabinets 14 lin ft \(no price\)/);
+    assert.equal(/\$12|\$0/.test(message), false);
   });
 });

@@ -7,15 +7,52 @@ import {
   type UnreadableOldQuoteReason,
 } from "./import-files.js";
 import {
+  clipSkippedLineRaw,
   importedLinesToUpsertBodies,
   parseImportedQuoteText,
+  skippedLinesForDisplay,
   type ImportedQuoteLine,
   type ParseImportedQuoteResult,
+  type SkippedImportedLine,
+  type SkippedImportedLineReason,
 } from "./import-parse.js";
 import type { RateCardEntryResponse } from "../types/rate-card.js";
 
 export const IMPORT_PASTE_HINT =
-  "Paste priced lines from the old quote. Photo and PDF reading is not ready yet.";
+  "Paste priced lines from the old quote. Photos and PDFs are not read yet — we will not guess prices from a picture.";
+
+export const IMPORT_EMPTY_BODY =
+  "Paste lines from an old quote, or skip and start quoting. We will not invent prices or catalog items.";
+
+export const IMPORT_NO_PRICES_BODY =
+  "Paste name, unit, and price (for example: Replace outlet    each    $85). Skipped lines stay skipped — we will not invent dollars. You can skip and quote with blanks.";
+
+const SKIPPED_LINE_REASON_LABEL: Record<SkippedImportedLineReason, string> = {
+  empty: "blank",
+  header: "header or total",
+  no_price: "no price",
+  no_name: "no item name",
+  ambiguous_total: "looks like a total, not a unit price",
+  invalid_price: "not a unit price",
+};
+
+function formatSkippedImportedLine(line: SkippedImportedLine): string {
+  const raw = clipSkippedLineRaw(line.raw);
+  const label = SKIPPED_LINE_REASON_LABEL[line.reason];
+  return raw === "" ? label : `${raw} (${label})`;
+}
+
+function skippedImportedLineLabels(skipped: SkippedImportedLine[]): string[] {
+  return skippedLinesForDisplay(skipped).map(formatSkippedImportedLine);
+}
+
+function skippedLinesMessageSuffix(skippedLines: SkippedImportedLine[]): string {
+  const labels = skippedImportedLineLabels(skippedLines);
+  if (labels.length === 0) {
+    return "";
+  }
+  return ` ${labels.join("; ")}`;
+}
 
 export type UnreadableOldQuoteFile = {
   filename: string;
@@ -25,6 +62,7 @@ export type UnreadableOldQuoteFile = {
 export type ImportOldQuotesJson = {
   imported: number;
   skipped: number;
+  skippedLines: SkippedImportedLine[];
   entries: RateCardEntryResponse[];
   unreadableFiles: UnreadableOldQuoteFile[];
   message: string;
@@ -78,24 +116,35 @@ export function importResultMessage(args: {
   imported: number;
   skipped: number;
   unreadableFiles: UnreadableOldQuoteFile[];
+  skippedLines?: SkippedImportedLine[];
 }): string {
+  const skippedLines = args.skippedLines ?? [];
+  const listed = skippedLinesMessageSuffix(skippedLines);
+
   if (args.imported > 0 && args.unreadableFiles.length === 0) {
     const extra =
       args.skipped > 0
         ? ` Skipped ${args.skipped} line${args.skipped === 1 ? "" : "s"} without a clear name, unit, and price.`
         : "";
-    return `Added ${args.imported} price${args.imported === 1 ? "" : "s"} to your rate card.${extra}`;
+    return `Added ${args.imported} price${args.imported === 1 ? "" : "s"} to your rate card.${extra}${listed}`;
   }
   if (args.imported > 0) {
-    return `Added ${args.imported} price${args.imported === 1 ? "" : "s"} from the pasted lines. ${IMPORT_PASTE_HINT}`;
+    const extra =
+      args.skipped > 0
+        ? ` Skipped ${args.skipped} line${args.skipped === 1 ? "" : "s"} without a clear name, unit, and price.`
+        : "";
+    return `Added ${args.imported} price${args.imported === 1 ? "" : "s"} from the pasted lines — not from photos.${extra} ${IMPORT_PASTE_HINT}${listed}`;
   }
-  if (args.unreadableFiles.length > 0) {
+  if (args.unreadableFiles.length > 0 && args.skipped === 0) {
     return IMPORT_PASTE_HINT;
   }
-  if (args.skipped > 0) {
-    return "No prices found on those lines. Paste name, unit, and price (for example: Replace outlet    each    $85). You can skip and quote with blanks.";
+  if (args.unreadableFiles.length > 0) {
+    return `${IMPORT_PASTE_HINT} ${IMPORT_NO_PRICES_BODY}${listed}`;
   }
-  return "Nothing to import yet. Paste lines from an old quote, or skip and start quoting.";
+  if (args.skipped > 0) {
+    return `${IMPORT_NO_PRICES_BODY}${listed}`;
+  }
+  return IMPORT_EMPTY_BODY;
 }
 
 export function collectImportText(body: ImportOldQuotesBody): {
@@ -163,11 +212,13 @@ export async function importOldQuotes(
   const json: ImportOldQuotesJson = {
     imported: entries.length,
     skipped: parsed.skipped.length,
+    skippedLines: parsed.skipped,
     entries,
     unreadableFiles: collected.unreadableFiles,
     message: importResultMessage({
       imported: entries.length,
       skipped: parsed.skipped.length,
+      skippedLines: parsed.skipped,
       unreadableFiles: collected.unreadableFiles,
     }),
   };

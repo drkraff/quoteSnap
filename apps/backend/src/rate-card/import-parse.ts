@@ -35,6 +35,37 @@ export type ParseImportedQuoteResult = {
   skipped: SkippedImportedLine[];
 };
 
+/** Item-like skips to show the contractor. Headers/letterhead stay counted, not listed. */
+export const CONTENT_SKIP_REASONS: readonly SkippedImportedLineReason[] = [
+  "no_price",
+  "no_name",
+  "ambiguous_total",
+  "invalid_price",
+];
+
+export const MAX_SKIPPED_LINES_SHOWN = 8;
+export const MAX_SKIPPED_LINE_CHARS = 80;
+
+export function isContentSkipReason(reason: SkippedImportedLineReason): boolean {
+  return (CONTENT_SKIP_REASONS as readonly string[]).includes(reason);
+}
+
+export function clipSkippedLineRaw(raw: string): string {
+  const compact = raw.replace(/\s+/g, " ").trim();
+  if (compact.length <= MAX_SKIPPED_LINE_CHARS) {
+    return compact;
+  }
+  return `${compact.slice(0, MAX_SKIPPED_LINE_CHARS - 1)}…`;
+}
+
+export function skippedLinesForDisplay(
+  skipped: SkippedImportedLine[],
+): SkippedImportedLine[] {
+  return skipped
+    .filter((line) => isContentSkipReason(line.reason))
+    .slice(0, MAX_SKIPPED_LINES_SHOWN);
+}
+
 export type RateCardImportedUpsertBody = {
   name: string;
   unit: CatalogUnit;

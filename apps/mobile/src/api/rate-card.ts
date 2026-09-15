@@ -25,6 +25,7 @@ export type RateCardEntryResponse = {
 export type ImportRateCardResponse = {
   imported: number;
   skipped: number;
+  skippedLines?: { raw: string; reason: string }[];
   entries: RateCardEntryResponse[];
   unreadableFiles: { filename: string; reason: string }[];
   message: string;
