@@ -62,6 +62,13 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
         JSON.stringify({ name: 'Copper Pipe', unit: 'foot', unitPriceCents: 5200 }),
       ),
     ).toBe('Saved price: Copper Pipe');
+    expect(
+      deadLetterTitle(
+        'rate_card',
+        'delete',
+        JSON.stringify({ id: '11111111-1111-4111-8111-111111111111', name: 'Copper Pipe' }),
+      ),
+    ).toBe('Removed rate: Copper Pipe');
     expect(deadLetterTitle('mystery', 'frob', '{}')).toBe('Saved change');
   });
 
@@ -77,6 +84,7 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
     expect(deadLetterSummary('onboarding', 'seed')).toBe("Couldn't finish catalog setup");
     expect(deadLetterSummary('onboarding', 'profile')).toBe("Couldn't save your hourly rate");
     expect(deadLetterSummary('rate_card', 'update')).toBe("Couldn't save this learned price");
+    expect(deadLetterSummary('rate_card', 'delete')).toBe("Couldn't remove this learned price");
     expect(deadLetterSummary('nope', 'nope')).toBe("Couldn't sync this change");
   });
 

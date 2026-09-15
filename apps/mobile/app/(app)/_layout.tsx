@@ -83,6 +83,13 @@ export default function AppLayout(): JSX.Element {
         }}
       />
       <Tabs.Screen
+        name="my-rates"
+        options={{
+          href: tabBarHref('my-rates'),
+          headerTitle: 'My rates',
+        }}
+      />
+      <Tabs.Screen
         name="sync-issues"
         options={{
           href: tabBarHref('sync-issues'),

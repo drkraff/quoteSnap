@@ -10,6 +10,11 @@ describe('normalizeRateCardName', () => {
     expect(normalizeRateCardName('Pipes')).toBe('pipes');
     expect(normalizeRateCardName('pipe-repair')).toBe('pipe-repair');
   });
+
+  it('does not fold lookalikes so list keys stay exact', () => {
+    expect(normalizeRateCardName('café')).toBe('café');
+    expect(normalizeRateCardName('Copper Pipe')).not.toBe(normalizeRateCardName('Copper Pipes'));
+  });
 });
 
 describe('displayRateCardName / rateCardTradeKey', () => {

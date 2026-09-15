@@ -2,6 +2,11 @@ import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
 import { importOldQuotes } from "../rate-card/import-apply.js";
+import {
+  deleteRateCardEntry,
+  isRateCardExactLookupQuery,
+  listRateCardEntries,
+} from "../rate-card/list.js";
 import { lookupRateCardEntry, upsertRateCardEntry } from "../rate-card/upsert.js";
 
 export const router = Router();
@@ -37,21 +42,47 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
   }
 });
 
-// GET / — exact lookup by name + unit (+ optional trade). Miss returns { entry: null }.
+// GET / — omit name for the contractor list (paginated). name+unit is exact lookup.
 router.get("/", authenticateToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const contractorId = req.contractor!.contractorId;
-    const outcome = await lookupRateCardEntry(query, {
+    if (isRateCardExactLookupQuery({ name: req.query["name"] })) {
+      const outcome = await lookupRateCardEntry(query, {
+        contractorId,
+        query: {
+          name: req.query["name"],
+          unit: req.query["unit"],
+          trade: req.query["trade"],
+        },
+      });
+      res.status(outcome.status).json(outcome.json);
+      return;
+    }
+    const outcome = await listRateCardEntries(query, {
       contractorId,
       query: {
-        name: req.query["name"],
-        unit: req.query["unit"],
-        trade: req.query["trade"],
+        limit: req.query["limit"],
+        offset: req.query["offset"],
       },
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
     console.error("GET /rate-card error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /:id — remove one learned row. Tenant-scoped; does not invent a replacement.
+router.delete("/:id", authenticateToken, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contractorId = req.contractor!.contractorId;
+    const outcome = await deleteRateCardEntry(query, {
+      contractorId,
+      id: req.params["id"] ?? "",
+    });
+    res.status(outcome.status).json(outcome.json);
+  } catch (err) {
+    console.error("DELETE /rate-card/:id error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

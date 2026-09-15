@@ -49,6 +49,7 @@ const TITLE_BY_ENTITY_ACTION: Record<string, string> = {
   'onboarding:profile': 'Hourly rate',
   'rate_card:update': 'Saved price',
   'rate_card:create': 'Saved price',
+  'rate_card:delete': 'Removed rate',
 };
 
 const SUMMARY_BY_ENTITY_ACTION: Record<string, string> = {
@@ -67,6 +68,7 @@ const SUMMARY_BY_ENTITY_ACTION: Record<string, string> = {
   'onboarding:profile': "Couldn't save your hourly rate",
   'rate_card:update': "Couldn't save this learned price",
   'rate_card:create': "Couldn't save this learned price",
+  'rate_card:delete': "Couldn't remove this learned price",
 };
 
 export function canRetryDeadLetter(status: string): boolean {

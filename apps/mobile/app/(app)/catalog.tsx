@@ -251,6 +251,17 @@ export default function CatalogScreen(): JSX.Element {
             <Pressable
               onPress={() => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                router.push('/my-rates' as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="My rates"
+              style={styles.importLink}
+            >
+              <Text style={styles.importLinkText}>My rates</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 router.push('/import-quotes' as any);
               }}
               accessibilityRole="button"

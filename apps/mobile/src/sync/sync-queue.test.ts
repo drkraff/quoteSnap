@@ -11,7 +11,7 @@ import { database } from '../db';
 import { isOnline } from './network-monitor';
 import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue } from './sync-queue';
 import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer, uploadQuotePhoto } from '../api/quotes';
-import { upsertRateCardEntry } from '../api/rate-card';
+import { upsertRateCardEntry, deleteRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
 import { QUOTE_MONEY_FROZEN_ERROR } from './frozen-quote';
 import { rememberServerRevision, resetServerRevisionsForTests } from './server-revision';
@@ -57,6 +57,7 @@ jest.mock('../api/quotes', () => ({
 jest.mock('../api/rate-card', () => ({
   upsertRateCardEntry: jest.fn(),
   lookupRateCardEntry: jest.fn(),
+  deleteRateCardEntry: jest.fn(),
 }));
 
 type FakeQueueItem = {
@@ -123,6 +124,7 @@ const mockedUnarchiveQuote = unarchiveQuote as unknown as jest.Mock;
 const mockedCreateQuoteOnServer = createQuoteOnServer as unknown as jest.Mock;
 const mockedUploadQuotePhoto = uploadQuotePhoto as unknown as jest.Mock;
 const mockedUpsertRateCardEntry = upsertRateCardEntry as unknown as jest.Mock;
+const mockedDeleteRateCardEntry = deleteRateCardEntry as unknown as jest.Mock;
 
 function makeQueueItem(overrides: Partial<FakeQueueItem> = {}): FakeQueueItem {
   const item: FakeQueueItem = {
@@ -207,6 +209,7 @@ describe('processQueue', () => {
     mockedCreateQuoteOnServer.mockReset();
     mockedUploadQuotePhoto.mockReset();
     mockedUpsertRateCardEntry.mockReset();
+    mockedDeleteRateCardEntry.mockReset();
     resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
@@ -1597,6 +1600,28 @@ describe('processQueue', () => {
     expect(item.status).toBe('pending');
     expect(item.retryCount).toBe(1);
     expect(item.nextRetryAt).toBeInstanceOf(Date);
+  });
+
+  it('deletes a rate-card row by id without posting an upsert', async () => {
+    const item = makeQueueItem({
+      entityType: 'rate_card',
+      entityId: '11111111-1111-4111-8111-111111111111',
+      action: 'delete',
+      payloadJson: JSON.stringify({
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'Copper Pipe',
+      }),
+    });
+    queueItems = [item];
+    mockedDeleteRateCardEntry.mockResolvedValue({ deleted: true });
+
+    await processQueue();
+
+    expect(mockedDeleteRateCardEntry).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(mockedUpsertRateCardEntry).not.toHaveBeenCalled();
+    expect(item.status).toBe('destroyed');
   });
 
   it('uploads a pending still once the parent quote has a server id', async () => {
