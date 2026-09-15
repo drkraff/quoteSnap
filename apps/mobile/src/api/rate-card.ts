@@ -1,5 +1,7 @@
 import { apiClient } from './client';
 
+export type RateCardSource = 'typed' | 'confirmed' | 'imported';
+
 export type RateCardHistoryEntry = {
   unitPriceCents: number;
   recordedAt: string;
@@ -13,10 +15,18 @@ export type RateCardEntryResponse = {
   trade: string | null;
   unitPriceCents: number;
   useCount: number;
-  source: 'typed' | 'confirmed';
+  source: RateCardSource;
   priceHistory: RateCardHistoryEntry[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type ImportRateCardResponse = {
+  imported: number;
+  skipped: number;
+  entries: RateCardEntryResponse[];
+  unreadableFiles: { filename: string; reason: string }[];
+  message: string;
 };
 
 interface RateCardUpsertResponse {
@@ -32,7 +42,7 @@ export async function upsertRateCardEntry(body: {
   unit: string;
   unitPriceCents: number;
   trade?: string;
-  source?: 'typed' | 'confirmed';
+  source?: RateCardSource;
 }): Promise<RateCardEntryResponse> {
   const data = await apiClient.post<RateCardUpsertResponse>('/rate-card', body);
   return data.entry;
@@ -49,4 +59,12 @@ export async function lookupRateCardEntry(query: {
   }
   const data = await apiClient.get<RateCardLookupResponse>(`/rate-card?${params.toString()}`);
   return data.entry;
+}
+
+export async function importRateCardFromText(body: {
+  text: string;
+  trade?: string;
+  documents?: { filename: string; mime: string; text?: string }[];
+}): Promise<ImportRateCardResponse> {
+  return apiClient.post<ImportRateCardResponse>('/rate-card/import', body);
 }

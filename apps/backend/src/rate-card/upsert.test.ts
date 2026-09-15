@@ -176,6 +176,13 @@ describe("parseRateCardUpsertBody", () => {
       source: "confirmed",
     });
     assert.equal(confirmed.ok && confirmed.source, "confirmed");
+    const imported = parseRateCardUpsertBody({
+      name: "Pipe",
+      unit: "each",
+      unitPriceCents: 100,
+      source: "imported",
+    });
+    assert.equal(imported.ok && imported.source, "imported");
     assert.equal(
       parseRateCardUpsertBody({
         name: "Pipe",

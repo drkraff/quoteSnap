@@ -3,9 +3,10 @@ import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/token
 
 interface EmptyStateProps {
   onAddItem: () => void;
+  onImportOldQuotes?: () => void;
 }
 
-export function EmptyState({ onAddItem }: EmptyStateProps): JSX.Element {
+export function EmptyState({ onAddItem, onImportOldQuotes }: EmptyStateProps): JSX.Element {
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>No items yet</Text>
@@ -18,6 +19,16 @@ export function EmptyState({ onAddItem }: EmptyStateProps): JSX.Element {
       >
         <Text style={styles.buttonText}>Add Item</Text>
       </Pressable>
+      {onImportOldQuotes ? (
+        <Pressable
+          style={({ pressed }) => [styles.secondary, pressed && styles.buttonPressed]}
+          onPress={onImportOldQuotes}
+          accessibilityRole="button"
+          accessibilityLabel="Import old quotes"
+        >
+          <Text style={styles.secondaryText}>Import old quotes</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -58,6 +69,18 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#ffffff',
+    fontSize: typography.body.fontSize,
+    fontWeight: '700',
+  },
+  secondary: {
+    width: '100%',
+    height: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
+  secondaryText: {
+    color: colors.accent,
     fontSize: typography.body.fontSize,
     fontWeight: '700',
   },
