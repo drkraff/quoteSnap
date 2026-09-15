@@ -1,8 +1,11 @@
 # QuoteSnap — Voice-to-Quote Design
 
-Status: working spec for Grok Bot  
+Status: working spec for Grok Bot. **P0 thin vertical + several MVP adjuncts landed 2026-09-15 overnight on `master` (through PR #61).** This file remains the product spec; [CONTEXT.md](../CONTEXT.md) is the shipped-status briefing.
+
 Audience: English-speaking global market first  
 Scope: how a contractor goes from a job-site walk to a priced PDF, without building a catalog first.
+
+As of 15 Sep 2026, `master` has the P0 loop (rate-card learn, adhoc voice lines with no invented prices, skippable catalog seed + hourly labor, material cost × markup compute) plus thin rooms, photos, private notes, option pairs, client sentence, paste-into-rate-card import, My rates list, customer PDF + OS share, and mark-sent after share (thin SYNC-06 freeze). Image/PDF OCR import, Twilio SMS, and a hosted approval page are **not** shipped.
 
 ## 1. Product bet
 

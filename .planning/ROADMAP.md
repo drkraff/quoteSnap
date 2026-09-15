@@ -6,17 +6,17 @@ This file is no longer a live GSD dashboard. Checkboxes and “Plans: TBD” bel
 
 ## Snapshot
 
-Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-07 against `master` including PRs #5 (CI), #7 (voice/auth), **#8 (sync retry/backoff/dead_letter/single-flight — merged)**, and **#9 (`ai_processing` reaper — merged)**.
+Match CONTEXT.md, not this table, if they ever diverge. Written 2026-09-15 against `master` through **PR #61**. Overnight 2026-09-14/15 landed the P0 thin vertical (rate card, adhoc voice, skippable seed + hourly, markup compute) plus MVP adjuncts (thin SYNC-06, FAIL-03/04/05/07, private notes, price_source, option groups, client sentence, rooms, photos, PDF share, paste→rate card, My rates list, mark-sent on share). Phase 6 SMS/Twilio/approval page and OCR image import are **not** done.
 
 | Phase | Requirements | In code | Notes |
 |-------|--------------|---------|-------|
 | 1 Foundation | AUTH-01…04, SYNC-01…02 | Yes | GitHub PRs #1, #2 merged |
-| 2 Onboarding | ONBD-01…04 | Yes | ONBD-03/04 not device-validated |
-| 3 Catalog | CAT-01…06 | Yes | |
-| 4 Quote review + history | REVIEW-01…06, HIST-01…04 | Yes | |
-| 5 Voice-to-quote | VOICE-01…09 | Yes | Code-complete; physical Android UAT still open |
-| 6 SMS + approval | SMS-01…10 | No | Do not implement unless asked |
-| 7 Sync hardening | SYNC-03…06, FAIL-01…08 | Partial | SYNC-03 retry/backoff/`dead_letter` (PR #8); SYNC-04 dead-letter UI; SYNC-05 draft conflict UX; thin SYNC-06 freeze of post-send money writes; FAIL-* not done |
+| 2 Onboarding | ONBD-01…04 | Yes | Catalog seed skippable; optional paste import into rate card. ONBD-03/04 not device-validated. OCR image import is a stub. |
+| 3 Catalog | CAT-01…06 | Yes | Catalog-adjacent **My rates** list is shipped (not a CAT-* ID) |
+| 4 Quote review + history | REVIEW-01…06, HIST-01…05 | Yes | HIST-05 archive/unarchive; Share quote builds a customer PDF (not SMS) |
+| 5 Voice-to-quote | VOICE-01…09 | Yes | Code-complete (adhoc lines + price attach); physical Android UAT still open |
+| 6 SMS + approval | SMS-01…10 | No | SMS/Twilio/`SMS-01`…`10` and hosted approval page not started. Thin customer PDF + OS share + mark-sent (phone optional) is shipped — that is not Phase 6. |
+| 7 Sync hardening | SYNC-03…06, FAIL-01…08 | Partial | SYNC-03…06 done (thin SYNC-06: status guards, no `quote_snapshots` table). **FAIL-03/04/05/07** done. Remaining **FAIL-01/02/06/08** (full 16-scenario matrix, mic ID, SMS, FCM) not done. |
 | Backlog 999.1 Railway + EAS | — | Partial | Root `build`/`start` + Railway migrate-on-boot; Android EAS preview in `apps/mobile/eas.json` (`docs/EAS-ANDROID.md`); no `railway.toml` |
 
 Do not start Phase 6, Phase 7 product work, or Railway/EAS from this roadmap alone.
