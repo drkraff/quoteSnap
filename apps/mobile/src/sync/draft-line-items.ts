@@ -42,6 +42,10 @@ export function toDraftLineItems(
     if (roomId) {
       line.roomId = roomId;
     }
+    const clientId = parseRoomId(item.clientId);
+    if (clientId) {
+      line.clientId = clientId;
+    }
     return line;
   });
 }

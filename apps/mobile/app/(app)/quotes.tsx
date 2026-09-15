@@ -62,6 +62,12 @@ import {
 } from '../../src/quotes/poll-ai-processing';
 import { audioRetryInFlight } from '../../src/quotes/retry-voice-quote';
 import { useResumeAfterCrashPrompt } from '../../src/quotes/use-resume-prompt';
+import { parseLineItems, serializeLineItems } from '../../src/utils/line-items';
+import {
+  assignRoomPhotosToNearestLine,
+  parsePhotosJson,
+  serializePhotos,
+} from '../../src/quotes/photos';
 
 // Tab bar height constant (safe default for both iOS/Android)
 const TAB_BAR_HEIGHT = 56;
@@ -138,6 +144,11 @@ export default function QuotesScreen(): JSX.Element {
               getDraftLineItems,
               async markDraftReady(_quote, lineItemsJson, clientSentence, roomsJson) {
                 const ready = draftReadyLocalFields(lineItemsJson);
+                const assigned = assignRoomPhotosToNearestLine(
+                  parsePhotosJson(q.photosJson),
+                  parseLineItems(lineItemsJson),
+                );
+                const nextLineJson = serializeLineItems(assigned.items);
                 await database.write(async () => {
                   // Write line items JSON to the draft record BEFORE updating quote status
                   const draftCollection = database.get<Draft>('drafts');
@@ -145,12 +156,13 @@ export default function QuotesScreen(): JSX.Element {
                   if (drafts.length > 0) {
                     const draft = drafts[0]!;
                     await draft.update((d) => {
-                      d.lineItemsJson = lineItemsJson;
+                      d.lineItemsJson = nextLineJson;
                     });
                   }
                   await q.update((r) => {
                     r.status = ready.status;
                     r.totalCents = ready.totalCents;
+                    r.photosJson = serializePhotos(assigned.photos);
                     if (clientSentence !== undefined) {
                       r.clientSentence = clientSentence;
                     }

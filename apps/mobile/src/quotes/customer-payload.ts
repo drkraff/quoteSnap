@@ -44,6 +44,7 @@ export type CustomerQuoteSource = {
     roomName?: string | null;
   }[];
   rooms?: { id: string; name: string; privateNote?: string | null }[];
+  photos?: { id: string; clientId?: string; localUri?: string; r2Key?: string }[];
 };
 
 export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuotePayload {
@@ -105,6 +106,7 @@ export function toContractorLineItemSync(item: {
   optionGroupId?: string | null;
   optionRole?: string | null;
   roomId?: string | null;
+  clientId?: string | null;
 }): {
   name: string;
   quantity: number;
@@ -115,6 +117,7 @@ export function toContractorLineItemSync(item: {
   optionGroupId?: string;
   optionRole?: string;
   roomId?: string | null;
+  clientId?: string | null;
 } {
   return {
     name: item.name,
@@ -127,5 +130,6 @@ export function toContractorLineItemSync(item: {
       ? { optionGroupId: item.optionGroupId, optionRole: item.optionRole }
       : {}),
     ...(item.roomId ? { roomId: item.roomId } : {}),
+    ...(item.clientId ? { clientId: item.clientId } : {}),
   };
 }

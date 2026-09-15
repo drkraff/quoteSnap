@@ -20,6 +20,15 @@ export interface QuoteResponse {
     name: string;
     privateNote?: string | null;
   }[];
+  /** Contractor-only stills. Never copy into a customer PDF/SMS payload. */
+  photos?: {
+    id: string;
+    clientId: string;
+    mime: string;
+    roomId?: string | null;
+    lineClientId?: string | null;
+    uploaded?: boolean;
+  }[];
 }
 
 export interface QuoteLineItemResponse {
@@ -40,6 +49,8 @@ export interface QuoteLineItemResponse {
   optionRole?: string | null;
   /** Optional room/zone. Null = ungrouped / default single-memo. */
   roomId?: string | null;
+  /** Client-stable id for photo-on-line. */
+  clientId?: string | null;
 }
 
 export interface QuoteListItem extends QuoteResponse {
@@ -107,6 +118,7 @@ export async function updateQuoteOnServer(
       optionGroupId?: string | null;
       optionRole?: string | null;
       roomId?: string | null;
+      clientId?: string | null;
     }[];
   },
 ): Promise<QuoteResponse> {
@@ -128,4 +140,40 @@ export async function unarchiveQuote(serverId: string): Promise<void> {
     archived: false,
     isArchived: false,
   });
+}
+
+export async function uploadQuotePhoto(
+  quoteServerId: string,
+  input: {
+    filePath: string;
+    clientId: string;
+    mime: string;
+    roomId?: string | null;
+    lineClientId?: string | null;
+  },
+): Promise<{
+  photo: {
+    id: string;
+    clientId: string;
+    mime: string;
+    roomId: string | null;
+    lineClientId: string | null;
+    uploaded: true;
+  };
+}> {
+  const formData = new FormData();
+  const ext = input.mime === 'image/png' ? 'png' : input.mime === 'image/webp' ? 'webp' : 'jpg';
+  formData.append('photo', {
+    uri: input.filePath,
+    type: input.mime,
+    name: `photo.${ext}`,
+  } as unknown as Blob);
+  formData.append('clientId', input.clientId);
+  if (input.roomId) {
+    formData.append('roomId', input.roomId);
+  }
+  if (input.lineClientId) {
+    formData.append('lineClientId', input.lineClientId);
+  }
+  return apiClient.post(`/quotes/${quoteServerId}/photos`, formData);
 }

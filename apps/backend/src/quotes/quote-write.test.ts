@@ -44,8 +44,8 @@ function quoteRow(overrides: Partial<QuoteRow> = {}): QuoteRow {
 }
 
 function existingLine(
-  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source" | "option_group_id" | "option_role" | "room_id">> = {},
-): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source" | "option_group_id" | "option_role" | "room_id"> {
+  overrides: Partial<Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source" | "option_group_id" | "option_role" | "room_id" | "client_id">> = {},
+): Pick<QuoteLineItemRow, "name" | "confidence" | "catalog_item_id" | "unit" | "private_note" | "price_source" | "option_group_id" | "option_role" | "room_id" | "client_id"> {
   return {
     name: "Copper pipe",
     confidence: 0.91,
@@ -56,6 +56,7 @@ function existingLine(
     option_group_id: null,
     option_role: null,
     room_id: null,
+    client_id: null,
     ...overrides,
   };
 }
@@ -427,6 +428,7 @@ describe("resolveReplacementLineItems", () => {
         optionGroupId: null,
         optionRole: null,
         roomId: null,
+        clientId: null,
       },
     ]);
   });
@@ -535,6 +537,7 @@ describe("resolveReplacementLineItems", () => {
       optionGroupId: null,
       optionRole: null,
       roomId: null,
+      clientId: null,
     });
   });
 
@@ -762,6 +765,7 @@ describe("applyQuotePut", () => {
         option_group_id: null,
         option_role: null,
         room_id: null,
+        client_id: null,
       },
     ];
     for (const status of ["sent", "approved", "declined", "expired", "failed_send"]) {
@@ -885,6 +889,7 @@ describe("applyQuotePut", () => {
         option_group_id: null,
         option_role: null,
         room_id: null,
+        client_id: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -915,7 +920,7 @@ describe("applyQuotePut", () => {
     assert.equal(update!.params?.[0], 4500);
 
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot", null, "catalog", null, null, null]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 3, 1500, 0.91, CATALOG_ID, "foot", null, "catalog", null, null, null, null]);
   });
 
   it("issues DELETE before INSERT on the same queryFn so a mid-loop failure can roll back", async () => {
@@ -957,6 +962,7 @@ describe("applyQuotePut", () => {
         option_group_id: null,
         option_role: null,
         room_id: null,
+        client_id: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -976,7 +982,7 @@ describe("applyQuotePut", () => {
       },
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot", null, "catalog", null, null, null]);
+    assert.deepEqual(insert?.params, [QUOTE_ID, "Copper pipe", 1, 1500, null, null, "foot", null, "catalog", null, null, null, null]);
   });
 
   it("writes a quote-level privateNote without replacing line items", async () => {
@@ -1028,6 +1034,7 @@ describe("applyQuotePut", () => {
         option_group_id: null,
         option_role: null,
         room_id: null,
+        client_id: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -1059,6 +1066,7 @@ describe("applyQuotePut", () => {
         option_group_id: null,
         option_role: null,
         room_id: null,
+        client_id: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -1111,8 +1119,8 @@ describe("applyQuotePut", () => {
 
     const inserts = calls.filter((c) => c.sql === INSERT_LINE_ITEM_SQL);
     assert.equal(inserts.length, 2);
-    assert.deepEqual(inserts[0]?.params?.slice(9), [groupId, "base", null]);
-    assert.deepEqual(inserts[1]?.params?.slice(9), [groupId, "alt", null]);
+    assert.deepEqual(inserts[0]?.params?.slice(9), [groupId, "base", null, null]);
+    assert.deepEqual(inserts[1]?.params?.slice(9), [groupId, "alt", null, null]);
     assert.equal(inserts[0]?.params?.[3], 180000);
     assert.equal(inserts[1]?.params?.[3], 45000);
   });
@@ -1135,6 +1143,7 @@ describe("applyQuotePut", () => {
         option_group_id: groupId,
         option_role: "base",
         room_id: null,
+        client_id: null,
       },
     ];
     const { calls, queryFn } = mockDb({ existingLines: existing });
@@ -1146,7 +1155,7 @@ describe("applyQuotePut", () => {
       },
     });
     const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
-    assert.deepEqual(insert?.params?.slice(9), [groupId, "base", null]);
+    assert.deepEqual(insert?.params?.slice(9), [groupId, "base", null, null]);
   });
 
   it("persists rooms and a line roomId without changing totals", async () => {

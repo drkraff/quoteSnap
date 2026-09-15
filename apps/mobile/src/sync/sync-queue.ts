@@ -13,7 +13,7 @@ import {
 import { uploadAudio } from '../api/voice';
 import type { Trade } from '../api/onboarding';
 import { CatalogItem } from '../db/models/catalog-item';
-import { archiveQuote, createQuoteOnServer, unarchiveQuote, updateQuoteOnServer } from '../api/quotes';
+import { archiveQuote, createQuoteOnServer, unarchiveQuote, updateQuoteOnServer, uploadQuotePhoto } from '../api/quotes';
 import { upsertRateCardEntry } from '../api/rate-card';
 import { Quote } from '../db/models/quote';
 import { Draft } from '../db/models/draft';
@@ -25,6 +25,11 @@ import { canRetryDeadLetter, deadLetterRetryPatch } from './dead-letter';
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
 import { parseRoomsJson } from '../quotes/rooms';
+import {
+  parsePhotosJson,
+  serializePhotos,
+  stampPhotoUploaded,
+} from '../quotes/photos';
 import {
   FrozenQuoteWriteError,
   QUOTE_MONEY_FROZEN_ERROR,
@@ -38,7 +43,7 @@ const queueFlight = createSingleFlight();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface SyncEnqueueParams {
-  entityType: 'quote' | 'catalog_item' | 'draft' | 'audio' | 'onboarding' | 'rate_card';
+  entityType: 'quote' | 'catalog_item' | 'draft' | 'audio' | 'onboarding' | 'rate_card' | 'photo';
   entityId: string;
   action: 'create' | 'update' | 'delete' | 'seed' | 'profile';
   payload: Record<string, unknown>;
@@ -225,6 +230,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           optionGroupId?: string | null;
           optionRole?: string | null;
           roomId?: string | null;
+          clientId?: string | null;
         }[] | undefined,
       });
       rememberServerRevision(serverId, updated.updatedAt);
@@ -256,6 +262,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         optionGroupId?: string | null;
         optionRole?: string | null;
         roomId?: string | null;
+        clientId?: string | null;
       }[];
       const payloadLines = lineItemsFromQueuePayload(payload) ?? [];
       const outcome = await fetchAndResolveDraftFork({
@@ -280,6 +287,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           optionGroupId?: string | null;
           optionRole?: string | null;
           roomId?: string | null;
+          clientId?: string | null;
         }[],
         totalCents: payload.totalCents as number | undefined,
         ...(quote.roomsJson != null && quote.roomsJson !== '' ? { rooms } : {}),
@@ -323,6 +331,40 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       }
       throw error;
     }
+    return;
+  }
+
+  if (item.entityType === 'photo') {
+    const { filePath, quoteLocalId, photoId, mime } = payload as {
+      filePath: string;
+      quoteLocalId: string;
+      photoId: string;
+      mime?: string;
+    };
+    const quoteCollection = database.get<Quote>('quotes');
+    const localQuotes = await quoteCollection.query(Q.where('id', quoteLocalId)).fetch();
+    const quote = localQuotes[0];
+    if (!quote) throw new Error('Cannot sync photo: quote not found');
+    const quoteServerId = quote.serverId?.trim();
+    if (!quoteServerId) {
+      throw new Error('Cannot sync photo: parent quote has no server ID yet');
+    }
+    const current = parsePhotosJson(quote.photosJson);
+    const photo = current.find((entry) => entry.id === photoId);
+    const uploaded = await uploadQuotePhoto(quoteServerId, {
+      filePath,
+      clientId: photoId,
+      mime: photo?.mime ?? mime ?? 'image/jpeg',
+      roomId: photo?.roomId ?? null,
+      lineClientId: photo?.lineClientId ?? null,
+    });
+    await database.write(async () => {
+      await quote.update((r) => {
+        r.photosJson = serializePhotos(
+          stampPhotoUploaded(parsePhotosJson(r.photosJson), photoId, uploaded.photo.id),
+        );
+      });
+    });
     return;
   }
 

@@ -26,6 +26,8 @@ export interface LineItem {
   optionRole?: OptionRole;
   /** Optional room/zone. Undefined = ungrouped / default single-memo. */
   roomId?: string;
+  /** Client-stable id so photos can attach across edits. */
+  clientId?: string;
 }
 
 const UNIT_SHORT: Record<string, string> = {
@@ -96,6 +98,10 @@ function coerceLineItem(value: unknown): LineItem {
   const roomId = parseRoomId(raw.roomId);
   if (roomId) {
     line.roomId = roomId;
+  }
+  const clientId = parseRoomId(raw.clientId);
+  if (clientId) {
+    line.clientId = clientId;
   }
   return line;
 }

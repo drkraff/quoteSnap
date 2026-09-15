@@ -33,6 +33,7 @@ export type QuoteLineItemRow = {
   option_group_id: string | null;
   option_role: string | null;
   room_id: string | null;
+  client_id: string | null;
 };
 
 export const QUOTE_COLUMNS =
@@ -56,7 +57,7 @@ export function parseQuotesListArchivedQuery(archived: unknown): boolean {
 }
 
 export const LINE_ITEM_COLUMNS =
-  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role, room_id";
+  "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role, room_id, client_id";
 
 export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
   return {
@@ -89,6 +90,7 @@ export function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemRespo
     optionGroupId: row.option_group_id,
     optionRole: row.option_role,
     roomId: row.room_id,
+    clientId: row.client_id,
   };
 }
 

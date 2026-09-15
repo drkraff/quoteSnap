@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 7,
+  version: 8,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -26,6 +26,10 @@ export const schema = appSchema({
         // Thin rooms/zones (design §6.1 / §8). JSON: [{id, name, privateNote?}].
         // Empty/null = single-memo / ungrouped. Line roomId lives in draft JSON.
         { name: 'rooms_json', type: 'string', isOptional: true },
+        // Thin photo-on-line (design §6.1 / §8). JSON: QuotePhoto[].
+        // Local URI + pending/uploaded. Bytes live in documentDirectory;
+        // server id stamps after private R2 upload. Never public by default.
+        { name: 'photos_json', type: 'string', isOptional: true },
       ],
     }),
     tableSchema({
@@ -48,7 +52,7 @@ export const schema = appSchema({
       columns: [
         { name: 'quote_id', type: 'string' },
         { name: 'line_items_json', type: 'string' },
-        // JSON: name, qty, unitPriceCents, optional unit/confidence/privateNote/priceSource/optionGroupId/optionRole/roomId.
+        // JSON: name, qty, unitPriceCents, optional unit/confidence/privateNote/priceSource/optionGroupId/optionRole/roomId/clientId.
         // Leftover unused v1 column. Do not store private notes here —
         // job notes live on quotes.private_note; line notes in line_items_json.
         { name: 'notes', type: 'string', isOptional: true },
@@ -59,7 +63,7 @@ export const schema = appSchema({
       name: 'sync_queue_items',
       columns: [
         { name: 'entity_type', type: 'string' },
-        // entity_type: quote | catalog_item | draft | audio | onboarding | rate_card
+        // entity_type: quote | catalog_item | draft | audio | onboarding | rate_card | photo
         { name: 'entity_id', type: 'string' },
         { name: 'action', type: 'string' },
         // action: create | update | delete | seed

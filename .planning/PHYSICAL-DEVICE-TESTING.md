@@ -232,6 +232,31 @@ These are the three tests from `.planning/phases/05-voice-to-quote-pipeline/05-H
 
 **Result**:
 
+#### Test 5.4 — Thin photo-on-line (stills, not video)
+
+**Setup**: Logged in. Manual Quote draft. Camera or library permission as needed. A native rebuild that includes `expo-image-picker` (not Expo Go).
+
+**Steps**:
+1. Open a draft. Confirm **Add photo** under the client sentence, with hint **Job evidence — not on the customer PDF**
+2. Attach a still to the **job** (library is enough). Thumbnail appears with **Waiting to upload** (offline) or **Saved** after sync
+3. Add a room (e.g. Kitchen). Attach a still on the room header
+4. Add a line item. Attach a still on that line. Confirm private notes still say internal-only
+5. Open the quote from history. Thumbnails still show. Prices were not invented or changed by attaching photos
+6. (Optional) Airplane mode → attach another still → **Waiting to upload** → go online → label becomes **Saved**
+
+**Expected**:
+- Stills only (no video picker)
+- Photos stay on the contractor draft/detail, not on a public URL
+- Private notes unchanged
+- Line prices unchanged
+
+**Fail signals**:
+- ❌ Picker offers video → MediaTypeOptions regression
+- ❌ Attaching a photo fills in a blank price → price-invent regression
+- ❌ Photo appears in any customer-payload test / PDF mock → allowlist regression
+
+**Result**:
+
 ---
 
 ### Regression — prior-phase features

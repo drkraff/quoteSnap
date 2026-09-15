@@ -3,6 +3,7 @@ import { parseLineItems, serializeLineItems, type LineItem } from '../utils/line
 import { parseOptionGroupId, parseOptionRole } from './option-groups';
 import { parsePriceSource } from '../utils/price-source';
 import { parseRoomId, parseRoomsJson, type QuoteRoom } from './rooms';
+import { mergePhotosOnHydrate, parsePhotosJson, type QuotePhoto, type ServerQuotePhoto } from './photos';
 
 export const QUOTE_DETAIL_OFFLINE_ERROR =
   'Connect to the internet to view full details';
@@ -21,6 +22,7 @@ export type LocalQuoteRecord = {
   privateNote?: string | null;
   clientSentence?: string | null;
   roomsJson?: string | null;
+  photosJson?: string | null;
 };
 
 export type QuoteDetailSnapshot = {
@@ -32,6 +34,7 @@ export type QuoteDetailSnapshot = {
   privateNote?: string | null;
   clientSentence?: string | null;
   rooms?: QuoteRoom[];
+  photos?: QuotePhoto[];
 };
 
 export type QuoteDetailSource = 'local' | 'network' | 'none';
@@ -86,6 +89,9 @@ export function lineItemsFromDraftJson(json: string): QuoteLineItemResponse[] {
     if (item.roomId) {
       row.roomId = item.roomId;
     }
+    if (item.clientId) {
+      row.clientId = item.clientId;
+    }
     return row;
   });
 }
@@ -124,6 +130,10 @@ export function remoteLineItemsToDraftJson(
     if (roomId) {
       line.roomId = roomId;
     }
+    const clientId = parseRoomId(item.clientId);
+    if (clientId) {
+      line.clientId = clientId;
+    }
     return line;
   });
   return serializeLineItems(lines);
@@ -139,6 +149,7 @@ function snapshotFromLocal(quote: LocalQuoteRecord): QuoteDetailSnapshot {
     privateNote: quote.privateNote ?? null,
     clientSentence: quote.clientSentence ?? null,
     rooms: parseRoomsJson(quote.roomsJson),
+    photos: parsePhotosJson(quote.photosJson),
   };
 }
 
@@ -152,6 +163,7 @@ function snapshotFromRemote(quote: QuoteResponse): QuoteDetailSnapshot {
     privateNote: quote.privateNote ?? null,
     clientSentence: quote.clientSentence ?? null,
     rooms: quote.rooms ?? [],
+    photos: mergePhotosOnHydrate([], (quote.photos ?? []) as ServerQuotePhoto[]),
   };
 }
 

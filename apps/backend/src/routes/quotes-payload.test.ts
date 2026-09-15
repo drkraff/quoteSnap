@@ -48,6 +48,7 @@ function lineItemRow(overrides: Partial<QuoteLineItemRow> = {}): QuoteLineItemRo
     option_group_id: null,
     option_role: null,
     room_id: null,
+    client_id: null,
     ...overrides,
   };
 }
@@ -117,6 +118,7 @@ describe("lineItemRowToResponse", () => {
       optionGroupId: null,
       optionRole: null,
       roomId: null,
+      clientId: null,
     });
   });
 
