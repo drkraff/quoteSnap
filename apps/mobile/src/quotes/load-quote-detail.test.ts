@@ -305,6 +305,59 @@ describe('resolveQuoteDetailView', () => {
     expect(result.found).toBe(false);
     expect(result.error).toBe(QUOTE_DETAIL_NOT_FOUND);
   });
+
+  it('does not restore a locally cleared photo strip from GET /quotes/:id', () => {
+    const result = resolveQuoteDetailView({
+      localQuote: localQuote({ photosJson: '[]' }),
+      localDraftJson: hydrateDraftJson,
+      remote: {
+        ok: true,
+        quote: remoteQuote({
+          photos: [
+            {
+              id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+              clientId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              mime: 'image/jpeg',
+              uploaded: true,
+            },
+          ],
+        }),
+        lineItems: remoteLineItems,
+      },
+    });
+
+    expect(result.source).toBe('network');
+    expect(result.quote?.photos).toEqual([]);
+    expect(JSON.stringify(result.quote?.photos)).not.toContain('unitPrice');
+  });
+
+  it('fills photos from the server when local photos_json was never written', () => {
+    const result = resolveQuoteDetailView({
+      localQuote: localQuote({ photosJson: null }),
+      localDraftJson: hydrateDraftJson,
+      remote: {
+        ok: true,
+        quote: remoteQuote({
+          photos: [
+            {
+              id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+              clientId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              mime: 'image/jpeg',
+              uploaded: true,
+            },
+          ],
+        }),
+        lineItems: remoteLineItems,
+      },
+    });
+
+    expect(result.quote?.photos).toHaveLength(1);
+    expect(result.quote?.photos?.[0]).toMatchObject({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      serverId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      status: 'uploaded',
+    });
+  });
 });
 
 describe('loadQuoteDetail', () => {

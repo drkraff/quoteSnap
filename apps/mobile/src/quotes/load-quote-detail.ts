@@ -4,7 +4,7 @@ import { parseOptionGroupId, parseOptionRole } from './option-groups';
 import { parsePriceSource } from '../utils/price-source';
 import { normalizePrivateNote, assignNormalizedPrivateNote } from './private-notes';
 import { parseRoomId, parseRoomsJson, type QuoteRoom } from './rooms';
-import { mergePhotosOnHydrate, parsePhotosJson, type QuotePhoto, type ServerQuotePhoto } from './photos';
+import { mergeStoredPhotosWithServer, parsePhotosJson, type QuotePhoto, type ServerQuotePhoto } from './photos';
 
 export const QUOTE_DETAIL_OFFLINE_ERROR =
   'Connect to the internet to view full details';
@@ -150,7 +150,10 @@ function snapshotFromLocal(quote: LocalQuoteRecord): QuoteDetailSnapshot {
   };
 }
 
-function snapshotFromRemote(quote: QuoteResponse): QuoteDetailSnapshot {
+function snapshotFromRemote(
+  quote: QuoteResponse,
+  localPhotosJson?: string | null,
+): QuoteDetailSnapshot {
   return {
     status: quote.status,
     customerPhone: quote.customerPhone,
@@ -160,7 +163,10 @@ function snapshotFromRemote(quote: QuoteResponse): QuoteDetailSnapshot {
     privateNote: normalizePrivateNote(quote.privateNote),
     clientSentence: quote.clientSentence ?? null,
     rooms: quote.rooms ?? [],
-    photos: mergePhotosOnHydrate([], (quote.photos ?? []) as ServerQuotePhoto[]),
+    photos: mergeStoredPhotosWithServer(
+      localPhotosJson,
+      (quote.photos ?? []) as ServerQuotePhoto[],
+    ),
   };
 }
 
@@ -192,7 +198,7 @@ export function resolveQuoteDetailView(input: {
   if ('ok' in input.remote && input.remote.ok) {
     return {
       found: true,
-      quote: snapshotFromRemote(input.remote.quote),
+      quote: snapshotFromRemote(input.remote.quote, input.localQuote.photosJson),
       lineItems: input.remote.lineItems,
       source: 'network',
       error: null,

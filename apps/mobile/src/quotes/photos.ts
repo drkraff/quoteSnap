@@ -333,13 +333,30 @@ export function photosFromServer(server: ServerQuotePhoto[]): QuotePhoto[] {
 }
 
 /**
+ * Server-only stills fill a quote that has never stored photos_json.
+ * After the contractor writes the strip (including last-remove `[]`),
+ * local membership wins so hydrate/GET cannot resurrect a removed still.
+ * There is no photo DELETE API — pending uploads are skipped, but an
+ * already-uploaded remove would otherwise come back from the server list.
+ */
+export function shouldIncludeServerOnlyPhotos(
+  photosJson: string | null | undefined,
+): boolean {
+  return photosJson == null || photosJson.trim() === '';
+}
+
+/**
  * Keep local pending stills (not on the server yet) and local URIs.
  * Stamp uploaded when the server knows the client id.
+ * `includeServerOnly` (default true) is for first fill / new device.
+ * Pass false once photos_json has been written, including `[]`.
  */
 export function mergePhotosOnHydrate(
   local: QuotePhoto[],
   server: ServerQuotePhoto[],
+  options?: { includeServerOnly?: boolean },
 ): QuotePhoto[] {
+  const includeServerOnly = options?.includeServerOnly !== false;
   const serverByClient = new Map<string, ServerQuotePhoto>();
   for (const entry of server) {
     const clientId = parsePhotoId(entry.clientId);
@@ -372,9 +389,21 @@ export function mergePhotosOnHydrate(
     else delete next.lineClientId;
     merged.push(next);
   }
-  for (const remote of photosFromServer(server)) {
-    if (seen.has(remote.id)) continue;
-    merged.push(remote);
+  if (includeServerOnly) {
+    for (const remote of photosFromServer(server)) {
+      if (seen.has(remote.id)) continue;
+      merged.push(remote);
+    }
   }
   return merged;
+}
+
+/** Hydrate/GET merge that respects last-remove `[]` on an existing quote. */
+export function mergeStoredPhotosWithServer(
+  photosJson: string | null | undefined,
+  server: ServerQuotePhoto[],
+): QuotePhoto[] {
+  return mergePhotosOnHydrate(parsePhotosJson(photosJson), server, {
+    includeServerOnly: shouldIncludeServerOnlyPhotos(photosJson),
+  });
 }
