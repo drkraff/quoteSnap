@@ -2,8 +2,11 @@ import {
   canHardDeleteLocalQuote,
   DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE,
   DELETE_LOCAL_QUOTE_CONFIRM_TITLE,
+  draftLineItemsJsonByQuoteId,
   hardDeleteEmptyLocalQuote,
   hasMeaningfulLineItems,
+  lineItemsJsonForQuoteListSwipe,
+  quoteListHardDeleteGateKey,
   quoteRowSwipeAction,
   removeQuoteListEntry,
   shouldDropQueueItemForDeletedLocalQuote,
@@ -28,6 +31,14 @@ describe('hasMeaningfulLineItems', () => {
       hasMeaningfulLineItems(JSON.stringify([{ name: 'Pipe', quantity: 0, unitPriceCents: 0 }])),
     ).toBe(true);
   });
+
+  it('treats named blank-price lines as content even when totalCents is 0', () => {
+    expect(
+      hasMeaningfulLineItems(
+        JSON.stringify([{ name: 'Copper pipe', quantity: 1, unitPriceCents: 0 }]),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('canHardDeleteLocalQuote', () => {
@@ -40,10 +51,20 @@ describe('canHardDeleteLocalQuote', () => {
 
   it('allows a never-synced empty Manual Quote draft', () => {
     expect(canHardDeleteLocalQuote(emptyLocal)).toBe(true);
-    expect(canHardDeleteLocalQuote({ ...emptyLocal, serverId: undefined, lineItemsJson: undefined })).toBe(
-      true,
-    );
+    expect(canHardDeleteLocalQuote({ ...emptyLocal, serverId: undefined })).toBe(true);
     expect(canHardDeleteLocalQuote({ ...emptyLocal, serverId: '' })).toBe(true);
+    expect(canHardDeleteLocalQuote({ ...emptyLocal, lineItemsJson: null })).toBe(true);
+  });
+
+  it('does not treat omitted draft JSON as empty (list swipe must load it)', () => {
+    expect(canHardDeleteLocalQuote({ ...emptyLocal, lineItemsJson: undefined })).toBe(false);
+    expect(
+      canHardDeleteLocalQuote({
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+      }),
+    ).toBe(false);
   });
 
   it('never allows a row that has a serverId (hydrate would resurrect it)', () => {
@@ -68,6 +89,16 @@ describe('canHardDeleteLocalQuote', () => {
       }),
     ).toBe(false);
   });
+
+  it('does not delete a $0 draft with named blank-price lines', () => {
+    expect(
+      canHardDeleteLocalQuote({
+        ...emptyLocal,
+        totalCents: 0,
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 1, unitPriceCents: 0 }]),
+      }),
+    ).toBe(false);
+  });
 });
 
 describe('quoteRowSwipeAction', () => {
@@ -79,6 +110,97 @@ describe('quoteRowSwipeAction', () => {
   it('keeps Archive on the active list and Unarchive on Archived', () => {
     expect(quoteRowSwipeAction('active', false)).toBe('archive');
     expect(quoteRowSwipeAction('archived', false)).toBe('unarchive');
+  });
+
+  it('shows Archive for a $0 never-synced draft with named blank-price lines', () => {
+    const canDelete = canHardDeleteLocalQuote({
+      serverId: null,
+      status: 'draft_local',
+      totalCents: 0,
+      lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 1, unitPriceCents: 0 }]),
+    });
+    expect(canDelete).toBe(false);
+    expect(quoteRowSwipeAction('active', canDelete)).toBe('archive');
+  });
+
+  it('keeps Archive when serverId is present even if draft JSON is empty', () => {
+    const canDelete = canHardDeleteLocalQuote({
+      serverId: 'srv-q1',
+      status: 'draft_local',
+      totalCents: 0,
+      lineItemsJson: '[]',
+    });
+    expect(canDelete).toBe(false);
+    expect(quoteRowSwipeAction('active', canDelete)).toBe('archive');
+  });
+});
+
+describe('draft JSON for the Quotes list Delete gate', () => {
+  const blankNamed = JSON.stringify([{ name: 'Pipe', quantity: 1, unitPriceCents: 0 }]);
+
+  it('maps the first draft JSON per quote and treats missing JSON as empty', () => {
+    expect(
+      draftLineItemsJsonByQuoteId([
+        { quoteId: 'q1', lineItemsJson: '[]' },
+        { quoteId: 'q2', lineItemsJson: blankNamed },
+        { quoteId: 'q1', lineItemsJson: blankNamed },
+        { quoteId: 'q3', lineItemsJson: null },
+      ]),
+    ).toEqual({
+      q1: '[]',
+      q2: blankNamed,
+      q3: '[]',
+    });
+  });
+
+  it('does not assume empty lines until drafts have loaded', () => {
+    expect(lineItemsJsonForQuoteListSwipe(null, 'q1')).toBeUndefined();
+    expect(
+      canHardDeleteLocalQuote({
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        lineItemsJson: lineItemsJsonForQuoteListSwipe(null, 'q1'),
+      }),
+    ).toBe(false);
+    expect(quoteRowSwipeAction('active', false)).toBe('archive');
+  });
+
+  it('matches destroy after load: missing draft is empty; named blank-price is not', () => {
+    const loaded = draftLineItemsJsonByQuoteId([
+      { quoteId: 'empty', lineItemsJson: '[]' },
+      { quoteId: 'named', lineItemsJson: blankNamed },
+    ]);
+    expect(lineItemsJsonForQuoteListSwipe(loaded, 'empty')).toBe('[]');
+    expect(lineItemsJsonForQuoteListSwipe(loaded, 'missing-draft')).toBe('[]');
+    expect(lineItemsJsonForQuoteListSwipe(loaded, 'named')).toBe(blankNamed);
+
+    expect(
+      canHardDeleteLocalQuote({
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        lineItemsJson: lineItemsJsonForQuoteListSwipe(loaded, 'empty'),
+      }),
+    ).toBe(true);
+    expect(
+      canHardDeleteLocalQuote({
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        lineItemsJson: lineItemsJsonForQuoteListSwipe(loaded, 'named'),
+      }),
+    ).toBe(false);
+  });
+
+  it('changes the list extraData bit when $0 named lines appear (Delete → Archive)', () => {
+    const quotes = [{ id: 'q1', serverId: null, status: 'draft_local', totalCents: 0 }];
+    expect(quoteListHardDeleteGateKey(quotes, null)).toBe('pending');
+    expect(quoteListHardDeleteGateKey(quotes, { q1: '[]' })).toBe('d');
+    expect(quoteListHardDeleteGateKey(quotes, { q1: blankNamed })).toBe('a');
+    expect(quoteListHardDeleteGateKey(quotes, { q1: '[]' })).not.toBe(
+      quoteListHardDeleteGateKey(quotes, { q1: blankNamed }),
+    );
   });
 });
 
@@ -258,6 +380,41 @@ describe('hardDeleteEmptyLocalQuote', () => {
       }),
     ).resolves.toBe('refused');
     expect(quote.destroyed).toBeUndefined();
+  });
+
+  it('refuses a $0 never-synced draft whose JSON has named blank-price lines', async () => {
+    const quote = attachDestroy(
+      {
+        id: 'q1',
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        customerPhone: null,
+      },
+      () => {
+        throw new Error('must not destroy named blank-price lines');
+      },
+    );
+    const draft = attachDestroy(
+      {
+        id: 'd1',
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 1, unitPriceCents: 0 }]),
+      },
+      () => {
+        throw new Error('must not destroy draft');
+      },
+    );
+
+    await expect(
+      hardDeleteEmptyLocalQuote({
+        quote,
+        drafts: [draft],
+        queueItems: [],
+        write,
+      }),
+    ).resolves.toBe('refused');
+    expect(quote.destroyed).toBeUndefined();
+    expect(draft.destroyed).toBeUndefined();
   });
 
   it('destroys quote, draft, and pending queue rows locally with no server delete', async () => {

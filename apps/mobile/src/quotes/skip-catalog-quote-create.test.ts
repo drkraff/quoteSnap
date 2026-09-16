@@ -46,4 +46,16 @@ describe('skippable catalog does not block quote create', () => {
     expect(quotesScreen).not.toMatch(/method:\s*['"]DELETE['"]/);
     expect(quotesScreen).not.toMatch(/\/quotes\/:id/);
   });
+
+  it('loads draft lineItemsJson for the Delete swipe so it matches destroy', () => {
+    expect(quotesScreen).toContain('lineItemsJsonForQuoteListSwipe');
+    expect(quotesScreen).toContain('draftLineItemsJsonByQuoteId');
+    expect(quotesScreen).toContain('quoteListHardDeleteGateKey');
+    expect(quotesScreen).toContain("get<Draft>('drafts')");
+    expect(quotesScreen).toMatch(/observeWithColumns\(\['line_items_json'\]\)/);
+    expect(quotesScreen).toMatch(/canHardDeleteLocalQuote\(\{[\s\S]*lineItemsJson:/);
+    expect(quotesScreen).not.toMatch(
+      /canHardDeleteLocalQuote\(\{\s*serverId: item\.serverId,\s*status: item\.status,\s*totalCents: item\.totalCents,\s*\}\)/,
+    );
+  });
 });

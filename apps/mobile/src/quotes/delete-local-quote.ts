@@ -47,8 +47,12 @@ export function hasMeaningfulLineItems(lineItemsJson: string | null | undefined)
 
 /**
  * Hard-delete is only for never-synced UAT junk: a local Manual Quote draft
- * with no serverId and no meaningful lines. Anything with a serverId must
- * stay on Archive — hydrate would resurrect a server-backed row.
+ * with no serverId and no meaningful (customer-facing) lines. Anything with
+ * a serverId must stay on Archive — hydrate would resurrect a server-backed
+ * row. `totalCents === 0` is not enough: named blank-price lines are still
+ * content. The Quotes list swipe must pass draft JSON the same way destroy
+ * does. Omitting `lineItemsJson` is unknown, not empty — show Archive until
+ * the draft JSON is loaded.
  */
 export function canHardDeleteLocalQuote(input: {
   serverId: string | null | undefined;
@@ -60,10 +64,58 @@ export function canHardDeleteLocalQuote(input: {
   if (serverId) return false;
   if (input.status !== 'draft_local') return false;
   if ((input.totalCents ?? 0) !== 0) return false;
-  if (input.lineItemsJson !== undefined && hasMeaningfulLineItems(input.lineItemsJson)) {
-    return false;
-  }
+  if (input.lineItemsJson === undefined) return false;
+  if (hasMeaningfulLineItems(input.lineItemsJson)) return false;
   return true;
+}
+
+/** First draft JSON per quote. Missing JSON is empty `[]` (same as destroy). */
+export function draftLineItemsJsonByQuoteId(
+  drafts: readonly { quoteId: string; lineItemsJson?: string | null }[],
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const draft of drafts) {
+    if (map[draft.quoteId] !== undefined) continue;
+    map[draft.quoteId] = draft.lineItemsJson ?? '[]';
+  }
+  return map;
+}
+
+/**
+ * List swipe JSON: unknown until drafts have loaded (do not treat as empty).
+ * After load, a missing draft row is `[]`, matching destroy.
+ */
+export function lineItemsJsonForQuoteListSwipe(
+  lineItemsJsonByQuoteId: Record<string, string> | null,
+  quoteId: string,
+): string | undefined {
+  if (lineItemsJsonByQuoteId == null) return undefined;
+  return lineItemsJsonByQuoteId[quoteId] ?? '[]';
+}
+
+/** FlatList extraData bit so $0 named lines flip Delete → Archive in place. */
+export function quoteListHardDeleteGateKey(
+  quotes: readonly {
+    id: string;
+    serverId?: string | null;
+    status: string;
+    totalCents?: number;
+  }[],
+  lineItemsJsonByQuoteId: Record<string, string> | null,
+): string {
+  if (lineItemsJsonByQuoteId == null) return 'pending';
+  return quotes
+    .map((quote) =>
+      canHardDeleteLocalQuote({
+        serverId: quote.serverId,
+        status: quote.status,
+        totalCents: quote.totalCents,
+        lineItemsJson: lineItemsJsonByQuoteId[quote.id] ?? '[]',
+      })
+        ? 'd'
+        : 'a',
+    )
+    .join('');
 }
 
 export function quoteRowSwipeAction(

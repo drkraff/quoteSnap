@@ -41,7 +41,10 @@ import {
   DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE,
   DELETE_LOCAL_QUOTE_CONFIRM_TITLE,
   canHardDeleteLocalQuote,
+  draftLineItemsJsonByQuoteId,
   hardDeleteEmptyLocalQuote,
+  lineItemsJsonForQuoteListSwipe,
+  quoteListHardDeleteGateKey,
   quoteRowSwipeAction,
 } from '../../src/quotes/delete-local-quote';
 import {
@@ -78,6 +81,9 @@ export default function QuotesScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const [listMode, setListMode] = useState<QuotesListMode>('active');
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [draftJsonByQuoteId, setDraftJsonByQuoteId] = useState<Record<string, string> | null>(
+    null,
+  );
   const [isCreating, setIsCreating] = useState(false);
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,6 +118,18 @@ export default function QuotesScreen(): JSX.Element {
       .subscribe(setQuotes);
     return () => subscription.unsubscribe();
   }, [showArchived]);
+
+  // Swipe Delete must see draft JSON (named $0 lines are not empty junk).
+  useEffect(() => {
+    const subscription = database
+      .get<Draft>('drafts')
+      .query()
+      .observeWithColumns(['line_items_json'])
+      .subscribe((drafts) => {
+        setDraftJsonByQuoteId(draftLineItemsJsonByQuoteId(drafts));
+      });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Polling for ai_processing quotes (job id, or serverId so we can recover one)
   useEffect(() => {
@@ -374,7 +392,10 @@ export default function QuotesScreen(): JSX.Element {
     <SafeAreaView style={styles.container}>
       <FlatList
         data={quotes}
-        extraData={quoteListRenderKey(quotes, online)}
+        extraData={`${quoteListRenderKey(quotes, online)}:${quoteListHardDeleteGateKey(
+          quotes,
+          draftJsonByQuoteId,
+        )}`}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
           const swipeAction = quoteRowSwipeAction(
@@ -383,6 +404,7 @@ export default function QuotesScreen(): JSX.Element {
               serverId: item.serverId,
               status: item.status,
               totalCents: item.totalCents,
+              lineItemsJson: lineItemsJsonForQuoteListSwipe(draftJsonByQuoteId, item.id),
             }),
           );
           return (
