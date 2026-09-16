@@ -28,6 +28,8 @@ export type RemoteQuoteForPoll = {
   quote: {
     status: string;
     voiceJobId: string | null;
+    clientSentence?: string | null;
+    rooms?: unknown;
   };
   lineItems?: RemoteQuoteLineItem[];
 };
@@ -64,6 +66,20 @@ function lineItemsJsonFromUnknown(items: unknown): string {
   return JSON.stringify(Array.isArray(items) ? items : []);
 }
 
+function roomsJsonFromUnknown(rooms: unknown): string | null {
+  return Array.isArray(rooms) && rooms.length > 0 ? JSON.stringify(rooms) : null;
+}
+
+type CompleteDraftSeed = {
+  lineItems?: RemoteQuoteLineItem[];
+  clientSentence?: string | null;
+  rooms?: unknown;
+};
+
+function hasSeededLineItems(seed: CompleteDraftSeed | undefined): boolean {
+  return Array.isArray(seed?.lineItems) && seed.lineItems.length > 0;
+}
+
 /** Quotes list poller: need a job id (status poll) or a server id (quote lookup). */
 export function shouldPollAiProcessing(quote: {
   status: string;
@@ -92,6 +108,7 @@ async function applyComplete(
   quote: PollableAiQuote,
   draftId: string,
   deps: PollAiProcessingDeps,
+  seed: CompleteDraftSeed = {},
 ): Promise<PollAiProcessingOutcome> {
   try {
     const draftData = await deps.getDraftLineItems(draftId);
@@ -99,14 +116,26 @@ async function applyComplete(
       quote,
       lineItemsJsonFromUnknown(draftData.lineItems),
       draftData.clientSentence ?? null,
-      draftData.rooms ? JSON.stringify(draftData.rooms) : null,
+      roomsJsonFromUnknown(draftData.rooms),
     );
+    return 'draft_ready';
   } catch {
-    // Same as the existing quotes-list poller: do not stay in ai_processing
-    // if the draft fetch fails after the server already finished.
-    await deps.markDraftReady(quote, '[]');
+    // GET /voice/status complete (or GET /quotes already left ai_processing)
+    // does not mean we may invent an empty draft. A flaky GET /voice/draft
+    // used to mark draft_local + `[]`, which stopped the poller and looked
+    // like the contractor described nothing. Prefer lines we already have
+    // from GET /quotes/:id; otherwise keep spinning.
+    if (hasSeededLineItems(seed)) {
+      await deps.markDraftReady(
+        quote,
+        lineItemsJsonFromUnknown(seed.lineItems),
+        seed.clientSentence ?? null,
+        roomsJsonFromUnknown(seed.rooms),
+      );
+      return 'draft_ready';
+    }
+    return 'still_processing';
   }
-  return 'draft_ready';
 }
 
 async function applyFailed(
@@ -136,7 +165,7 @@ async function applyFailed(
         quote,
         lineItemsJsonFromUnknown(draftData.lineItems),
         draftData.clientSentence ?? null,
-        draftData.rooms ? JSON.stringify(draftData.rooms) : null,
+        roomsJsonFromUnknown(draftData.rooms),
       );
       return 'ai_failed';
     } catch {
@@ -207,7 +236,11 @@ export async function pollOneAiProcessingQuote(
   }
 
   if (remote.quote.status !== 'ai_processing') {
-    return applyComplete(quote, quote.serverId, deps);
+    return applyComplete(quote, quote.serverId, deps, {
+      lineItems: remote.lineItems,
+      clientSentence: remote.quote.clientSentence ?? null,
+      rooms: remote.quote.rooms,
+    });
   }
 
   if (hasText(remote.quote.voiceJobId)) {
