@@ -891,6 +891,31 @@ describe('processQueue', () => {
     expect(item.status).toBe('destroyed');
   });
 
+  it('does not POST a second quote when a queued create already has a server id', async () => {
+    const quote = makeQuote({
+      id: 'local-quote-1',
+      serverId: 'srv-already',
+      status: 'draft_local',
+      totalCents: 0,
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'create',
+      status: 'in_progress',
+      payloadJson: JSON.stringify({ status: 'draft_local', totalCents: 0 }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedCreateQuoteOnServer).not.toHaveBeenCalled();
+    expect(quote.serverId).toBe('srv-already');
+    expect(quote.totalCents).toBe(0);
+    expect(item.status).toBe('destroyed');
+  });
+
   it('does not create a server quote when the local row was hard-deleted', async () => {
     quotes = [];
     const item = makeQueueItem({
