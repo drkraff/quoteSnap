@@ -378,4 +378,78 @@ describe('pollOneAiProcessingQuote', () => {
     expect(api.markFailed).not.toHaveBeenCalled();
     expect(api.getDraftLineItems).not.toHaveBeenCalled();
   });
+
+  it('does not invent an empty draft_local when GET /voice/draft fails after complete', async () => {
+    const api = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'complete' as const,
+        draftId: 'srv-1',
+      })),
+      getDraftLineItems: jest.fn(async () => {
+        throw new Error('draft fetch failed');
+      }),
+    });
+    const row = quote({ voiceJobId: 'job-1', serverId: 'srv-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('still_processing');
+    expect(api.getDraftLineItems).toHaveBeenCalledWith('srv-1');
+    expect(api.markDraftReady).not.toHaveBeenCalled();
+    expect(api.markFailed).not.toHaveBeenCalled();
+  });
+
+  it('uses nested GET /quotes lines when GET /voice/draft fails — blank prices stay blank', async () => {
+    const nested = [
+      {
+        catalogItemId: null,
+        name: 'Mystery assembly',
+        quantity: 1,
+        unitPriceCents: null,
+        unit: 'job',
+        confidence: 0.8,
+      },
+    ];
+    const api = deps({
+      fetchQuote: jest.fn(async () => ({
+        quote: {
+          status: 'draft_local',
+          voiceJobId: 'job-1',
+          clientSentence: 'appliances not included',
+          rooms: [{ id: 'room-1', name: 'Kitchen' }],
+        },
+        lineItems: nested,
+      })),
+      getDraftLineItems: jest.fn(async () => {
+        throw new Error('draft fetch failed');
+      }),
+    });
+    const row = quote({ serverId: 'srv-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('draft_ready');
+    expect(api.markDraftReady).toHaveBeenCalledWith(
+      row,
+      JSON.stringify(nested),
+      'appliances not included',
+      JSON.stringify([{ id: 'room-1', name: 'Kitchen' }]),
+    );
+    expect(JSON.stringify(api.markDraftReady.mock.calls[0])).not.toMatch(/\$/);
+    expect(api.markFailed).not.toHaveBeenCalled();
+  });
+
+  it('keeps spinning when GET /quotes is already finished but has no lines and GET /voice/draft fails', async () => {
+    const api = deps({
+      fetchQuote: jest.fn(async () => ({
+        quote: { status: 'draft_local', voiceJobId: 'job-1' },
+        lineItems: [],
+      })),
+      getDraftLineItems: jest.fn(async () => {
+        throw new Error('draft fetch failed');
+      }),
+    });
+
+    await expect(
+      pollOneAiProcessingQuote(quote({ serverId: 'srv-1' }), api),
+    ).resolves.toBe('still_processing');
+    expect(api.markDraftReady).not.toHaveBeenCalled();
+    expect(api.markFailed).not.toHaveBeenCalled();
+  });
 });

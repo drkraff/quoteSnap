@@ -96,7 +96,7 @@ Related: `apps/mobile/app.config.ts` `microphonePermission` string.
 
 **UX.** Quotes badge **Couldn't process audio** (not **Send failed**). Tap opens the **draft** editor. Banner: **Couldn't transcribe this recording** + **Retry recording** (if the m4a remains) or **Record again** + **Add items**.
 
-**Recovery.** Retry re-enqueues the same `documentDirectory` file onto the **same** quote (`?quoteId=`). Never `failed_send`.
+**Recovery.** Retry re-enqueues the same `documentDirectory` file onto the **same** quote (`?quoteId=`). Never `failed_send`. The quotes-list poller must not mark `draft_local` with an empty `[]` when `GET /voice/draft` fails after the job reports complete — that invents “no lines.” Keep polling, or apply nested `GET /quotes/:id` lines when they already arrived. Blank prices stay blank.
 
 **Status: done.** PR [#48](https://github.com/drkraff/quoteSnap/pull/48). `apps/backend/src/voice/ai-failure.ts`, `apps/mobile/src/quotes/ai-failed-recovery.ts`, `retry-voice-quote.ts`, `apps/mobile/src/components/quotes/ai-failed-banner.tsx`. Tests: `ai-failed-recovery.test.ts`, `ai-failure.test.ts`.
 
