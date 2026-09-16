@@ -34,6 +34,7 @@ import {
   mergeQuoteHydrateLists,
   shouldArchiveLocalQuoteOnHydrate,
 } from '../quotes/archive-quote';
+import { isDeadLetterAudioUpload } from '../quotes/voice-upload-queue';
 
 export { toDraftLineItems } from './draft-line-items';
 
@@ -209,6 +210,9 @@ export async function upsertQuotes(
     }
     if (isQuoteUnarchiveQueueItem(item)) {
       unarchiveHeldIds.add(item.entityId);
+    }
+    if (isDeadLetterAudioUpload(item)) {
+      blockedQuoteIds.add(item.entityId);
     }
   }
 
