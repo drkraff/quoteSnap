@@ -8,7 +8,7 @@ import { serializeLineItems } from '../utils/line-items';
 import { toDraftLineItems } from './draft-line-items';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
-import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
+import { mergeStoredPhotosWithServer, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 
 export function parseServerDate(iso: string): Date {
   const date = new Date(iso);
@@ -51,8 +51,8 @@ export async function applyServerQuoteInWrite(
     record.clientSentence = serverQuote.clientSentence ?? null;
     record.roomsJson = serializeRooms((serverQuote.rooms ?? []) as QuoteRoom[]);
     record.photosJson = serializePhotos(
-      mergePhotosOnHydrate(
-        parsePhotosJson(record.photosJson),
+      mergeStoredPhotosWithServer(
+        record.photosJson,
         (serverQuote.photos ?? []) as ServerQuotePhoto[],
       ),
     );

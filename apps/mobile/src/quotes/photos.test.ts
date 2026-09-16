@@ -13,6 +13,7 @@ import {
   ensureLineClientId,
   localPhotoPath,
   mergePhotosOnHydrate,
+  mergeStoredPhotosWithServer,
   parsePhotosJson,
   photoDisplayUri,
   photoStatusLabel,
@@ -21,6 +22,7 @@ import {
   photosForRoom,
   removePhoto,
   serializePhotos,
+  shouldIncludeServerOnlyPhotos,
   shouldUploadQueuedPhoto,
   type QuotePhoto,
 } from './photos';
@@ -183,6 +185,47 @@ describe('ensureLineClientId / mergePhotosOnHydrate', () => {
     expect(photoDisplayUri(merged[0]!)).toBeNull();
     expect(photoStatusLabel(merged[0]!)).toBe('On server');
     expect(merged[0]!.serverId).toBe(SERVER);
+  });
+
+  it('does not resurrect a last-remove empty strip from server-only metadata', () => {
+    const server = [
+      {
+        id: SERVER,
+        clientId: PHOTO_A,
+        mime: 'image/jpeg',
+        roomId: null,
+        lineClientId: null,
+      },
+    ];
+    expect(shouldIncludeServerOnlyPhotos(null)).toBe(true);
+    expect(shouldIncludeServerOnlyPhotos('')).toBe(true);
+    expect(shouldIncludeServerOnlyPhotos('[]')).toBe(false);
+    expect(mergePhotosOnHydrate([], server, { includeServerOnly: false })).toEqual([]);
+    expect(mergeStoredPhotosWithServer('[]', server)).toEqual([]);
+    expect(JSON.stringify(mergeStoredPhotosWithServer('[]', server))).not.toContain('unitPrice');
+  });
+
+  it('keeps remaining local stills after one remove without re-adding the dropped id', () => {
+    const local = addPhoto([], { id: PHOTO_B, localUri: 'file:///b.jpg' });
+    const merged = mergePhotosOnHydrate(
+      local,
+      [
+        { id: SERVER, clientId: PHOTO_A, mime: 'image/jpeg' },
+        {
+          id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+          clientId: PHOTO_B,
+          mime: 'image/jpeg',
+        },
+      ],
+      { includeServerOnly: false },
+    );
+    expect(merged.map((photo) => photo.id)).toEqual([PHOTO_B]);
+    expect(merged[0]).toMatchObject({
+      id: PHOTO_B,
+      localUri: 'file:///b.jpg',
+      status: 'uploaded',
+      serverId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    });
   });
 });
 

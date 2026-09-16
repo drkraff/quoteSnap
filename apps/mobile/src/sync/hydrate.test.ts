@@ -432,6 +432,39 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     ]);
   });
 
+  it('does not resurrect a last-remove empty photo strip on re-hydrate', async () => {
+    const serverQuote = {
+      id: 'srv-quote-1',
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: '2026-09-02T00:00:00.000Z',
+      updatedAt: '2026-09-02T00:00:00.000Z',
+      sentAt: null,
+      voiceJobId: null,
+      photos: [
+        {
+          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          clientId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          mime: 'image/jpeg',
+          roomId: null,
+          lineClientId: null,
+          uploaded: true,
+        },
+      ],
+      lineItems: [] as [],
+    };
+
+    await upsertQuotes(contractorId, [serverQuote]);
+    expect(JSON.parse(quotes[0]!.photosJson ?? '[]')).toHaveLength(1);
+
+    quotes[0]!.photosJson = '[]';
+    await upsertQuotes(contractorId, [serverQuote]);
+
+    expect(quotes).toHaveLength(1);
+    expect(JSON.parse(quotes[0]!.photosJson ?? '[]')).toEqual([]);
+  });
+
   it('re-running upsert updates in place and does not duplicate rows', async () => {
     const serverCatalog = {
       id: 'srv-cat-1',

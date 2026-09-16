@@ -24,7 +24,7 @@ import {
 } from '../../../src/quotes/load-quote-detail';
 import { serializeRooms } from '../../../src/quotes/rooms';
 import { normalizePrivateNote } from '../../../src/quotes/private-notes';
-import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos } from '../../../src/quotes/photos';
+import { mergeStoredPhotosWithServer, serializePhotos } from '../../../src/quotes/photos';
 import { useAuthStore } from '../../../src/store/auth-store';
 import {
   SHARE_QUOTE_ALERT_CANNOT,
@@ -97,10 +97,7 @@ export default function QuoteDetailScreen(): JSX.Element {
                 record.clientSentence = remoteQuote.clientSentence ?? null;
                 record.roomsJson = serializeRooms(remoteQuote.rooms ?? []);
                 record.photosJson = serializePhotos(
-                  mergePhotosOnHydrate(
-                    parsePhotosJson(q.photosJson),
-                    remoteQuote.photos ?? [],
-                  ),
+                  mergeStoredPhotosWithServer(q.photosJson, remoteQuote.photos ?? []),
                 );
               });
             });

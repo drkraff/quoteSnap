@@ -27,7 +27,7 @@ import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
-import { mergePhotosOnHydrate, parsePhotosJson, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
+import { mergePhotosOnHydrate, mergeStoredPhotosWithServer, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 import {
   hydrateArchivedFlag,
   isQuoteUnarchiveQueueItem,
@@ -301,8 +301,8 @@ export async function upsertQuotes(
           record.clientSentence = quote.clientSentence ?? null;
           record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
           record.photosJson = serializePhotos(
-            mergePhotosOnHydrate(
-              parsePhotosJson(record.photosJson),
+            mergeStoredPhotosWithServer(
+              record.photosJson,
               (quote.photos ?? []) as ServerQuotePhoto[],
             ),
           );
