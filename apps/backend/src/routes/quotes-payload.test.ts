@@ -109,6 +109,44 @@ describe("quoteRowToResponse", () => {
       "Appliances and decorative lighting not included.",
     );
   });
+
+  it("includes failureStage on ai_failed when the stored stage is known", () => {
+    assert.equal(
+      quoteRowToResponse(quoteRow({ status: "ai_failed", ai_failure_stage: "timeout" }))
+        .failureStage,
+      "timeout",
+    );
+    assert.equal(
+      quoteRowToResponse(quoteRow({ status: "ai_failed", ai_failure_stage: "asr" }))
+        .failureStage,
+      "asr",
+    );
+    assert.equal(
+      quoteRowToResponse(quoteRow({ status: "ai_failed", ai_failure_stage: "mapping" }))
+        .failureStage,
+      "mapping",
+    );
+  });
+
+  it("omits failureStage when the column is empty or unknown — does not invent asr", () => {
+    assert.equal(quoteRowToResponse(quoteRow({ status: "ai_failed" })).failureStage, undefined);
+    assert.equal(
+      quoteRowToResponse(quoteRow({ status: "ai_failed", ai_failure_stage: null })).failureStage,
+      undefined,
+    );
+    assert.equal(
+      quoteRowToResponse(
+        quoteRow({ status: "ai_failed", ai_failure_stage: "failed_send" }),
+      ).failureStage,
+      undefined,
+    );
+    assert.equal(
+      quoteRowToResponse(
+        quoteRow({ status: "draft_local", ai_failure_stage: "timeout" }),
+      ).failureStage,
+      undefined,
+    );
+  });
 });
 
 describe("lineItemRowToResponse", () => {

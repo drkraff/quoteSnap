@@ -13,6 +13,7 @@ export class Quote extends Model {
   @date('updated_at') updatedAt!: Date;
   @date('sent_at') sentAt!: Date | null;
   @text('voice_job_id') voiceJobId!: string | null;
+  @text('ai_failure_stage') aiFailureStage!: string | null;
   @field('is_archived') isArchived!: boolean | null;
   @text('private_note') privateNote!: string | null;
   @text('client_sentence') clientSentence!: string | null;

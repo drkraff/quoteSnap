@@ -2,6 +2,7 @@ import { snapshotPriceSourceFromRow } from "../quotes/price-source.js";
 import { normalizePrivateNote } from "../quotes/private-note.js";
 import { roomsFromDb } from "../quotes/rooms.js";
 import type { QuoteLineItemResponse, QuoteListItemResponse, QuoteResponse } from "../types/quotes.js";
+import { parseAiFailureStage } from "../voice/ai-failure.js";
 
 export type QuoteRow = {
   id: string;
@@ -17,6 +18,7 @@ export type QuoteRow = {
   private_note: string | null;
   client_sentence: string | null;
   rooms: unknown;
+  ai_failure_stage?: string | null;
 };
 
 export type QuoteLineItemRow = {
@@ -38,7 +40,7 @@ export type QuoteLineItemRow = {
 };
 
 export const QUOTE_COLUMNS =
-  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note, client_sentence, rooms";
+  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note, client_sentence, rooms, ai_failure_stage";
 
 /** Active Quotes list (catalog GET analog). Default GET /quotes. */
 export function listQuotesSql(archived: boolean): string {
@@ -61,6 +63,8 @@ export const LINE_ITEM_COLUMNS =
   "id, quote_id, name, quantity, unit_price_cents, created_at, confidence, catalog_item_id, unit, private_note, price_source, option_group_id, option_role, room_id, client_id";
 
 export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
+  const failureStage =
+    row.status === "ai_failed" ? parseAiFailureStage(row.ai_failure_stage) : null;
   return {
     id: row.id,
     status: row.status,
@@ -74,6 +78,7 @@ export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
     privateNote: normalizePrivateNote(row.private_note),
     clientSentence: row.client_sentence,
     rooms: roomsFromDb(row.rooms),
+    ...(failureStage ? { failureStage } : {}),
   };
 }
 

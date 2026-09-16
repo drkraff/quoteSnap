@@ -30,6 +30,8 @@ export interface QuoteResponse {
   clientSentence: string | null;
   /** Thin rooms/zones. Empty = single-memo / ungrouped. */
   rooms: QuoteRoomResponse[];
+  /** FAIL-04/05. Omitted when the column is empty or unknown — do not invent. */
+  failureStage?: 'asr' | 'mapping' | 'timeout';
   /** Contractor-only stills. Never copy into a customer PDF/SMS/approval payload. */
   photos?: QuotePhotoResponse[];
 }

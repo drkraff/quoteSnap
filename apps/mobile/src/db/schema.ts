@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 8,
+  version: 9,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -16,6 +16,8 @@ export const schema = appSchema({
         { name: 'updated_at', type: 'number' },
         { name: 'sent_at', type: 'number', isOptional: true },
         { name: 'voice_job_id', type: 'string', isOptional: true },
+        // FAIL-04/05: asr | mapping | timeout from the API. Null when not ai_failed.
+        { name: 'ai_failure_stage', type: 'string', isOptional: true },
         // Soft-archive (HIST-05). Optional so v2→v3 SQLite ADD COLUMN can be null
         // on existing rows; treat null as active (not archived).
         { name: 'is_archived', type: 'boolean', isOptional: true },

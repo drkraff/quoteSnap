@@ -1,4 +1,5 @@
 import type { DraftLineItemsResponse, VoiceStatusResponse } from '../api/voice';
+import { parseAiFailureStage, type AiFailureStage } from './ai-failed-recovery';
 
 export type PollableAiQuote = {
   id: string;
@@ -30,6 +31,7 @@ export type RemoteQuoteForPoll = {
     voiceJobId: string | null;
     clientSentence?: string | null;
     rooms?: unknown;
+    failureStage?: AiFailureStage;
   };
   lineItems?: RemoteQuoteLineItem[];
 };
@@ -49,6 +51,7 @@ export type PollAiProcessingDeps = {
     lineItemsJson: string,
     clientSentence?: string | null,
     roomsJson?: string | null,
+    failureStage?: AiFailureStage | null,
   ) => Promise<void>;
   stampVoiceJobId: (quote: PollableAiQuote, jobId: string) => Promise<void>;
 };
@@ -138,18 +141,56 @@ async function applyComplete(
   }
 }
 
+async function markFailedFromSeed(
+  quote: PollableAiQuote,
+  deps: PollAiProcessingDeps,
+  lineItemsJson: string,
+  seed: {
+    clientSentence?: string | null;
+    roomsJson?: string | null;
+    failureStage?: unknown;
+  } = {},
+): Promise<void> {
+  const failureStage = parseAiFailureStage(seed.failureStage);
+  if (seed.clientSentence !== undefined || seed.roomsJson !== undefined) {
+    if (failureStage) {
+      await deps.markFailed(
+        quote,
+        lineItemsJson,
+        seed.clientSentence,
+        seed.roomsJson,
+        failureStage,
+      );
+      return;
+    }
+    await deps.markFailed(quote, lineItemsJson, seed.clientSentence, seed.roomsJson);
+    return;
+  }
+  if (failureStage) {
+    await deps.markFailed(quote, lineItemsJson, undefined, undefined, failureStage);
+    return;
+  }
+  await deps.markFailed(quote, lineItemsJson);
+}
+
 async function applyFailed(
   quote: PollableAiQuote,
   deps: PollAiProcessingDeps,
   options: PollAiProcessingOptions,
-  seed: { draftId?: string | null; lineItems?: RemoteQuoteLineItem[] },
+  seed: {
+    draftId?: string | null;
+    lineItems?: RemoteQuoteLineItem[];
+    failureStage?: unknown;
+  },
 ): Promise<PollAiProcessingOutcome> {
   if (options.audioRetryInFlight) {
     return 'still_processing';
   }
 
   if (seed.lineItems && seed.lineItems.length > 0) {
-    await deps.markFailed(quote, lineItemsJsonFromUnknown(seed.lineItems));
+    await markFailedFromSeed(quote, deps, lineItemsJsonFromUnknown(seed.lineItems), {
+      failureStage: seed.failureStage,
+    });
     return 'ai_failed';
   }
 
@@ -161,11 +202,15 @@ async function applyFailed(
   if (hasText(draftId)) {
     try {
       const draftData = await deps.getDraftLineItems(draftId);
-      await deps.markFailed(
+      await markFailedFromSeed(
         quote,
+        deps,
         lineItemsJsonFromUnknown(draftData.lineItems),
-        draftData.clientSentence ?? null,
-        roomsJsonFromUnknown(draftData.rooms),
+        {
+          clientSentence: draftData.clientSentence ?? null,
+          roomsJson: roomsJsonFromUnknown(draftData.rooms),
+          failureStage: seed.failureStage,
+        },
       );
       return 'ai_failed';
     } catch {
@@ -173,7 +218,7 @@ async function applyFailed(
     }
   }
 
-  await deps.markFailed(quote, '[]');
+  await markFailedFromSeed(quote, deps, '[]', { failureStage: seed.failureStage });
   return 'ai_failed';
 }
 
@@ -189,7 +234,10 @@ async function pollByVoiceJobId(
       return applyComplete(quote, result.draftId, deps);
     }
     if (result.status === 'failed') {
-      return applyFailed(quote, deps, options, { draftId: result.draftId });
+      return applyFailed(quote, deps, options, {
+        draftId: result.draftId,
+        failureStage: result.failureStage,
+      });
     }
     return 'still_processing';
   } catch {
@@ -232,6 +280,7 @@ export async function pollOneAiProcessingQuote(
     return applyFailed(quote, deps, options, {
       draftId: quote.serverId,
       lineItems: remote.lineItems,
+      failureStage: remote.quote.failureStage,
     });
   }
 

@@ -39,6 +39,25 @@ export function parseAiFailureStage(value: unknown): AiFailureStage | null {
   return null;
 }
 
+/**
+ * Persist a server-provided FAIL-04/05 stage on `ai_failed`. Clear it when
+ * status leaves `ai_failed`. Do not invent a stage when the API omits one.
+ */
+export function assignStoredAiFailureStage(
+  record: { aiFailureStage?: string | null },
+  status: string,
+  apiStage?: unknown,
+): void {
+  if (status !== 'ai_failed') {
+    record.aiFailureStage = null;
+    return;
+  }
+  const parsed = parseAiFailureStage(apiStage);
+  if (parsed) {
+    record.aiFailureStage = parsed;
+  }
+}
+
 /** Count only. Junk / missing JSON is 0 — never materializes SKUs or cents. */
 export function lineCountFromDraftJson(json: string | null | undefined): number {
   if (json == null || json.trim() === '') {

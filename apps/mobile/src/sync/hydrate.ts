@@ -27,6 +27,7 @@ import { rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
+import { assignStoredAiFailureStage } from '../quotes/ai-failed-recovery';
 import { mergePhotosOnHydrate, mergeStoredPhotosWithServer, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 import {
   hydrateArchivedFlag,
@@ -264,6 +265,7 @@ export async function upsertQuotes(
           record.photosJson = serializePhotos(
             mergePhotosOnHydrate([], (quote.photos ?? []) as ServerQuotePhoto[]),
           );
+          assignStoredAiFailureStage(record, quote.status, quote.failureStage);
         });
         quoteByServerId.set(quote.id, local);
       }
@@ -310,6 +312,7 @@ export async function upsertQuotes(
               (quote.photos ?? []) as ServerQuotePhoto[],
             ),
           );
+          assignStoredAiFailureStage(record, quote.status, quote.failureStage);
           const serverArchived = quote.isArchived === true;
           const nextArchived = unarchiveHeldIds.has(localQuote.id)
             ? false

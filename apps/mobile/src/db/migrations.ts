@@ -83,5 +83,16 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 9,
+      steps: [
+        addColumns({
+          table: 'quotes',
+          columns: [
+            { name: 'ai_failure_stage', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });

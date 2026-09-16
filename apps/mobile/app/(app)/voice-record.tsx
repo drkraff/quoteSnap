@@ -29,6 +29,7 @@ import {
 import { localVoiceAudioPath } from '../../src/quotes/voice-audio';
 import { findQuoteRecord } from '../../src/quotes/find-quote';
 import { parseReuseQuoteId } from '../../src/quotes/retry-voice-quote';
+import { assignStoredAiFailureStage } from '../../src/quotes/ai-failed-recovery';
 import {
   shouldAlertOnVoiceStopError,
   voiceUploadEnqueueParams,
@@ -168,6 +169,7 @@ export default function VoiceRecordScreen(): JSX.Element {
             await found.record.update((r) => {
               r.status = 'ai_processing';
               r.voiceJobId = null;
+              assignStoredAiFailureStage(r, 'ai_processing');
             });
           });
         }
