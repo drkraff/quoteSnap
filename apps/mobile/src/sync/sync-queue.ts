@@ -150,6 +150,11 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       if (!localQuote) {
         return;
       }
+      // Stale in_progress / retry after POST+stamp must not insert a second quote
+      // (catalog create already skips when serverId is known).
+      if (localQuote.serverId) {
+        return;
+      }
       const response = await createQuoteOnServer({
         status: payload.status as string | undefined,
         customerPhone: payload.customerPhone as string | undefined,
