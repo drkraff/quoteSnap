@@ -66,6 +66,45 @@ export function canHardDeleteLocalQuote(input: {
   return true;
 }
 
+/** Same JSON destroy reads: first draft, or empty list. */
+export function firstDraftLineItemsJson(
+  drafts: readonly { lineItemsJson?: string | null }[] | undefined,
+): string {
+  return drafts?.[0]?.lineItemsJson ?? '[]';
+}
+
+/** First draft JSON per quote — same pick destroy uses (`drafts[0]`). */
+export function indexFirstDraftLineItemsJson(
+  drafts: readonly { quoteId: string; lineItemsJson?: string | null }[],
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const draft of drafts) {
+    if (next[draft.quoteId] !== undefined) continue;
+    next[draft.quoteId] = firstDraftLineItemsJson([draft]);
+  }
+  return next;
+}
+
+/**
+ * List swipe and destroy share this gate so a $0 draft with named
+ * blank-price lines cannot show Delete then silently refuse.
+ */
+export function canHardDeleteLocalQuoteWithDrafts(
+  quote: {
+    serverId: string | null | undefined;
+    status: string;
+    totalCents?: number;
+  },
+  drafts: readonly { lineItemsJson?: string | null }[],
+): boolean {
+  return canHardDeleteLocalQuote({
+    serverId: quote.serverId,
+    status: quote.status,
+    totalCents: quote.totalCents,
+    lineItemsJson: firstDraftLineItemsJson(drafts),
+  });
+}
+
 export function quoteRowSwipeAction(
   listMode: QuotesListMode,
   canDelete: boolean,
@@ -115,14 +154,7 @@ export async function hardDeleteEmptyLocalQuote(input: {
   write: (work: () => Promise<void>) => Promise<unknown>;
 }): Promise<HardDeleteLocalQuoteResult> {
   const { quote, drafts, queueItems, write } = input;
-  if (
-    !canHardDeleteLocalQuote({
-      serverId: quote.serverId,
-      status: quote.status,
-      totalCents: quote.totalCents,
-      lineItemsJson: drafts[0]?.lineItemsJson ?? '[]',
-    })
-  ) {
+  if (!canHardDeleteLocalQuoteWithDrafts(quote, drafts)) {
     return 'refused';
   }
   const draftIds = drafts.map((draft) => draft.id);

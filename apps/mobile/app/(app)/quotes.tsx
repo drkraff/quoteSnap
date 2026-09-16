@@ -40,8 +40,9 @@ import {
 import {
   DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE,
   DELETE_LOCAL_QUOTE_CONFIRM_TITLE,
-  canHardDeleteLocalQuote,
+  canHardDeleteLocalQuoteWithDrafts,
   hardDeleteEmptyLocalQuote,
+  indexFirstDraftLineItemsJson,
   quoteRowSwipeAction,
 } from '../../src/quotes/delete-local-quote';
 import {
@@ -78,6 +79,9 @@ export default function QuotesScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const [listMode, setListMode] = useState<QuotesListMode>('active');
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [draftLineItemsByQuoteId, setDraftLineItemsByQuoteId] = useState<
+    Record<string, string>
+  >({});
   const [isCreating, setIsCreating] = useState(false);
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,6 +116,17 @@ export default function QuotesScreen(): JSX.Element {
       .subscribe(setQuotes);
     return () => subscription.unsubscribe();
   }, [showArchived]);
+
+  useEffect(() => {
+    const subscription = database
+      .get<Draft>('drafts')
+      .query()
+      .observeWithColumns(['line_items_json', 'quote_id'])
+      .subscribe((drafts) => {
+        setDraftLineItemsByQuoteId(indexFirstDraftLineItemsJson(drafts));
+      });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Polling for ai_processing quotes (job id, or serverId so we can recover one)
   useEffect(() => {
@@ -374,16 +389,14 @@ export default function QuotesScreen(): JSX.Element {
     <SafeAreaView style={styles.container}>
       <FlatList
         data={quotes}
-        extraData={quoteListRenderKey(quotes, online)}
+        extraData={`${quoteListRenderKey(quotes, online)}:${JSON.stringify(draftLineItemsByQuoteId)}`}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
           const swipeAction = quoteRowSwipeAction(
             listMode,
-            canHardDeleteLocalQuote({
-              serverId: item.serverId,
-              status: item.status,
-              totalCents: item.totalCents,
-            }),
+            canHardDeleteLocalQuoteWithDrafts(item, [
+              { lineItemsJson: draftLineItemsByQuoteId[item.id] },
+            ]),
           );
           return (
             <QuoteRow

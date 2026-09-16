@@ -1,9 +1,14 @@
+import fs from 'fs';
+import path from 'path';
 import {
   canHardDeleteLocalQuote,
+  canHardDeleteLocalQuoteWithDrafts,
   DELETE_LOCAL_QUOTE_CONFIRM_MESSAGE,
   DELETE_LOCAL_QUOTE_CONFIRM_TITLE,
+  firstDraftLineItemsJson,
   hardDeleteEmptyLocalQuote,
   hasMeaningfulLineItems,
+  indexFirstDraftLineItemsJson,
   quoteRowSwipeAction,
   removeQuoteListEntry,
   shouldDropQueueItemForDeletedLocalQuote,
@@ -67,6 +72,95 @@ describe('canHardDeleteLocalQuote', () => {
         ]),
       }),
     ).toBe(false);
+  });
+
+  it('does not delete a $0 local draft with named blank-price lines', () => {
+    expect(
+      canHardDeleteLocalQuote({
+        ...emptyLocal,
+        lineItemsJson: JSON.stringify([{ name: 'Copper 90', quantity: 1, unitPriceCents: 0 }]),
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('canHardDeleteLocalQuoteWithDrafts (list swipe = destroy gate)', () => {
+  const localZero = {
+    serverId: null as string | null,
+    status: 'draft_local',
+    totalCents: 0,
+  };
+  const namedBlankJson = JSON.stringify([
+    { name: 'Copper 90', quantity: 1, unitPriceCents: 0 },
+  ]);
+
+  it('never-synced $0 draft with named blank-price lines is Archive, not Delete', () => {
+    const drafts = [{ lineItemsJson: namedBlankJson }];
+    const canDelete = canHardDeleteLocalQuoteWithDrafts(localZero, drafts);
+    expect(canDelete).toBe(false);
+    expect(quoteRowSwipeAction('active', canDelete)).toBe('archive');
+    expect(quoteRowSwipeAction('archived', canDelete)).toBe('unarchive');
+  });
+
+  it('omitting lineItemsJson would wrongly show Delete — swipe must pass draft JSON', () => {
+    expect(canHardDeleteLocalQuote(localZero)).toBe(true);
+    expect(quoteRowSwipeAction('active', canHardDeleteLocalQuote(localZero))).toBe('delete');
+    expect(
+      canHardDeleteLocalQuoteWithDrafts(localZero, [{ lineItemsJson: namedBlankJson }]),
+    ).toBe(false);
+  });
+
+  it('still offers Delete for a never-synced empty draft', () => {
+    expect(canHardDeleteLocalQuoteWithDrafts(localZero, [{ lineItemsJson: '[]' }])).toBe(true);
+    expect(canHardDeleteLocalQuoteWithDrafts(localZero, [])).toBe(true);
+    expect(
+      quoteRowSwipeAction('active', canHardDeleteLocalQuoteWithDrafts(localZero, [])),
+    ).toBe('delete');
+  });
+
+  it('serverId stays Archive even when drafts are empty', () => {
+    expect(
+      canHardDeleteLocalQuoteWithDrafts(
+        { ...localZero, serverId: 'srv-q1' },
+        [{ lineItemsJson: '[]' }],
+      ),
+    ).toBe(false);
+    expect(
+      quoteRowSwipeAction(
+        'active',
+        canHardDeleteLocalQuoteWithDrafts(
+          { ...localZero, serverId: 'srv-q1' },
+          [{ lineItemsJson: '[]' }],
+        ),
+      ),
+    ).toBe('archive');
+  });
+});
+
+describe('firstDraftLineItemsJson / indexFirstDraftLineItemsJson', () => {
+  it('matches destroy: first draft JSON, else empty list', () => {
+    expect(firstDraftLineItemsJson(undefined)).toBe('[]');
+    expect(firstDraftLineItemsJson([])).toBe('[]');
+    expect(firstDraftLineItemsJson([{ lineItemsJson: undefined }])).toBe('[]');
+    expect(
+      firstDraftLineItemsJson([
+        { lineItemsJson: JSON.stringify([{ name: 'Copper 90', quantity: 1, unitPriceCents: 0 }]) },
+      ]),
+    ).toBe(JSON.stringify([{ name: 'Copper 90', quantity: 1, unitPriceCents: 0 }]));
+  });
+
+  it('indexes the first draft per quote (destroy drafts[0])', () => {
+    const namedBlank = JSON.stringify([{ name: 'Copper 90', quantity: 1, unitPriceCents: 0 }]);
+    expect(
+      indexFirstDraftLineItemsJson([
+        { quoteId: 'q-named', lineItemsJson: namedBlank },
+        { quoteId: 'q-empty', lineItemsJson: '[]' },
+        { quoteId: 'q-named', lineItemsJson: '[]' },
+      ]),
+    ).toEqual({
+      'q-named': namedBlank,
+      'q-empty': '[]',
+    });
   });
 });
 
@@ -260,6 +354,47 @@ describe('hardDeleteEmptyLocalQuote', () => {
     expect(quote.destroyed).toBeUndefined();
   });
 
+  it('refuses a never-synced $0 draft with named blank-price lines', async () => {
+    const quote = attachDestroy(
+      {
+        id: 'q1',
+        serverId: null,
+        status: 'draft_local',
+        totalCents: 0,
+        customerPhone: null,
+      },
+      () => {
+        throw new Error('must not destroy named blank-price lines');
+      },
+    );
+    const draft = attachDestroy(
+      {
+        id: 'd1',
+        lineItemsJson: JSON.stringify([{ name: 'Copper 90', quantity: 1, unitPriceCents: 0 }]),
+      },
+      () => {
+        throw new Error('must not destroy draft');
+      },
+    );
+
+    await expect(
+      hardDeleteEmptyLocalQuote({
+        quote,
+        drafts: [draft],
+        queueItems: [],
+        write,
+      }),
+    ).resolves.toBe('refused');
+    expect(quote.destroyed).toBeUndefined();
+    expect(draft.destroyed).toBeUndefined();
+    expect(
+      quoteRowSwipeAction(
+        'active',
+        canHardDeleteLocalQuoteWithDrafts(quote, [draft]),
+      ),
+    ).toBe('archive');
+  });
+
   it('destroys quote, draft, and pending queue rows locally with no server delete', async () => {
     const store = {
       quotes: [] as StoreQuote[],
@@ -367,5 +502,21 @@ describe('removeQuoteListEntry', () => {
     expect(next[0]?.totalCents).toBe(69500);
     expect(next[0]?.customerPhone).toBe('+15555550100');
     expect(removeQuoteListEntry([], junk.id)).toEqual([]);
+  });
+});
+
+describe('Quotes list swipe wiring', () => {
+  const quotesScreen = fs.readFileSync(
+    path.join(__dirname, '../../app/(app)/quotes.tsx'),
+    'utf8',
+  );
+
+  it('passes draft JSON into the same helper destroy uses (not the no-lines skip)', () => {
+    expect(quotesScreen).toContain('canHardDeleteLocalQuoteWithDrafts');
+    expect(quotesScreen).toContain('indexFirstDraftLineItemsJson');
+    expect(quotesScreen).toContain('draftLineItemsByQuoteId');
+    expect(quotesScreen).not.toMatch(
+      /canHardDeleteLocalQuote\(\{[\s\S]*totalCents: item\.totalCents,\s*\}\)/,
+    );
   });
 });
