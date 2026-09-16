@@ -47,6 +47,7 @@ export type CustomerQuoteSource = {
     optionRole?: string | null;
     roomId?: string | null;
     roomName?: string | null;
+    clientId?: string | null;
   }[];
   rooms?: { id: string; name: string; privateNote?: string | null }[];
   photos?: { id: string; clientId?: string; localUri?: string; r2Key?: string }[];

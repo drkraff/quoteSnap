@@ -1,8 +1,13 @@
 import {
   shareCustomerQuoteAndMarkSent,
+  defaultConfirmShareSent,
 } from './share-and-mark-sent';
 import {
   SHARE_QUOTE_CANCELLED,
+  SHARE_QUOTE_CONFIRM_SENT_BODY,
+  SHARE_QUOTE_CONFIRM_SENT_NO,
+  SHARE_QUOTE_CONFIRM_SENT_TITLE,
+  SHARE_QUOTE_CONFIRM_SENT_YES,
   SHARE_QUOTE_EMPTY,
   SHARE_QUOTE_FAILED,
   type ShareCustomerQuoteDeps,
@@ -167,21 +172,37 @@ describe('shareCustomerQuoteAndMarkSent', () => {
   it('marks an eligible draft sent after a successful share', async () => {
     const quote = makeQuote();
     const now = new Date('2026-09-15T12:00:00.000Z');
-    const markSent = jest.fn(async (record: FakeQuote) => {
-      record.status = 'sent';
-      record.sentAt = now;
-      return 'sent' as const;
-    });
+    const markSent = jest.fn(
+      async (
+        record: FakeQuote,
+        _now?: Date,
+        _snapshot?: { totalCents: number; lineItems: { name: string; unitPriceCents: number }[] },
+      ) => {
+        record.status = 'sent';
+        record.sentAt = now;
+        return 'sent' as const;
+      },
+    );
     const result = await shareCustomerQuoteAndMarkSent(
       sourceWithLine,
       quote as unknown as never,
       {},
-      { shareDeps: fakeShareDeps(), markSent: markSent as never, now },
+      {
+        shareDeps: fakeShareDeps(),
+        markSent: markSent as never,
+        confirmSent: async () => true,
+        now,
+      },
     );
 
     expect(result.share).toEqual({ ok: true, kind: 'pdf' });
     expect(result.marked).toBe('sent');
     expect(markSent).toHaveBeenCalledTimes(1);
+    const snapshot = markSent.mock.calls[0]![2];
+    expect(snapshot?.totalCents).toBe(25000);
+    expect(snapshot?.lineItems[0]!.name).toBe('Replace outlet');
+    expect(snapshot?.lineItems[0]!.unitPriceCents).toBe(25000);
+    expect(JSON.stringify(snapshot)).not.toContain('customerPhone');
     expect(quote.status).toBe('sent');
     expect(quote.sentAt).toBe(now);
   });
@@ -203,5 +224,101 @@ describe('shareCustomerQuoteAndMarkSent', () => {
     expect(quote.status).toBe('sent');
     expect(quote.sentAt).toBe(sentAt);
     expect(quote.totalCents).toBe(25000);
+  });
+
+  it('does not mark sent when the plumber says they did not send the Android share', async () => {
+    const quote = makeQuote();
+    const markSent = jest.fn(async (): Promise<MarkQuoteSentAfterShareResult> => 'sent');
+    const result = await shareCustomerQuoteAndMarkSent(
+      sourceWithLine,
+      quote as unknown as never,
+      {},
+      {
+        shareDeps: fakeShareDeps(),
+        markSent,
+        confirmSent: async () => false,
+      },
+    );
+
+    expect(result.share).toEqual({
+      ok: false,
+      reason: 'cancelled',
+      message: SHARE_QUOTE_CANCELLED,
+    });
+    expect(result.marked).toBe('skipped');
+    expect(markSent).not.toHaveBeenCalled();
+    expect(quote.status).toBe('draft_local');
+    expect(quote.sentAt).toBeNull();
+  });
+
+  it('does not ask to confirm after cancel or empty share', async () => {
+    const quote = makeQuote();
+    const confirmSent = jest.fn(async () => true);
+    const markSent = jest.fn(async (): Promise<MarkQuoteSentAfterShareResult> => 'sent');
+    await shareCustomerQuoteAndMarkSent(
+      sourceWithLine,
+      quote as unknown as never,
+      {},
+      {
+        shareDeps: fakeShareDeps({
+          shareFile: jest.fn(async () => {
+            throw new Error('User did not share');
+          }),
+        }),
+        markSent,
+        confirmSent,
+      },
+    );
+    expect(confirmSent).not.toHaveBeenCalled();
+    expect(markSent).not.toHaveBeenCalled();
+  });
+});
+
+describe('defaultConfirmShareSent', () => {
+  it('skips the prompt on iOS where cancel already throws', async () => {
+    const alert = jest.fn();
+    await expect(defaultConfirmShareSent({ platform: 'ios', alert: alert as never })).resolves.toBe(
+      true,
+    );
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('asks on Android and treats Not yet as cancel', async () => {
+    const alert = jest.fn(
+      (
+        _title: string,
+        _message: string,
+        buttons: { text: string; onPress?: () => void }[],
+      ) => {
+        buttons.find((button) => button.text === SHARE_QUOTE_CONFIRM_SENT_NO)?.onPress?.();
+      },
+    );
+    await expect(
+      defaultConfirmShareSent({ platform: 'android', alert: alert as never }),
+    ).resolves.toBe(false);
+    expect(alert).toHaveBeenCalledWith(
+      SHARE_QUOTE_CONFIRM_SENT_TITLE,
+      SHARE_QUOTE_CONFIRM_SENT_BODY,
+      expect.arrayContaining([
+        expect.objectContaining({ text: SHARE_QUOTE_CONFIRM_SENT_NO }),
+        expect.objectContaining({ text: SHARE_QUOTE_CONFIRM_SENT_YES }),
+      ]),
+      expect.objectContaining({ cancelable: true }),
+    );
+  });
+
+  it('asks on Android and treats I sent it as confirm', async () => {
+    const alert = jest.fn(
+      (
+        _title: string,
+        _message: string,
+        buttons: { text: string; onPress?: () => void }[],
+      ) => {
+        buttons.find((button) => button.text === SHARE_QUOTE_CONFIRM_SENT_YES)?.onPress?.();
+      },
+    );
+    await expect(
+      defaultConfirmShareSent({ platform: 'android', alert: alert as never }),
+    ).resolves.toBe(true);
   });
 });

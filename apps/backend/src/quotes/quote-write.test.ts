@@ -999,6 +999,56 @@ describe("applyQuotePut", () => {
     assert.equal(calls.some((c) => c.sql.startsWith("UPDATE quotes")), false);
   });
 
+  it("marks a draft sent with stored line items and does not invent customerPhone", async () => {
+    const { queryFn, calls } = mockDb({
+      quote: quoteRow({ status: "draft_local", customer_phone: null, sent_at: null, total_cents: 0 }),
+      existingLines: [],
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        status: "sent",
+        totalCents: 25000,
+        lineItems: [{ name: "Replace outlet", quantity: 1, unitPriceCents: 25000, unit: "each" }],
+      },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.quote.status, "sent");
+    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.ok(update);
+    assert.match(update!.sql, /status = \$/);
+    assert.equal(update!.params?.[0], "sent");
+    assert.equal(
+      /SET[\s\S]*customer_phone\s*=/.test(update!.sql),
+      false,
+      "share-sent snapshot must not invent customer_phone",
+    );
+    assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), true);
+    const insert = calls.find((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.equal(insert?.params?.[1], "Replace outlet");
+    assert.equal(insert?.params?.[3], 25000);
+  });
+
+  it("rejects a share-sent snapshot that tries to rewrite money on an already-sent quote", async () => {
+    const { queryFn, calls } = mockDb({
+      quote: quoteRow({ status: "sent", sent_at: new Date("2026-09-01T13:00:00.000Z"), total_cents: 25000 }),
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        status: "sent",
+        totalCents: 1,
+        lineItems: [{ name: "Replace outlet", quantity: 9, unitPriceCents: 9999 }],
+      },
+    });
+    assert.deepEqual(outcome, { status: 409, json: { error: QUOTE_MONEY_FROZEN_ERROR } });
+    assert.equal(calls.some((c) => c.sql.startsWith("UPDATE quotes")), false);
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL || c.sql === INSERT_LINE_ITEM_SQL), false);
+  });
+
   it("still replaces line items on draft_local and draft_queued", async () => {
     for (const status of ["draft_local", "draft_queued"]) {
       const { queryFn, calls } = mockDb({

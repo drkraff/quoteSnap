@@ -1741,6 +1741,54 @@ describe('processQueue', () => {
     expect(item.status).toBe('destroyed');
   });
 
+  it('PUTs the shared line snapshot after local mark-sent so freeze matches the PDF', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'sent',
+      serverId: 'srv-q1',
+      customerPhone: null,
+      totalCents: 25000,
+      sentAt: new Date('2026-09-15T12:00:00.000Z'),
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    mockedFetchQuote.mockRejectedValue(new Error('offline'));
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      updatedAt: '2026-09-15T12:00:01.000Z',
+    });
+    const lineItems = [
+      { name: 'Replace outlet', quantity: 1, unitPriceCents: 25000, unit: 'each' },
+    ];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      payloadJson: JSON.stringify({
+        status: 'sent',
+        totalCents: 25000,
+        lineItems,
+      }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(mockedFetchQuote).not.toHaveBeenCalled();
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledWith(
+      'srv-q1',
+      expect.objectContaining({
+        status: 'sent',
+        totalCents: 25000,
+        lineItems,
+      }),
+    );
+    const body = mockedUpdateQuoteOnServer.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.customerPhone).toBeUndefined();
+    expect(item.status).toBe('destroyed');
+    expect(quote.totalCents).toBe(25000);
+  });
+
   it('forwards imported source on rate-card upsert', async () => {
     const item = makeQueueItem({
       entityType: 'rate_card',
