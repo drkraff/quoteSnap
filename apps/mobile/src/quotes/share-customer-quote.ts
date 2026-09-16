@@ -26,6 +26,12 @@ export const SHARE_QUOTE_CANCELLED =
 export const SHARE_QUOTE_FAILED =
   'The quote could not be shared. It was not marked sent — tap Share quote to try again.';
 
+export const SHARE_QUOTE_CONFIRM_SENT_TITLE = 'Mark quote sent?';
+export const SHARE_QUOTE_CONFIRM_SENT_BODY =
+  'If you sent the file, we freeze these prices so they cannot change. If you closed the share sheet, pick Not yet.';
+export const SHARE_QUOTE_CONFIRM_SENT_YES = 'I sent it';
+export const SHARE_QUOTE_CONFIRM_SENT_NO = 'Not yet';
+
 export const SHARE_QUOTE_ALERT_CANNOT = 'Cannot share';
 export const SHARE_QUOTE_ALERT_CANCELLED = 'Share cancelled';
 export const SHARE_QUOTE_ALERT_FAILED = 'Could not share';

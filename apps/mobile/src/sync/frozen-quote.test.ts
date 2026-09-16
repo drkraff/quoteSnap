@@ -6,7 +6,9 @@ import {
   isFrozenQuoteStatus,
   isFrozenQuoteWriteError,
   isFrozenQuoteWriteMessage,
+  isShareSentSnapshotPayload,
   payloadMutatesQuoteMoney,
+  shouldParkFrozenMoneyPut,
 } from './frozen-quote';
 
 describe('frozen quote statuses (SYNC-06)', () => {
@@ -51,6 +53,32 @@ describe('frozen quote statuses (SYNC-06)', () => {
         clientSentence: 'Appliances and decorative lighting not included.',
       }),
     ).toBe(false);
+  });
+
+  it('parks stale money PUTs on sent quotes but not the share-sent snapshot', () => {
+    expect(isShareSentSnapshotPayload({ status: 'sent' })).toBe(true);
+    expect(
+      isShareSentSnapshotPayload({
+        status: 'sent',
+        lineItems: [{ name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+        totalCents: 1500,
+      }),
+    ).toBe(true);
+    expect(isShareSentSnapshotPayload({ status: 'draft_queued', totalCents: 1500 })).toBe(false);
+    expect(
+      shouldParkFrozenMoneyPut('sent', {
+        lineItemsJson: '[]',
+        totalCents: 89991,
+      }),
+    ).toBe(true);
+    expect(
+      shouldParkFrozenMoneyPut('sent', {
+        status: 'sent',
+        lineItems: [{ name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+        totalCents: 1500,
+      }),
+    ).toBe(false);
+    expect(shouldParkFrozenMoneyPut('draft_local', { totalCents: 1500 })).toBe(false);
   });
 
   it('recognizes the server freeze 409 and the contractor-facing copy', () => {

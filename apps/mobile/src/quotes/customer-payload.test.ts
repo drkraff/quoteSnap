@@ -232,6 +232,7 @@ describe('toCustomerQuotePayload', () => {
           name: 'Cabinets',
           quantity: 14,
           unitPriceCents: null,
+          clientId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
         },
       ],
     });
@@ -241,6 +242,7 @@ describe('toCustomerQuotePayload', () => {
     expect(json).not.toContain('r2Key');
     expect(json).not.toContain('secret.jpg');
     expect(payload.lineItems[0]!.unitPriceCents).toBeNull();
+    expect(JSON.stringify(payload)).not.toContain('clientId');
   });
 
   it('omits private notes after clear and does not invent prices or placeholder copy', () => {

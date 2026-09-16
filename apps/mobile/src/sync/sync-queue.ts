@@ -35,9 +35,10 @@ import {
 import {
   FrozenQuoteWriteError,
   QUOTE_MONEY_FROZEN_ERROR,
-  isFrozenQuoteStatus,
   isFrozenQuoteWriteError,
+  isShareSentSnapshotPayload,
   payloadMutatesQuoteMoney,
+  shouldParkFrozenMoneyPut,
 } from './frozen-quote';
 import { rememberServerRevision } from './server-revision';
 
@@ -185,7 +186,12 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       }
       const localQuote = localItems[0];
       const payloadLines = lineItemsFromQueuePayload(payload);
-      if (payloadMutatesQuoteMoney(payload) && payloadLines && localQuote) {
+      if (
+        payloadMutatesQuoteMoney(payload)
+        && payloadLines
+        && localQuote
+        && !isShareSentSnapshotPayload(payload)
+      ) {
         const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', localQuote.id)).fetch();
         const parentDraft = drafts[0];
         if (parentDraft) {
@@ -198,7 +204,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           if (outcome === 'frozen') throw new FrozenQuoteWriteError();
         }
       }
-      if (payloadMutatesQuoteMoney(payload) && localQuote && isFrozenQuoteStatus(localQuote.status)) {
+      if (localQuote && shouldParkFrozenMoneyPut(localQuote.status, payload)) {
         throw new FrozenQuoteWriteError();
       }
       const updated = await updateQuoteOnServer(serverId, {
@@ -274,7 +280,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       });
       if (outcome === 'conflict') return;
       if (outcome === 'frozen') throw new FrozenQuoteWriteError();
-      if (payloadMutatesQuoteMoney(payload) && isFrozenQuoteStatus(quote.status)) {
+      if (shouldParkFrozenMoneyPut(quote.status, payload)) {
         throw new FrozenQuoteWriteError();
       }
       const rooms = parseRoomsJson(quote.roomsJson);

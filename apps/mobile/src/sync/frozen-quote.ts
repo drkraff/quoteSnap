@@ -47,6 +47,27 @@ export function payloadMutatesQuoteMoney(payload: Record<string, unknown>): bool
   );
 }
 
+/**
+ * Share-mark-sent PUT: `{ status: 'sent' }` plus the stored snapshot.
+ * Local status is already `sent` before this queue item runs; the server
+ * may still be a draft. Do not park it as a freeze rewrite.
+ */
+export function isShareSentSnapshotPayload(payload: Record<string, unknown>): boolean {
+  return payload.status === 'sent';
+}
+
+/** Skip stale post-share money PUTs. Allow the freeze-transition snapshot. */
+export function shouldParkFrozenMoneyPut(
+  status: string,
+  payload: Record<string, unknown>,
+): boolean {
+  return (
+    isFrozenQuoteStatus(status)
+    && payloadMutatesQuoteMoney(payload)
+    && !isShareSentSnapshotPayload(payload)
+  );
+}
+
 export function isFrozenQuoteWriteMessage(message: string): boolean {
   const lower = message.toLowerCase();
   return (

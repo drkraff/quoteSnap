@@ -1050,7 +1050,7 @@ export default function DraftScreen(): JSX.Element {
       await sentenceSync.flush();
       await roomsSync.flush();
       const contractor = useAuthStore.getState().contractor;
-      const { share } = await shareCustomerQuoteAndMarkSent(
+      const { share, marked } = await shareCustomerQuoteAndMarkSent(
         {
           customerPhone: phone || null,
           totalCents: recalculateTotal(lineItems),
@@ -1069,6 +1069,10 @@ export default function DraftScreen(): JSX.Element {
       if (!share.ok) {
         const alert = alertForFailedShare(share);
         Alert.alert(alert.title, alert.message);
+        return;
+      }
+      if (marked === 'sent') {
+        setQuoteStatus('sent');
       }
     } catch {
       Alert.alert(SHARE_QUOTE_ALERT_FAILED, SHARE_QUOTE_FAILED);

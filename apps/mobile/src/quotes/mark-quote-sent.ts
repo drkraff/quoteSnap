@@ -3,11 +3,19 @@
  * (and `sent_at`) so thin SYNC-06 freeze applies. Does not invent a phone
  * and does not send SMS (Phase 6). Sharing again on an already-sent quote
  * is a no-op.
+ *
+ * The PUT carries the stored line snapshot (not a later guessed price) so
+ * unsynced edits freeze as what the plumber just shared, instead of parking
+ * as Sync issues and letting hydrate clobber local money.
  */
 
 import { database } from '../db';
 import { Quote } from '../db/models/quote';
 import { enqueue } from '../sync/sync-queue';
+import {
+  toContractorLineItemSync,
+  type CustomerQuoteSource,
+} from './customer-payload';
 
 export const SHARE_SENT_ELIGIBLE_STATUSES = [
   'draft_local',
@@ -23,9 +31,35 @@ export function shouldMarkQuoteSentAfterShare(status: string): boolean {
   return SHARE_SENT_ELIGIBLE_SET.has(status);
 }
 
-/** PUT body: status only. Do not invent customerPhone. */
-export function shareSentSyncPayload(): { status: 'sent' } {
-  return { status: 'sent' };
+export type ShareSentSnapshot = {
+  totalCents: number;
+  lineItems: ReturnType<typeof toContractorLineItemSync>[];
+};
+
+export type ShareSentSyncPayload = {
+  status: 'sent';
+  totalCents?: number;
+  lineItems?: ShareSentSnapshot['lineItems'];
+};
+
+/** Stored snapshot at share time. Do not invent customerPhone or prices. */
+export function shareSentSnapshotFromSource(source: CustomerQuoteSource): ShareSentSnapshot {
+  return {
+    totalCents: source.totalCents,
+    lineItems: source.lineItems.map((item) => toContractorLineItemSync(item)),
+  };
+}
+
+/** PUT body: status plus stored lines/total when we have them. Never phone. */
+export function shareSentSyncPayload(snapshot?: ShareSentSnapshot | null): ShareSentSyncPayload {
+  if (!snapshot) {
+    return { status: 'sent' };
+  }
+  return {
+    status: 'sent',
+    totalCents: snapshot.totalCents,
+    lineItems: snapshot.lineItems,
+  };
 }
 
 export type ShareSentLocalFields = {
@@ -53,6 +87,7 @@ export type MarkQuoteSentAfterShareResult = 'sent' | 'noop';
 export async function markQuoteSentAfterShare(
   quote: Quote,
   now: Date = new Date(),
+  snapshot?: ShareSentSnapshot | null,
 ): Promise<MarkQuoteSentAfterShareResult> {
   if (!shouldMarkQuoteSentAfterShare(quote.status)) {
     return 'noop';
@@ -66,7 +101,7 @@ export async function markQuoteSentAfterShare(
     entityType: 'quote',
     entityId: quote.id,
     action: 'update',
-    payload: shareSentSyncPayload(),
+    payload: shareSentSyncPayload(snapshot),
   });
   return 'sent';
 }

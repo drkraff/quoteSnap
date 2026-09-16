@@ -1,6 +1,7 @@
 import {
   applyShareSentLocalFields,
   markQuoteSentAfterShare,
+  shareSentSnapshotFromSource,
   shareSentSyncPayload,
   shouldMarkQuoteSentAfterShare,
 } from './mark-quote-sent';
@@ -75,6 +76,42 @@ describe('shouldMarkQuoteSentAfterShare / applyShareSentLocalFields', () => {
     expect(shareSentSyncPayload()).not.toHaveProperty('lineItems');
     expect(shareSentSyncPayload()).not.toHaveProperty('totalCents');
   });
+
+  it('puts the stored line snapshot without inventing a phone or a price', () => {
+    const snapshot = shareSentSnapshotFromSource({
+      customerPhone: null,
+      totalCents: 25000,
+      privateNote: 'subcontractor check — do not tell the client',
+      lineItems: [
+        {
+          name: 'Replace outlet',
+          quantity: 1,
+          unitPriceCents: 25000,
+          unit: 'each',
+          privateNote: 'moisture from neighbor pipe',
+          clientId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        },
+        {
+          name: 'Cabinets',
+          quantity: 14,
+          unitPriceCents: null,
+          unit: 'foot',
+        },
+      ],
+    });
+    expect(snapshot.totalCents).toBe(25000);
+    expect(snapshot.lineItems[0]!.unitPriceCents).toBe(25000);
+    expect(snapshot.lineItems[1]!.unitPriceCents).toBe(0);
+    const payload = shareSentSyncPayload(snapshot);
+    expect(payload).toEqual({
+      status: 'sent',
+      totalCents: 25000,
+      lineItems: snapshot.lineItems,
+    });
+    expect(payload).not.toHaveProperty('customerPhone');
+    expect(JSON.stringify(payload)).not.toContain('subcontractor check');
+    expect(JSON.stringify(payload.lineItems)).toContain('moisture from neighbor pipe');
+  });
 });
 
 describe('markQuoteSentAfterShare', () => {
@@ -83,11 +120,20 @@ describe('markQuoteSentAfterShare', () => {
     mockedWrite.mockClear();
   });
 
-  it('writes sent + sentAt locally and enqueues status-only PUT', async () => {
+  it('writes sent + sentAt locally and enqueues the stored snapshot without a phone', async () => {
     const quote = makeQuote({ status: 'draft_local', customerPhone: null });
     const now = new Date('2026-09-15T12:00:00.000Z');
+    const snapshot = shareSentSnapshotFromSource({
+      customerPhone: null,
+      totalCents: 25000,
+      lineItems: [
+        { name: 'Replace outlet', quantity: 1, unitPriceCents: 25000, unit: 'each' },
+      ],
+    });
 
-    await expect(markQuoteSentAfterShare(quote as unknown as never, now)).resolves.toBe('sent');
+    await expect(
+      markQuoteSentAfterShare(quote as unknown as never, now, snapshot),
+    ).resolves.toBe('sent');
 
     expect(quote.status).toBe('sent');
     expect(quote.sentAt).toBe(now);
@@ -96,7 +142,11 @@ describe('markQuoteSentAfterShare', () => {
       entityType: 'quote',
       entityId: 'local-q1',
       action: 'update',
-      payload: { status: 'sent' },
+      payload: {
+        status: 'sent',
+        totalCents: 25000,
+        lineItems: snapshot.lineItems,
+      },
     });
     const payload = mockedEnqueue.mock.calls[0]![0].payload as Record<string, unknown>;
     expect(payload.customerPhone).toBeUndefined();
