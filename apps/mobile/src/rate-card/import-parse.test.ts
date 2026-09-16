@@ -108,6 +108,20 @@ describe('parseImportedQuoteText', () => {
     ]);
   });
 
+  it('does not invent unit=each when an @ price already has foot or hour', () => {
+    const parsed = parseImportedQuoteText(
+      'Copper pipe 14 ft @ $12.50\nLabor 2 hours @ $75\nLaminate cabinets 14 lin ft @ $185\n',
+    );
+    expect(parsed.lines).toEqual([
+      { name: 'Copper pipe', unit: 'foot', unitPriceCents: 1250 },
+      { name: 'Labor', unit: 'hour', unitPriceCents: 7500 },
+      { name: 'Laminate cabinets', unit: 'foot', unitPriceCents: 18500 },
+    ]);
+    expect(
+      parsed.lines.some((line) => line.name === 'Copper pipe' && line.unit === 'each'),
+    ).toBe(false);
+  });
+
   it('defaults missing unit to each only when an item + dollar price are clear', () => {
     expect(parseImportedQuoteText('Replace outlet    $85\n').lines).toEqual([
       { name: 'Replace outlet', unit: 'each', unitPriceCents: 8500 },

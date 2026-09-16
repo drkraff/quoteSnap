@@ -213,7 +213,9 @@ function extractExplicitUnitPrice(line: string): {
   if (atMatch) {
     const cents = moneyToCents(atMatch[1] ?? "");
     if (cents !== null) {
-      return { cents, unitHint: "each" };
+      // @ is an explicit unit price, not a unit. Do not stamp `each` —
+      // a foot/hour token on the same line must keep that unit.
+      return { cents, unitHint: null };
     }
   }
 
