@@ -840,6 +840,59 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     });
   });
 
+  it('does not overwrite an ai_failed quote while its audio upload is dead-lettered', async () => {
+    const local = attachUpdate<FakeQuote>({
+      id: 'local-voice-1',
+      serverId: 'srv-voice-1',
+      contractorId,
+      status: 'ai_failed',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date('2026-09-16T12:00:00.000Z'),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-voice-1',
+      quoteId: 'local-voice-1',
+      lineItemsJson: '[]',
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [local];
+    drafts = [localDraft];
+    queueItems = [
+      {
+        entityType: 'audio',
+        entityId: 'local-voice-1',
+        action: 'create',
+        status: 'dead_letter',
+        payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: 'local-voice-1' }),
+      },
+    ];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-voice-1',
+        status: 'ai_processing',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-16T12:05:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [],
+      },
+    ]);
+
+    expect(local.status).toBe('ai_failed');
+    expect(local.totalCents).toBe(0);
+    expect(local.customerPhone).toBeNull();
+    expect(localDraft.lineItemsJson).toBe('[]');
+  });
+
   it('applies server line items on a dirty draft fork and parks needs_review (SYNC-05)', async () => {
     const localQuote = attachUpdate<FakeQuote>({
       id: 'local-quote-1',

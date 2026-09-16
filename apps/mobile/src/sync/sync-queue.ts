@@ -27,6 +27,11 @@ import { fetchAndResolveDraftFork } from './draft-conflict-sync';
 import { parseRoomsJson } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
 import {
+  failQuoteAfterAudioDeadLetterPlan,
+  isDeadLetterAudioUpload,
+  resumeQuoteAfterAudioDeadLetterRetryPlan,
+} from '../quotes/voice-upload-queue';
+import {
   parsePhotosJson,
   serializePhotos,
   shouldUploadQueuedPhoto,
@@ -52,9 +57,93 @@ export interface SyncEnqueueParams {
   payload: Record<string, unknown>;
 }
 
+async function quoteByLocalId(quoteId: string): Promise<Quote | undefined> {
+  const quotes = await database.get<Quote>('quotes').query(Q.where('id', quoteId)).fetch();
+  return quotes.find((row) => row.id === quoteId);
+}
+
+/** After SYNC-03 exhausts a voice upload, surface FAIL-04/05 — status only. */
+async function failQuoteForDeadLetterAudio(item: {
+  entityType: string;
+  action?: string | null;
+  status: string;
+  entityId: string;
+}): Promise<void> {
+  if (!isDeadLetterAudioUpload(item)) return;
+  const quote = await quoteByLocalId(item.entityId);
+  if (!quote) return;
+  const plan = failQuoteAfterAudioDeadLetterPlan({
+    quoteId: quote.id,
+    status: quote.status,
+  });
+  if (!plan.ok) return;
+  await database.write(async () => {
+    await quote.update((record) => {
+      record.status = plan.nextStatus;
+    });
+  });
+}
+
+/** Sync issues / FAIL-04 retry: resume the quiet upload loop if still ai_failed. */
+async function resumeQuoteForAudioRetry(item: {
+  entityType: string;
+  entityId: string;
+}): Promise<void> {
+  if (item.entityType !== 'audio') return;
+  const quote = await quoteByLocalId(item.entityId);
+  if (!quote) return;
+  const plan = resumeQuoteAfterAudioDeadLetterRetryPlan({
+    quoteId: quote.id,
+    status: quote.status,
+  });
+  if (!plan.ok) return;
+  await database.write(async () => {
+    await quote.update((record) => {
+      record.status = plan.nextStatus;
+    });
+  });
+}
+
+/**
+ * Quotes that already exhausted audio retries (app upgrade / leftover rows)
+ * get the same local ai_failed flip so tap is not stuck on inert Queued.
+ */
+export async function applyAudioDeadLetterQuoteFailures(): Promise<void> {
+  const items = await getDeadLetterItems();
+  for (const item of items) {
+    await failQuoteForDeadLetterAudio(item);
+  }
+}
+
 export async function enqueue(params: SyncEnqueueParams): Promise<void> {
   const collection = database.get<SyncQueueItem>('sync_queue_items');
+  let reusedDeadLetter: SyncQueueItem | null = null;
   await database.write(async () => {
+    if (params.entityType === 'audio' && params.action === 'create') {
+      const candidates = await collection
+        .query(
+          Q.where('entity_type', 'audio'),
+          Q.where('entity_id', params.entityId),
+          Q.where('status', 'dead_letter'),
+        )
+        .fetch();
+      const existing = candidates.find(
+        (item) =>
+          isDeadLetterAudioUpload(item) &&
+          item.entityId === params.entityId &&
+          item.action === 'create',
+      );
+      if (existing) {
+        const patch = deadLetterRetryPatch();
+        await existing.update((record) => {
+          record.status = patch.status;
+          record.retryCount = patch.retryCount;
+          record.nextRetryAt = patch.nextRetryAt;
+        });
+        reusedDeadLetter = existing;
+        return;
+      }
+    }
     await collection.create((item) => {
       item.entityType = params.entityType;
       item.entityId = params.entityId;
@@ -65,6 +154,10 @@ export async function enqueue(params: SyncEnqueueParams): Promise<void> {
       item.nextRetryAt = null;
     });
   });
+
+  if (reusedDeadLetter) {
+    await resumeQuoteForAudioRetry(reusedDeadLetter);
+  }
 
   // Attempt immediate sync if online
   if (isOnline()) {
@@ -314,11 +407,16 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     try {
       const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quoteServerId);
 
-      // Store jobId and serverId on local quote
+      // Store jobId and serverId on local quote. If Sync issues retried a
+      // dead-lettered upload while the row was still ai_failed, resume the
+      // poller — do not invent lines or prices.
       await database.write(async () => {
         await quote.update((r) => {
           r.voiceJobId = jobId;
           r.serverId = serverQuoteId;
+          if (r.status === 'ai_failed') {
+            r.status = 'ai_processing';
+          }
         });
       });
     } catch (error) {
@@ -477,6 +575,9 @@ async function processQueueOnce(): Promise<void> {
           record.nextRetryAt = schedule.nextRetryAtMs != null ? new Date(schedule.nextRetryAtMs) : null;
         });
       });
+      if (schedule.status === 'dead_letter') {
+        await failQuoteForDeadLetterAudio(item);
+      }
     }
   }
 
@@ -508,6 +609,9 @@ export function initSyncQueue(): () => void {
       processQueue().catch(() => {});
     }
   });
+
+  // Leftover dead-letter audio must not stay inert Queued after upgrade.
+  applyAudioDeadLetterQuoteFailures().catch(() => {});
 
   // Initial queue processing attempt
   processQueue().catch(() => {});
@@ -550,6 +654,7 @@ export async function retryDeadLetterItem(item: SyncQueueItem): Promise<void> {
       record.nextRetryAt = patch.nextRetryAt;
     });
   });
+  await resumeQuoteForAudioRetry(item);
   await processQueue();
 }
 

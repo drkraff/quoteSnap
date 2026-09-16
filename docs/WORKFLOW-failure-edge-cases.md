@@ -80,13 +80,13 @@ Related: `apps/mobile/app.config.ts` `microphonePermission` string.
 
 ## 3 — Audio upload fails offline / no radio (FAIL-03)
 
-**Detection.** NetInfo down, or `POST /voice/upload` fails after Stop. Local quote + m4a already exist. Queue row stays `pending` (SYNC-03 backoff). Quote is **not** marked `ai_failed`.
+**Detection.** NetInfo down, or `POST /voice/upload` fails after Stop. Local quote + m4a already exist. Queue row stays `pending` (SYNC-03 backoff). Quote is **not** marked `ai_failed` mid-flow.
 
 **UX.** Contractor is **not** Alerted mid-flow. Quotes row shows **Queued** (cloud) until `voiceJobId` is stamped or while offline; accessibility “will retry” / “will upload when online”. Spinner only after the server has the file.
 
-**Recovery.** `processQueue` uploads when connectivity returns. After the 15-minute attempt fails, SYNC-04 dead-letter (scenario 9) — still not a mid-flow error.
+**Recovery.** `processQueue` uploads when connectivity returns. After the 15-minute attempt fails, SYNC-04 dead-letter (scenario 9) **and** the local quote flips `ai_processing` → `ai_failed` (status only — no invented lines, dollars, or phone). Tap opens the draft with FAIL-04/05 **Retry recording** / **Add items**; Sync issues still lists the recording. Not a mid-flow error.
 
-**Status: done.** PR [#53](https://github.com/drkraff/quoteSnap/pull/53). `apps/mobile/src/quotes/voice-upload-queue.ts`, `quote-row-display.ts`, `voice-record.tsx`. Tests: `voice-upload-queue.test.ts`, `quote-row-display.test.ts`.
+**Status: done.** PR [#53](https://github.com/drkraff/quoteSnap/pull/53); dead-letter recovery on the quote (not inert Queued). `apps/mobile/src/quotes/voice-upload-queue.ts`, `quote-row-display.ts`, `voice-record.tsx`. Tests: `voice-upload-queue.test.ts`, `quote-row-display.test.ts`, `sync-queue.test.ts`.
 
 ---
 
@@ -142,9 +142,9 @@ Related: `apps/mobile/app.config.ts` `microphonePermission` string.
 
 **Detection.** `processQueue` failure stays `pending` with `nextRetryAt` backoff **5s → 15s → 60s → 5m → 15m**, then `dead_letter`. Single-flight so overlapping runs do not double-write. Pre-existing `failed` rows are picked up.
 
-**UX.** No mid-flow Alert. Pending count / amber indicators; Quotes **Queued** for voice until upload is accepted (scenario 3).
+**UX.** No mid-flow Alert. Pending count / amber indicators; Quotes **Queued** for voice until upload is accepted (scenario 3). After audio `dead_letter`, the quote is `ai_failed` so tap is not inert.
 
-**Recovery.** Automatic until dead-letter; then scenario 9.
+**Recovery.** Automatic until dead-letter; then scenario 9 (and FAIL-04/05 on the quote for exhausted voice uploads).
 
 **Status: done.** PR [#8](https://github.com/drkraff/quoteSnap/pull/8). `apps/mobile/src/sync/sync-retry.ts`, `sync-queue.ts`. Tests: `sync-retry.test.ts`, `sync-queue.test.ts`.
 
@@ -156,7 +156,7 @@ Related: `apps/mobile/app.config.ts` `microphonePermission` string.
 
 **UX.** Quotes/Catalog banner + header warning open **Sync issues**: plain-language entity/action + last error + **Retry** (freeze / status-lock copy; never dump a stack). Empty: **All caught up**.
 
-**Recovery.** Retry resets to `pending` (`deadLetterRetryPatch`) and kicks `processQueue` without rewriting stored totals or prices. Frozen-quote money PUTs are parked here instead of retrying into dead-letter via backoff (thin SYNC-06).
+**Recovery.** Retry resets to `pending` (`deadLetterRetryPatch`) and kicks `processQueue` without rewriting stored totals or prices. Frozen-quote money PUTs are parked here instead of retrying into dead-letter via backoff (thin SYNC-06). Retrying a dead-lettered **voice recording** resumes the quote to `ai_processing` so the poller can run.
 
 **Status: done.** `apps/mobile/app/(app)/sync-issues.tsx`, `apps/mobile/src/sync/dead-letter.ts`, `use-dead-letter-items.ts`. Tests: `dead-letter.test.ts`. PR #75 retry UX (plain-English freeze / status-lock; retry omits payload).
 

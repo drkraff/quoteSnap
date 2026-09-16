@@ -9,7 +9,7 @@ import { seedCatalog, saveOnboardingProfile } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
-import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue } from './sync-queue';
+import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue, applyAudioDeadLetterQuoteFailures } from './sync-queue';
 import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer, uploadQuotePhoto } from '../api/quotes';
 import { upsertRateCardEntry, deleteRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
@@ -598,6 +598,146 @@ describe('processQueue', () => {
     expect(queueItems[0]!.lastError).toMatch(/network/i);
     expect(quote.status).toBe('ai_processing');
     expect(quote.voiceJobId).toBeNull();
+  });
+
+  it('FAIL-03 after SYNC-03: dead-letter audio marks the quote ai_failed without inventing a draft', async () => {
+    const quote = makeQuote({
+      status: 'ai_processing',
+      serverId: null,
+      customerPhone: null,
+      totalCents: 0,
+    });
+    quotes = [quote];
+    mockedUploadAudio.mockRejectedValue(new Error('Network request failed'));
+    const item = makeQueueItem({
+      entityType: 'audio',
+      entityId: quote.id,
+      action: 'create',
+      retryCount: 5,
+      payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: quote.id }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(item.status).toBe('dead_letter');
+    expect(quote.status).toBe('ai_failed');
+    expect(quote.totalCents).toBe(0);
+    expect(quote.customerPhone).toBeNull();
+    expect(quote.voiceJobId).toBeNull();
+    expect(JSON.stringify(quote)).not.toMatch(/unitPrice/);
+  });
+
+  it('does not mark ai_failed when a catalog item dead-letters', async () => {
+    const quote = makeQuote({ status: 'ai_processing' });
+    quotes = [quote];
+    const item = makeQueueItem({ retryCount: 5 });
+    queueItems = [item];
+    mockedCreateCatalogItem.mockRejectedValue(new Error('still down'));
+
+    await processQueue();
+
+    expect(item.status).toBe('dead_letter');
+    expect(quote.status).toBe('ai_processing');
+  });
+
+  it('flips leftover dead-letter audio quotes off inert Queued (upgrade / already-exhausted)', async () => {
+    const quote = makeQuote({ status: 'ai_processing', totalCents: 0, customerPhone: null });
+    quotes = [quote];
+    queueItems = [
+      makeQueueItem({
+        entityType: 'audio',
+        entityId: quote.id,
+        action: 'create',
+        status: 'dead_letter',
+        retryCount: 6,
+        payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: quote.id }),
+      }),
+    ];
+
+    await applyAudioDeadLetterQuoteFailures();
+
+    expect(quote.status).toBe('ai_failed');
+    expect(quote.totalCents).toBe(0);
+    expect(quote.customerPhone).toBeNull();
+  });
+
+  it('Sync issues retry of dead-letter audio resumes ai_processing then uploads', async () => {
+    const quote = makeQuote({ status: 'ai_failed', serverId: null, totalCents: 0 });
+    quotes = [quote];
+    mockedUploadAudio.mockResolvedValue({
+      jobId: 'job-retry',
+      quoteId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    });
+    const item = makeQueueItem({
+      entityType: 'audio',
+      entityId: quote.id,
+      action: 'create',
+      status: 'dead_letter',
+      retryCount: 6,
+      lastError: 'still down',
+      nextRetryAt: null,
+      payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: quote.id }),
+    });
+    queueItems = [item];
+
+    await retryDeadLetterItem(item as never);
+
+    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
+    expect(item.status).toBe('destroyed');
+    expect(quote.status).toBe('ai_processing');
+    expect(quote.voiceJobId).toBe('job-retry');
+    expect(quote.totalCents).toBe(0);
+  });
+
+  it('FAIL-04 retry reuses a dead-letter audio row instead of creating a second upload', async () => {
+    const quote = makeQuote({ status: 'ai_failed', totalCents: 0 });
+    quotes = [quote];
+    mockedUploadAudio.mockResolvedValue({
+      jobId: 'job-reuse',
+      quoteId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    });
+    const dead = makeQueueItem({
+      entityType: 'audio',
+      entityId: quote.id,
+      action: 'create',
+      status: 'dead_letter',
+      retryCount: 6,
+      payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: quote.id }),
+    });
+    queueItems = [dead];
+
+    await enqueue({
+      entityType: 'audio',
+      entityId: quote.id,
+      action: 'create',
+      payload: { filePath: '/tmp/a.m4a', quoteLocalId: quote.id },
+    });
+    await processQueue();
+
+    expect(queueItems.filter((row) => row.entityType === 'audio')).toHaveLength(1);
+    expect(dead.status).toBe('destroyed');
+    expect(quote.status).toBe('ai_processing');
+    expect(quote.voiceJobId).toBe('job-reuse');
+  });
+
+  it('does not yank a manual draft back to processing when leftover audio dead-letters', async () => {
+    const quote = makeQuote({ status: 'draft_local', totalCents: 0 });
+    quotes = [quote];
+    queueItems = [
+      makeQueueItem({
+        entityType: 'audio',
+        entityId: quote.id,
+        action: 'create',
+        status: 'dead_letter',
+        retryCount: 6,
+        payloadJson: JSON.stringify({ filePath: '/tmp/a.m4a', quoteLocalId: quote.id }),
+      }),
+    ];
+
+    await applyAudioDeadLetterQuoteFailures();
+
+    expect(quote.status).toBe('draft_local');
   });
 
   it('processes an onboarding seed job and stamps local catalog ids', async () => {
