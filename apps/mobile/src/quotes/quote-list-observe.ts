@@ -13,6 +13,8 @@ import { parseLineItems, recalculateTotal } from '../utils/line-items';
  * invisible until another quote is created or the screen remounts (FlatList
  * also skips cells when the Model instance identity is unchanged). server_id
  * is watched so a Manual Quote that just synced loses the Delete swipe.
+ * Draft `line_items_json` is observed separately: $0 named blank-price lines
+ * must show Archive, not Delete.
  */
 export const QUOTE_LIST_OBSERVE_COLUMNS: string[] = [
   'status',
