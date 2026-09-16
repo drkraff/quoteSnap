@@ -9,6 +9,8 @@ export interface QuoteResponse {
   updatedAt: string;
   sentAt: string | null;
   voiceJobId: string | null;
+  /** FAIL-04/05. Present on ai_failed when the API knows asr | mapping | timeout. */
+  failureStage?: 'asr' | 'mapping' | 'timeout';
   isArchived?: boolean;
   /** Contractor-only. Never copy into a customer PDF/SMS payload. */
   privateNote?: string | null;

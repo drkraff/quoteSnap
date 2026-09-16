@@ -63,6 +63,7 @@ import {
   shouldPollAiProcessing,
   shouldRunQuotesAiPoller,
 } from '../../src/quotes/poll-ai-processing';
+import { assignStoredAiFailureStage } from '../../src/quotes/ai-failed-recovery';
 import { audioRetryInFlight } from '../../src/quotes/retry-voice-quote';
 import { useResumeAfterCrashPrompt } from '../../src/quotes/use-resume-prompt';
 import { parseLineItems, serializeLineItems } from '../../src/utils/line-items';
@@ -180,6 +181,7 @@ export default function QuotesScreen(): JSX.Element {
                   await q.update((r) => {
                     r.status = ready.status;
                     r.totalCents = ready.totalCents;
+                    assignStoredAiFailureStage(r, ready.status);
                     r.photosJson = serializePhotos(assigned.photos);
                     if (clientSentence !== undefined) {
                       r.clientSentence = clientSentence;
@@ -190,7 +192,7 @@ export default function QuotesScreen(): JSX.Element {
                   });
                 });
               },
-              async markFailed(_quote, lineItemsJson, clientSentence, roomsJson) {
+              async markFailed(_quote, lineItemsJson, clientSentence, roomsJson, failureStage) {
                 const failed = draftFailedLocalFields(lineItemsJson);
                 await database.write(async () => {
                   const draftCollection = database.get<Draft>('drafts');
@@ -203,6 +205,7 @@ export default function QuotesScreen(): JSX.Element {
                   await q.update((r) => {
                     r.status = failed.status;
                     r.totalCents = failed.totalCents;
+                    assignStoredAiFailureStage(r, failed.status, failureStage);
                     if (clientSentence !== undefined) {
                       r.clientSentence = clientSentence;
                     }

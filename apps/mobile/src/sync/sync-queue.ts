@@ -26,6 +26,7 @@ import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
 import { parseRoomsJson } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
+import { assignStoredAiFailureStage } from '../quotes/ai-failed-recovery';
 import {
   failQuoteAfterAudioDeadLetterPlan,
   isDeadLetterAudioUpload,
@@ -100,6 +101,7 @@ async function resumeQuoteForAudioRetry(item: {
   await database.write(async () => {
     await quote.update((record) => {
       record.status = plan.nextStatus;
+      assignStoredAiFailureStage(record, plan.nextStatus);
     });
   });
 }
@@ -416,6 +418,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           r.serverId = serverQuoteId;
           if (r.status === 'ai_failed') {
             r.status = 'ai_processing';
+            assignStoredAiFailureStage(r, 'ai_processing');
           }
         });
       });

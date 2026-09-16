@@ -336,7 +336,13 @@ describe('pollOneAiProcessingQuote', () => {
 
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
     expect(api.getDraftLineItems).toHaveBeenCalledWith('srv-1');
-    expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial), null, null);
+    expect(api.markFailed).toHaveBeenCalledWith(
+      row,
+      JSON.stringify(partial),
+      null,
+      null,
+      'mapping',
+    );
     expect(api.markDraftReady).not.toHaveBeenCalled();
   });
 
@@ -361,6 +367,67 @@ describe('pollOneAiProcessingQuote', () => {
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
     expect(api.markFailed).toHaveBeenCalledWith(row, JSON.stringify(partial));
     expect(api.getDraftLineItems).not.toHaveBeenCalled();
+  });
+
+  it('persists timeout from voice status even when there are 0 lines', async () => {
+    const api = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'failed' as const,
+        failureStage: 'timeout' as const,
+      })),
+    });
+    const row = quote({ voiceJobId: 'job-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
+    expect(api.markFailed).toHaveBeenCalledWith(row, '[]', undefined, undefined, 'timeout');
+    expect(api.markDraftReady).not.toHaveBeenCalled();
+  });
+
+  it('persists asr from voice status and does not invent a stage when omitted', async () => {
+    const asrApi = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'failed' as const,
+        failureStage: 'asr' as const,
+      })),
+    });
+    const asrRow = quote({ voiceJobId: 'job-asr' });
+    await expect(pollOneAiProcessingQuote(asrRow, asrApi)).resolves.toBe('ai_failed');
+    expect(asrApi.markFailed).toHaveBeenCalledWith(
+      asrRow,
+      '[]',
+      undefined,
+      undefined,
+      'asr',
+    );
+
+    const omittedApi = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'failed' as const,
+        error: 'Processing failed',
+      })),
+    });
+    const omittedRow = quote({ voiceJobId: 'job-omit' });
+    await expect(pollOneAiProcessingQuote(omittedRow, omittedApi)).resolves.toBe('ai_failed');
+    expect(omittedApi.markFailed).toHaveBeenCalledWith(omittedRow, '[]');
+    expect(omittedApi.markFailed.mock.calls[0]).toHaveLength(2);
+  });
+
+  it('persists timeout from GET /quotes when the poller recovers without a job id', async () => {
+    const api = deps({
+      fetchQuote: jest.fn(async () => ({
+        quote: {
+          status: 'ai_failed',
+          voiceJobId: null,
+          failureStage: 'timeout' as const,
+        },
+        lineItems: [],
+      })),
+    });
+    const row = quote({ serverId: 'srv-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('ai_failed');
+    expect(api.markFailed).toHaveBeenCalledWith(row, '[]', undefined, undefined, 'timeout');
+    expect(api.getVoiceStatus).not.toHaveBeenCalled();
   });
 
   it('FAIL-04: does not mark failed while the same quote has a pending audio retry', async () => {

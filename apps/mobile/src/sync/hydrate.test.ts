@@ -64,6 +64,7 @@ type FakeQuote = {
   clientSentence?: string | null;
   roomsJson?: string | null;
   photosJson?: string | null;
+  aiFailureStage?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -284,6 +285,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
             privateNote: null,
             clientSentence: null,
             roomsJson: null,
+            aiFailureStage: null,
           });
           writer(record);
           quotes.push(record);
@@ -838,6 +840,113 @@ describe('upsertCatalogItems / upsertQuotes', () => {
       status: 'ai_processing',
       voiceJobId: 'job-xyz',
     });
+  });
+
+  it('stores failureStage on ai_failed and does not invent one when the API omits it', async () => {
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-timeout',
+        status: 'ai_failed',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        failureStage: 'timeout',
+        lineItems: [],
+      },
+    ]);
+
+    expect(quotes[0]).toMatchObject({
+      serverId: 'srv-quote-timeout',
+      status: 'ai_failed',
+      aiFailureStage: 'timeout',
+      totalCents: 0,
+    });
+    expect(quotes[0]!.aiFailureStage).not.toBe('asr');
+    expect(JSON.stringify(quotes[0])).not.toMatch(/unitPrice/);
+    expect(quotes[0]!.customerPhone).toBeNull();
+
+    quotes = [];
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-asr',
+        status: 'ai_failed',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        failureStage: 'asr',
+        lineItems: [],
+      },
+    ]);
+    expect(quotes[0]!.aiFailureStage).toBe('asr');
+
+    quotes = [];
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-omit',
+        status: 'ai_failed',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [],
+      },
+    ]);
+    expect(quotes[0]!.status).toBe('ai_failed');
+    expect(quotes[0]!.aiFailureStage).toBeNull();
+  });
+
+  it('clears a stored failureStage when hydrate status leaves ai_failed', async () => {
+    const local = attachUpdate<FakeQuote>({
+      id: 'local-failed-1',
+      serverId: 'srv-failed-1',
+      contractorId,
+      status: 'ai_failed',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date('2026-09-16T12:00:00.000Z'),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      aiFailureStage: 'timeout',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-failed-1',
+      quoteId: 'local-failed-1',
+      lineItemsJson: '[]',
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [local];
+    drafts = [localDraft];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-failed-1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-16T12:05:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [],
+      },
+    ]);
+
+    expect(local.status).toBe('draft_local');
+    expect(local.aiFailureStage).toBeNull();
+    expect(localDraft.lineItemsJson).toBe('[]');
+    expect(local.totalCents).toBe(0);
+    expect(local.customerPhone).toBeNull();
   });
 
   it('does not overwrite an ai_failed quote while its audio upload is dead-lettered', async () => {

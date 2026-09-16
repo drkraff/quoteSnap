@@ -68,7 +68,12 @@ import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
 import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review-before-sending-banner';
-import { aiFailedRecoveryView, recoverAiFailedPlan } from '../../../src/quotes/ai-failed-recovery';
+import {
+  aiFailedRecoveryView,
+  assignStoredAiFailureStage,
+  parseAiFailureStage,
+  recoverAiFailedPlan,
+} from '../../../src/quotes/ai-failed-recovery';
 import { retryVoiceQuotePlan } from '../../../src/quotes/retry-voice-quote';
 import { localVoiceAudioPath } from '../../../src/quotes/voice-audio';
 import {
@@ -163,6 +168,7 @@ export default function DraftScreen(): JSX.Element {
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteStatus, setQuoteStatus] = useState('');
+  const [quoteAiFailureStage, setQuoteAiFailureStage] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [phone, setPhone] = useState('');
@@ -261,6 +267,7 @@ export default function DraftScreen(): JSX.Element {
         });
         setQuote(q);
         setQuoteStatus(q.status);
+        setQuoteAiFailureStage(q.aiFailureStage ?? null);
         setPhone(q.customerPhone ?? '');
         setPrivateNote(privateNoteFieldValue(q.privateNote));
         setClientSentence(q.clientSentence ?? '');
@@ -342,6 +349,7 @@ export default function DraftScreen(): JSX.Element {
     if (!quote) return;
     const sub = quote.observe().subscribe((updated) => {
       setQuoteStatus(updated.status);
+      setQuoteAiFailureStage(updated.aiFailureStage ?? null);
     });
     return () => sub.unsubscribe();
   }, [quote]);
@@ -435,9 +443,11 @@ export default function DraftScreen(): JSX.Element {
     await database.write(async () => {
       await quote.update((r) => {
         r.status = plan.nextStatus;
+        assignStoredAiFailureStage(r, plan.nextStatus);
       });
     });
     setQuoteStatus(plan.nextStatus);
+    setQuoteAiFailureStage(null);
     await enqueue(plan.enqueue);
   }
 
@@ -462,6 +472,7 @@ export default function DraftScreen(): JSX.Element {
         await quote.update((r) => {
           r.status = plan.nextStatus;
           r.voiceJobId = null;
+          assignStoredAiFailureStage(r, plan.nextStatus);
         });
       });
       await enqueue(plan.enqueue);
@@ -1406,6 +1417,7 @@ export default function DraftScreen(): JSX.Element {
                   audioExists,
                   lineCount: lineItems.length,
                   lineItemsJson: draft?.lineItemsJson,
+                  failureStage: parseAiFailureStage(quoteAiFailureStage),
                 })}
                 retryDisabled={retryingVoice}
                 onRetry={() => {

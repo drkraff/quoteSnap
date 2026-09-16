@@ -1,5 +1,6 @@
 import {
   aiFailedRecoveryView,
+  assignStoredAiFailureStage,
   lineCountFromDraftJson,
   parseAiFailureStage,
   recoverAiFailedPlan,
@@ -29,6 +30,34 @@ describe('parseAiFailureStage', () => {
   it('does not treat failed_send as a voice failure stage', () => {
     expect(parseAiFailureStage('failed_send')).toBeNull();
     expect(parseAiFailureStage('ai_failed')).toBeNull();
+  });
+});
+
+describe('assignStoredAiFailureStage', () => {
+  it('stores timeout and asr from the API and does not invent a stage when omitted', () => {
+    const timeout: { aiFailureStage?: string | null } = {};
+    assignStoredAiFailureStage(timeout, 'ai_failed', 'timeout');
+    expect(timeout.aiFailureStage).toBe('timeout');
+
+    const asr: { aiFailureStage?: string | null } = {};
+    assignStoredAiFailureStage(asr, 'ai_failed', 'asr');
+    expect(asr.aiFailureStage).toBe('asr');
+
+    const omitted: { aiFailureStage?: string | null } = {};
+    assignStoredAiFailureStage(omitted, 'ai_failed');
+    expect(omitted.aiFailureStage).toBeUndefined();
+    assignStoredAiFailureStage(omitted, 'ai_failed', 'failed_send');
+    expect(omitted.aiFailureStage).toBeUndefined();
+  });
+
+  it('clears a stored stage when status leaves ai_failed', () => {
+    const record: { aiFailureStage?: string | null } = { aiFailureStage: 'timeout' };
+    assignStoredAiFailureStage(record, 'ai_processing');
+    expect(record.aiFailureStage).toBeNull();
+
+    record.aiFailureStage = 'mapping';
+    assignStoredAiFailureStage(record, 'draft_local');
+    expect(record.aiFailureStage).toBeNull();
   });
 });
 
@@ -99,6 +128,30 @@ describe('aiFailedRecoveryView', () => {
     expect(view.showRetry).toBe(false);
     expect(view.showRecordAgain).toBe(true);
     expect(view.recordAgainLabel).toBe('Record again');
+    assertHonestRecoveryCopy(view);
+  });
+
+  it('FAIL-05: stored timeout with 0 lines is not FAIL-04 transcribe copy', () => {
+    const view = aiFailedRecoveryView({
+      audioExists: true,
+      lineCount: 0,
+      lineItemsJson: '[]',
+      failureStage: parseAiFailureStage('timeout'),
+    });
+    expect(view.title).toBe("Couldn't finish this quote from the recording");
+    expect(view.title).not.toBe("Couldn't transcribe this recording");
+    expect(view.body.toLowerCase()).not.toContain('flagged');
+    expect(view.showRetry).toBe(true);
+    assertHonestRecoveryCopy(view);
+  });
+
+  it('FAIL-04: stored asr with 0 lines keeps transcribe copy', () => {
+    const view = aiFailedRecoveryView({
+      audioExists: true,
+      lineCount: 0,
+      failureStage: parseAiFailureStage('asr'),
+    });
+    expect(view.title).toBe("Couldn't transcribe this recording");
     assertHonestRecoveryCopy(view);
   });
 

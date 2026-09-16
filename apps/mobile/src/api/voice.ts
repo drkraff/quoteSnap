@@ -9,6 +9,7 @@ export interface VoiceStatusResponse {
   status: 'processing' | 'complete' | 'failed';
   draftId?: string;
   error?: string;
+  /** FAIL-04/05. Omitted when the API does not know the stage — do not invent. */
   failureStage?: 'asr' | 'mapping' | 'timeout';
 }
 

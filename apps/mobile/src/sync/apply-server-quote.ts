@@ -8,6 +8,7 @@ import { serializeLineItems } from '../utils/line-items';
 import { toDraftLineItems } from './draft-line-items';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
+import { assignStoredAiFailureStage } from '../quotes/ai-failed-recovery';
 import { mergeStoredPhotosWithServer, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 
 export function parseServerDate(iso: string): Date {
@@ -56,6 +57,7 @@ export async function applyServerQuoteInWrite(
         (serverQuote.photos ?? []) as ServerQuotePhoto[],
       ),
     );
+    assignStoredAiFailureStage(record, serverQuote.status, serverQuote.failureStage);
   });
   await draft.update((record) => {
     record.lineItemsJson = lineItemsJson;
