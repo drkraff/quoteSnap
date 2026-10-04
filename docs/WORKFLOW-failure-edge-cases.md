@@ -45,10 +45,10 @@ IDs stay as they are in REQUIREMENTS. This file does **not** invent FAIL-09…FA
 | 12 | GPT unknown catalog IDs / no invented prices | **VOICE-06** | done | `voice-validation.ts`, PRs [#45](https://github.com/drkraff/quoteSnap/pull/45)/[#46](https://github.com/drkraff/quoteSnap/pull/46) |
 | 13 | Access token expiry during voice upload/poll | **AUTH-02** / audit A-08 | done | `apps/mobile/src/api/voice.ts` → `apiClient` |
 | 14 | Twilio SMS delivery failure | **FAIL-06** | not started | Phase 6; `failed_send` reserved |
-| 15 | Expired customer approval page | **SMS-09** | not started | Phase 6; no approval routes |
+| 15 | Expired customer approval page | **SMS-09** | done (page) | Neutral expired HTML; pg-boss marks `sent` → `expired`. Not Twilio. |
 | 16 | FCM token rotation | **FAIL-08** | not started | Column reserved (`008_fcm_token_comment.sql`) |
 
-FAIL-01 is **done** when this map exists. Implementation of rows 14–16 remains **not started**.
+FAIL-01 is **done** when this map exists. Row 15 (SMS-09 expired page) is implemented on the backend. Rows 14 and 16 (FAIL-06 Twilio retry, FAIL-08 FCM) remain **not started**.
 
 ---
 
@@ -176,7 +176,7 @@ Related: `apps/mobile/app.config.ts` `microphonePermission` string.
 
 ## 11 — Post-send line/total rewrite (SYNC-06)
 
-**Detection.** Frozen statuses: `sent`, `approved`, `declined`, `expired`, `failed_send`. `PUT /quotes/:id` with `lineItems` or `totalCents` → **409** `Quote line items and totals cannot be changed after send`. No `quote_snapshots` table (SMS-02/04 remain Phase 6).
+**Detection.** Frozen statuses: `sent`, `approved`, `declined`, `expired`, `failed_send`. `PUT /quotes/:id` with `lineItems` or `totalCents` → **409** `Quote line items and totals cannot be changed after send`. SMS-02 `quote_snapshots` is a separate write-once row for the approval page; this PUT freeze still applies and nothing updates that snapshot.
 
 **UX.** Mobile `processQueue` skips those PUTs and parks a Sync issues row. Share-mark-sent (`draft_*` / `ai_failed` → `sent` + `sent_at`, phone optional, PR [#61](https://github.com/drkraff/quoteSnap/pull/61)) is how freeze starts without Twilio.
 
@@ -224,13 +224,13 @@ Related: `apps/mobile/app.config.ts` `microphonePermission` string.
 
 ## 15 — Expired customer approval page (SMS-09)
 
-**Detection (defined, not built).** Approval token TTL exceeded (SMS-05/10; default 72 hours, value undecided before Phase 6). pg-boss cron marks the quote `expired`.
+**Detection.** Approval token TTL exceeded (`QUOTE_APPROVAL_TTL_MS`, default 72 hours). pg-boss queue `quote-approval-expiry` marks a still-`sent` quote `expired`. The page also treats `expires_at` in the past as expired before that job runs.
 
-**UX (defined, not built).** Customer page: neutral **This quote has expired** — not an error page. Contractor history: **Expired**.
+**UX.** Customer page: neutral **This quote has expired** — HTTP 200, not an error page. Unknown and malformed tokens are a different not-found page. Contractor history still uses the existing **Expired** label when status is `expired`.
 
-**Recovery (defined, not built).** Contractor sends a new quote (new snapshot / token). Do not resurrect the old approval URL.
+**Recovery.** A second send of the same quote is refused (the snapshot is write-once and the raw token is not stored). A new quote is a new snapshot and token. Do not resurrect the old approval URL. This is not Twilio delivery failure (FAIL-06).
 
-**Status: not started.** No approval-page routes. Share PDF is not this scenario. Do not implement from this map.
+**Status: page implemented.** Share PDF is not this scenario. FAIL-06 retry is not implemented.
 
 ---
 
@@ -270,4 +270,4 @@ These have detection/UX/recovery but were not in the FAIL-01 count:
 | FAIL-03…05, FAIL-07 | checked | PRs #53, #48, #54 |
 | FAIL-06, FAIL-08 | unchecked | Phase 6; defined only |
 | SYNC-03…06 | checked | Already complete (thin SYNC-06) |
-| SMS-09 | unchecked | Phase 6 |
+| SMS-09 | checked | Expired page is neutral HTML; lookup and pg-boss both honor the TTL. Not FAIL-06. |

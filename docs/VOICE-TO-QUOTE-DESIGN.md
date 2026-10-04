@@ -5,7 +5,7 @@ Status: working spec for Grok Bot. **P0 thin vertical + several MVP adjuncts lan
 Audience: English-speaking global market first  
 Scope: how a contractor goes from a job-site walk to a priced PDF, without building a catalog first.
 
-As of 15 Sep 2026, `master` has the P0 loop (rate-card learn, adhoc voice lines with no invented prices, skippable catalog seed + hourly labor, material cost × markup compute) plus thin rooms, photos, private notes, option pairs, client sentence, paste-into-rate-card import, My rates list, customer PDF + OS share, and mark-sent after share (thin SYNC-06 freeze). Image/PDF OCR import, Twilio SMS, and a hosted approval page are **not** shipped.
+As of 4 Oct 2026, `master` has the P0 loop (rate-card learn, adhoc voice lines with no invented prices, skippable catalog seed + hourly labor, material cost × markup compute) plus thin rooms, photos, private notes, option pairs, client sentence, paste-into-rate-card import, My rates list, customer PDF + OS share, and mark-sent after share (thin SYNC-06 freeze). The backend also has a write-once approval snapshot and a server-rendered approval page with a dry-run SMS sender. Image/PDF OCR import, Twilio SMS delivery, and FCM are **not** shipped. Shipped-status detail lives in [CONTEXT.md](../CONTEXT.md).
 
 ## 1. Product bet
 

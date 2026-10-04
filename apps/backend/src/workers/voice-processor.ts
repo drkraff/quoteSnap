@@ -14,6 +14,7 @@ import { filterUuidCatalogIds, validateAndBuildLineItemsAsync } from './voice-va
 import type { CatalogItemRow, ValidatedLineItem } from './voice-validation.js';
 import { resolveWhisperLanguage } from './whisper-language.js';
 import { startAiProcessingReaper } from './ai-processing-reaper.js';
+import { startQuoteApprovalExpiry } from '../quotes/approval-expiry.js';
 import {
   flagPartialMappingLines,
   markQuoteAiFailed,
@@ -38,6 +39,7 @@ export async function initBoss(): Promise<void> {
   await boss.work<VoiceJobData>('voice-process', { localConcurrency: 2 }, processVoiceJobs);
 
   await startAiProcessingReaper(boss, query);
+  await startQuoteApprovalExpiry(boss, query);
 }
 
 async function processVoiceJobs(jobs: Job<VoiceJobData>[]): Promise<void> {

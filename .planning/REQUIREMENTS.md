@@ -57,18 +57,18 @@ Checkboxes mean “accepted as in-scope and (if checked) implemented in code,”
 
 ### SMS Delivery and Customer Approval
 
-These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and marking eligible drafts `sent` without a phone) is a separate contractor-device path — see [CONTEXT.md](../CONTEXT.md). Do not check `SMS-*` for that.
+Backend approval (no Twilio account, no device, no mobile UI) implements SMS-02, SMS-04, SMS-05, SMS-06, SMS-07, SMS-09, and SMS-10. SMS-01, SMS-03, and SMS-08 stay pending. Thin customer PDF + OS share (and marking eligible drafts `sent` without a phone) is still a separate contractor-device path — see [CONTEXT.md](../CONTEXT.md). Do not check SMS-01 for that share path.
 
 - [ ] **SMS-01**: Contractor can enter a customer phone number and send the quote draft via SMS (Twilio)
-- [ ] **SMS-02**: Quote is saved as a write-once snapshot at send time (catalog/price edits after send cannot alter the approval page)
+- [x] **SMS-02**: Quote is saved as a write-once snapshot at send time (catalog/price edits after send cannot alter the approval page)
 - [ ] **SMS-03**: Customer receives an SMS with a link to a branded, mobile-optimized approval page (no app download required)
-- [ ] **SMS-04**: Approval page renders from the write-once snapshot — not from live data
-- [ ] **SMS-05**: Approval tokens are 32-byte random values stored as SHA-256 hashes; expiry is enforced server-side by pg-boss cron
-- [ ] **SMS-06**: Customer can approve the quote with one tap; approval is recorded with a timestamp
-- [ ] **SMS-07**: Customer can decline the quote with one tap
+- [x] **SMS-04**: Approval page renders from the write-once snapshot — not from live data
+- [x] **SMS-05**: Approval tokens are 32-byte random values stored as SHA-256 hashes; expiry is enforced server-side by pg-boss cron
+- [x] **SMS-06**: Customer can approve the quote with one tap; approval is recorded with a timestamp
+- [x] **SMS-07**: Customer can decline the quote with one tap
 - [ ] **SMS-08**: Contractor receives a push notification (FCM) immediately when a customer approves
-- [ ] **SMS-09**: Expired quotes show a neutral "This quote has expired" state — not an error page
-- [ ] **SMS-10**: Quote expiry TTL is configurable (default 72 hours; exact value to be decided before Phase 6)
+- [x] **SMS-09**: Expired quotes show a neutral "This quote has expired" state — not an error page
+- [x] **SMS-10**: Quote expiry TTL is configurable (default 72 hours; exact value to be decided before Phase 6)
 
 ### Quote Storage and History
 
@@ -85,7 +85,7 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 - [x] **SYNC-03**: Sync retry schedule: 5s → 15s → 60s → 5m → 15m → dead-letter after max retries
 - [x] **SYNC-04**: Dead-letter items are surfaced to the contractor with a plain-language error and retry option
 - [x] **SYNC-05**: WatermelonDB uses server-as-truth conflict resolution; draft conflicts (pre-send) surface as a visible "Review before sending" prompt — not silent resolution
-- [x] **SYNC-06**: Post-send quotes (`sent`, `approved`, `declined`, `expired`, `failed_send`) cannot have line items or totals rewritten by sync/PUT (thin: status guards on existing snapshot rows; no `quote_snapshots` table; SMS-02/04 approval page still Phase 6)
+- [x] **SYNC-06**: Post-send quotes (`sent`, `approved`, `declined`, `expired`, `failed_send`) cannot have line items or totals rewritten by sync/PUT (status guards remain; SMS-02 adds a separate write-once `quote_snapshots` row for the approval page and does not replace this freeze)
 
 ### Failure and Edge Cases
 
@@ -174,16 +174,16 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 | REVIEW-04 | Phase 4 | Complete |
 | REVIEW-05 | Phase 4 | Complete |
 | REVIEW-06 | Phase 4 | Complete |
-| SMS-01 | Phase 6 | Pending |
-| SMS-02 | Phase 6 | Pending |
-| SMS-03 | Phase 6 | Pending |
-| SMS-04 | Phase 6 | Pending |
-| SMS-05 | Phase 6 | Pending |
-| SMS-06 | Phase 6 | Pending |
-| SMS-07 | Phase 6 | Pending |
+| SMS-01 | Phase 6 | Pending (Twilio not wired; dry-run sender only) |
+| SMS-02 | Phase 6 | Complete |
+| SMS-03 | Phase 6 | Pending (page exists; SMS is not delivered) |
+| SMS-04 | Phase 6 | Complete |
+| SMS-05 | Phase 6 | Complete |
+| SMS-06 | Phase 6 | Complete |
+| SMS-07 | Phase 6 | Complete |
 | SMS-08 | Phase 6 | Pending |
-| SMS-09 | Phase 6 | Pending |
-| SMS-10 | Phase 6 | Pending |
+| SMS-09 | Phase 6 | Complete |
+| SMS-10 | Phase 6 | Complete (default 72h via `QUOTE_APPROVAL_TTL_MS`) |
 | HIST-01 | Phase 4 | Complete |
 | HIST-02 | Phase 4 | Complete |
 | HIST-03 | Phase 4 | Complete |
@@ -194,7 +194,7 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 | SYNC-03 | Phase 7 | Complete |
 | SYNC-04 | Phase 7 | Complete |
 | SYNC-05 | Phase 7 | Complete |
-| SYNC-06 | Phase 7 | Complete (thin: status guards, no snapshot table) |
+| SYNC-06 | Phase 7 | Complete (PUT money freeze remains; SMS-02 snapshot is separate) |
 | FAIL-01 | Phase 7 | Complete (map; FAIL-06/08 remain not implemented) |
 | FAIL-02 | Phase 7 | Complete |
 | FAIL-03 | Phase 7 | Complete |
@@ -211,4 +211,4 @@ These IDs are Phase 6 and **not implemented**. Thin customer PDF + OS share (and
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-09-15 — overnight ships through PR #62 plus day-session #63–#77 (photo import stub, My rates `q` + unit chip filter, FAIL-01 map, P0 attach tests, share cancel/empty edges, PDF Assumptions, cost×markup keypad, option-group selection, CONTEXT sync #71/#73, rooms empty/delete/ungroup #72, Metro UAT checklist #74, dead-letter retry UX #75, My rates empty-delete #76, paste-import empty/OCR-stub copy #77). SMS-01…10 and FAIL-06/08 stay pending. Status narrative lives in CONTEXT.md*
+*Last updated: 2026-10-04 — Phase 6 backend approval without Twilio or FCM: SMS-02, SMS-04, SMS-05, SMS-06, SMS-07, SMS-09, SMS-10. SMS-01, SMS-03, SMS-08, FAIL-06, and FAIL-08 stay pending. Status narrative lives in CONTEXT.md*

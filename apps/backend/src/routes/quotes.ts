@@ -4,6 +4,9 @@ import { v4 as uuidv4 } from "uuid";
 import { authenticateToken } from "../middleware/auth.js";
 import { query, withTransaction } from "../db/connection.js";
 import { applyQuotePut, parseQuoteCreateBody, parseQuotePutBody } from "../quotes/quote-write.js";
+import { sendQuoteForApproval } from "../quotes/send-quote.js";
+import { resolveQuoteApprovalTtlMs, resolvePublicBaseUrl } from "../quotes/approval-token.js";
+import { resolveSmsSender } from "../quotes/sms-sender.js";
 import { applyQuoteArchivePatch } from "../quotes/archive.js";
 import { filterUuidCatalogIds } from "../workers/voice-validation.js";
 import { attachQuotePhoto } from "../quotes/photo-upload.js";
@@ -170,6 +173,34 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
     console.error("PUT /quotes/:id error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /:id/send — snapshot + approval token + dry-run SMS (no Twilio).
+router.post("/:id/send", authenticateToken, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const sender = resolveSmsSender(process.env["SMS_SENDER"]);
+    if (!sender.ok) {
+      res.status(501).json({ error: sender.error });
+      return;
+    }
+    const contractorId = req.contractor!.contractorId;
+    const { id } = req.params as { id: string };
+    const outcome = await withTransaction((txQuery) =>
+      sendQuoteForApproval(txQuery, {
+        quoteId: id,
+        contractorId,
+        body: req.body,
+        sender: sender.sender,
+        now: new Date(),
+        publicBaseUrl: resolvePublicBaseUrl(process.env["PUBLIC_BASE_URL"]),
+        ttlMs: resolveQuoteApprovalTtlMs(process.env["QUOTE_APPROVAL_TTL_MS"]),
+      }),
+    );
+    res.status(outcome.status).json(outcome.json);
+  } catch (err) {
+    console.error("POST /quotes/:id/send error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
