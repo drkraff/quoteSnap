@@ -298,6 +298,8 @@ export async function upsertQuotes(
 
       if (!blockedQuoteIds.has(localQuote.id) || frozen) {
         await localQuote.update((record) => {
+          // followed_up_at and follow_up_dismissed are local-only. Do not
+          // assign them from the server — login must not clear a snooze.
           record.status = quote.status;
           record.customerPhone = quote.customerPhone;
           record.totalCents = quote.totalCents;

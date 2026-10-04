@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 9,
+  version: 10,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -32,6 +32,11 @@ export const schema = appSchema({
         // Local URI + pending/uploaded. Bytes live in documentDirectory;
         // server id stamps after private R2 upload. Never public by default.
         { name: 'photos_json', type: 'string', isOptional: true },
+        // Local follow-up snooze. Not synced. Hydrate must not assign these.
+        // followed_up_at: last "Mark followed up" (quiet for FOLLOW_UP_AFTER_DAYS).
+        // follow_up_dismissed: "Dismiss" hides the reminder. Null = not dismissed.
+        { name: 'followed_up_at', type: 'number', isOptional: true },
+        { name: 'follow_up_dismissed', type: 'boolean', isOptional: true },
       ],
     }),
     tableSchema({

@@ -13,6 +13,8 @@ import { parseLineItems, recalculateTotal } from '../utils/line-items';
  * invisible until another quote is created or the screen remounts (FlatList
  * also skips cells when the Model instance identity is unchanged). server_id
  * is watched so a Manual Quote that just synced loses the Delete swipe.
+ * sent_at / followed_up_at / follow_up_dismissed are watched so Needs
+ * follow-up appears, snoozes, and dismisses without waiting for another row.
  * Draft `line_items_json` is observed separately: $0 named blank-price lines
  * must show Archive, not Delete.
  */
@@ -22,6 +24,9 @@ export const QUOTE_LIST_OBSERVE_COLUMNS: string[] = [
   'customer_phone',
   'voice_job_id',
   'server_id',
+  'sent_at',
+  'followed_up_at',
+  'follow_up_dismissed',
 ];
 
 /** Stamp status + list total together when the voice poller finishes. */
@@ -50,6 +55,12 @@ export function draftFailedLocalFields(lineItemsJson: string): {
  * FlatList treats identical Model references as unchanged cells. Include
  * the fields the row displays so a status/total write re-renders in place.
  */
+function instantKey(value: Date | number | null | undefined): string {
+  if (value == null) return '';
+  const ms = value instanceof Date ? value.getTime() : value;
+  return Number.isFinite(ms) ? String(ms) : '';
+}
+
 export function quoteListRenderKey(
   quotes: {
     id: string;
@@ -57,6 +68,9 @@ export function quoteListRenderKey(
     totalCents: number;
     serverId?: string | null;
     voiceJobId?: string | null;
+    sentAt?: Date | number | null;
+    followedUpAt?: Date | number | null;
+    followUpDismissed?: boolean | null;
   }[],
   online: boolean,
 ): string {
@@ -64,7 +78,8 @@ export function quoteListRenderKey(
     .map((quote) => {
       const synced = quote.serverId?.trim() ? '1' : '0';
       const job = quote.voiceJobId?.trim() ? '1' : '0';
-      return `${quote.id}:${quote.status}:${quote.totalCents}:${synced}:${job}`;
+      const dismissed = quote.followUpDismissed === true ? '1' : '0';
+      return `${quote.id}:${quote.status}:${quote.totalCents}:${synced}:${job}:${instantKey(quote.sentAt)}:${instantKey(quote.followedUpAt)}:${dismissed}`;
     })
     .join('|');
   return `${online ? '1' : '0'}:${rows}`;
