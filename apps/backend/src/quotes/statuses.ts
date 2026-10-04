@@ -5,13 +5,14 @@
  * Client POST may only write CLIENT_QUOTE_STATUSES (A-06). Client PUT may
  * also write `sent` after a successful customer PDF/HTML share (no Twilio,
  * phone optional). The voice worker/reaper own ai_processing / ai_failed.
- * Phase 6 still owns approved / declined / expired / failed_send — a client
- * cannot self-approve.
+ * Customer approve/decline/expiry (SMS-06/07/09) is a separate path from
+ * client PUT — a client still cannot self-approve. failed_send stays reserved.
  *
- * SYNC-06 (thin): FROZEN_QUOTE_STATUSES cannot have line items or totals
- * rewritten by client PUT. There is no quote_snapshots table (SMS-02/04).
+ * SYNC-06: FROZEN_QUOTE_STATUSES cannot have line items or totals rewritten
+ * by client PUT. SMS-02 stores a separate write-once quote_snapshots row for
+ * the approval page; that row does not replace this freeze.
  * failed_send is frozen for money so a later catalog/draft sync cannot
- * rewrite what was attempted; Phase 6 retry may later change status only.
+ * rewrite what was attempted.
  */
 export const QUOTE_STATUSES = [
   "ai_processing",

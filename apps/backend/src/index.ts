@@ -6,6 +6,7 @@ import { router as catalogRouter } from "./routes/catalog.js";
 import { router as quotesRouter } from "./routes/quotes.js";
 import { router as rateCardRouter } from "./routes/rate-card.js";
 import { router as voiceRouter } from "./routes/voice.js";
+import { router as approvalRouter } from "./routes/approval.js";
 import { initBoss } from "./workers/voice-processor.js";
 
 const app = express();
@@ -30,6 +31,9 @@ app.use("/rate-card", rateCardRouter);
 
 // Voice routes
 app.use("/voice", voiceRouter);
+
+// Public customer approval page (snapshot HTML; no app, no session)
+app.use("/q", approvalRouter);
 
 // GET /health — liveness probe
 app.get("/health", (_req: Request, res: Response) => {
