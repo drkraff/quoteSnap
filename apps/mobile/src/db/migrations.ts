@@ -94,5 +94,17 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 10,
+      steps: [
+        addColumns({
+          table: 'quotes',
+          columns: [
+            { name: 'followed_up_at', type: 'number', isOptional: true },
+            { name: 'follow_up_dismissed', type: 'boolean', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });

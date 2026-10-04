@@ -19,4 +19,7 @@ export class Quote extends Model {
   @text('client_sentence') clientSentence!: string | null;
   @text('rooms_json') roomsJson!: string | null;
   @text('photos_json') photosJson!: string | null;
+  // Local follow-up reminder. Not a server column. Do not enqueue these.
+  @date('followed_up_at') followedUpAt!: Date | null;
+  @field('follow_up_dismissed') followUpDismissed!: boolean | null;
 }

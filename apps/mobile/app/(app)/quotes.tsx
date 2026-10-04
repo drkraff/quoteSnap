@@ -19,6 +19,11 @@ import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
 import { QuotesEmptyState } from '../../src/components/quotes/empty-state';
+import {
+  FollowUpEmptyState,
+  FollowUpFilterChip,
+  FollowUpRow,
+} from '../../src/components/quotes/follow-up-list';
 import { QuotesListModeToggle } from '../../src/components/quotes/list-mode-toggle';
 import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
 import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
@@ -72,6 +77,20 @@ import {
   parsePhotosJson,
   serializePhotos,
 } from '../../src/quotes/photos';
+import {
+  FOLLOW_UP_FILTER_LABEL,
+  applyDismissFollowUp,
+  applyMarkFollowedUp,
+  followUpRowView,
+  quotesNeedingFollowUp,
+} from '../../src/quotes/follow-up';
+import {
+  applyFollowUpNotification,
+  createOptionalExpoNotificationScheduler,
+  planFollowUpNotification,
+} from '../../src/quotes/follow-up-notification';
+
+const followUpScheduler = createOptionalExpoNotificationScheduler();
 
 // Tab bar height constant (safe default for both iOS/Android)
 const TAB_BAR_HEIGHT = 56;
@@ -81,6 +100,7 @@ export default function QuotesScreen(): JSX.Element {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const [listMode, setListMode] = useState<QuotesListMode>('active');
+  const [followUpOnly, setFollowUpOnly] = useState(false);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [draftJsonByQuoteId, setDraftJsonByQuoteId] = useState<Record<string, string> | null>(
     null,
@@ -91,6 +111,10 @@ export default function QuotesScreen(): JSX.Element {
   const deadLetterItems = useDeadLetterItems();
   const online = useIsOnline();
   const showArchived = listMode === 'archived';
+  const followUpMode = followUpOnly && !showArchived;
+  const now = new Date();
+  const followUpQuotes = showArchived ? [] : quotesNeedingFollowUp(quotes, now);
+  const visibleQuotes = followUpMode ? followUpQuotes : quotes;
   const navigateResume = useCallback((href: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     router.push(href as any);
@@ -99,9 +123,32 @@ export default function QuotesScreen(): JSX.Element {
 
   useEffect(() => {
     navigation.setOptions({
-      headerTitle: showArchived ? ARCHIVED_QUOTES_HEADER_TITLE : ACTIVE_QUOTES_HEADER_TITLE,
+      headerTitle: showArchived
+        ? ARCHIVED_QUOTES_HEADER_TITLE
+        : followUpMode
+          ? FOLLOW_UP_FILTER_LABEL
+          : ACTIVE_QUOTES_HEADER_TITLE,
     });
-  }, [navigation, showArchived]);
+  }, [navigation, showArchived, followUpMode]);
+
+  useEffect(() => {
+    if (showArchived) return;
+    for (const quote of quotes) {
+      const plan = planFollowUpNotification(
+        {
+          status: quote.status,
+          sentAt: quote.sentAt,
+          followedUpAt: quote.followedUpAt,
+          isArchived: quote.isArchived,
+          followUpDismissed: quote.followUpDismissed,
+        },
+        new Date(),
+      );
+      void applyFollowUpNotification(followUpScheduler, quote.id, plan).catch(() => {
+        // The list is the reminder. A missing local notification must not block it.
+      });
+    }
+  }, [quotes, showArchived]);
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
@@ -340,6 +387,21 @@ export default function QuotesScreen(): JSX.Element {
           record.updatedAt = new Date();
         });
       });
+      if (isArchived) {
+        const plan = planFollowUpNotification(
+          {
+            status: quote.status,
+            sentAt: quote.sentAt,
+            followedUpAt: quote.followedUpAt,
+            followUpDismissed: quote.followUpDismissed,
+            isArchived: true,
+          },
+          new Date(),
+        );
+        void applyFollowUpNotification(followUpScheduler, quote.id, plan).catch(() => {
+          // Archive already saved. A leftover local alarm is not the list.
+        });
+      }
       await enqueue({
         entityType: 'quote',
         entityId: quote.id,
@@ -385,6 +447,31 @@ export default function QuotesScreen(): JSX.Element {
     }
   }
 
+  async function markFollowedUp(quote: Quote): Promise<void> {
+    try {
+      const markedAt = new Date();
+      await database.write(async () => {
+        await quote.update((record) => {
+          applyMarkFollowedUp(record, markedAt);
+        });
+      });
+    } catch {
+      // Stay on the list; tap again to retry. Local columns only — no sync PUT.
+    }
+  }
+
+  async function dismissFollowUp(quote: Quote): Promise<void> {
+    try {
+      await database.write(async () => {
+        await quote.update((record) => {
+          applyDismissFollowUp(record);
+        });
+      });
+    } catch {
+      // Stay on the list; tap again to retry. Local columns only — no sync PUT.
+    }
+  }
+
   function swipeHandlerFor(action: ReturnType<typeof quoteRowSwipeAction>): (quote: Quote) => void {
     if (action === 'delete') return confirmDeleteLocalQuote;
     if (action === 'unarchive') return confirmUnarchiveQuote;
@@ -394,13 +481,32 @@ export default function QuotesScreen(): JSX.Element {
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={quotes}
+        data={visibleQuotes}
         extraData={`${quoteListRenderKey(quotes, online)}:${quoteListHardDeleteGateKey(
           quotes,
           draftJsonByQuoteId,
-        )}`}
+        )}:${followUpMode ? 'follow' : 'all'}`}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
+          if (followUpMode) {
+            const view = followUpRowView({
+              // No customer-name column on quotes. Do not invent one.
+              customerName: null,
+              customerPhone: item.customerPhone,
+              totalCents: item.totalCents,
+              sentAt: item.sentAt,
+              now,
+            });
+            if (!view) return null;
+            return (
+              <FollowUpRow
+                view={view}
+                onPress={() => handleQuotePress(item)}
+                onMarkFollowedUp={() => { void markFollowedUp(item); }}
+                onDismiss={() => { void dismissFollowUp(item); }}
+              />
+            );
+          }
           const swipeAction = quoteRowSwipeAction(
             listMode,
             canHardDeleteLocalQuote({
@@ -429,15 +535,30 @@ export default function QuotesScreen(): JSX.Element {
                 router.push('/sync-issues' as any);
               }}
             />
-            <QuotesListModeToggle mode={listMode} onChange={setListMode} />
+            <QuotesListModeToggle
+              mode={listMode}
+              onChange={(mode) => {
+                setListMode(mode);
+                if (mode === 'archived') setFollowUpOnly(false);
+              }}
+            />
+            {!showArchived ? (
+              <FollowUpFilterChip
+                selected={followUpMode}
+                count={followUpQuotes.length}
+                onPress={() => setFollowUpOnly((selected) => !selected)}
+              />
+            ) : null}
           </>
         }
-        ListEmptyComponent={<QuotesEmptyState archived={showArchived} />}
+        ListEmptyComponent={
+          followUpMode ? <FollowUpEmptyState /> : <QuotesEmptyState archived={showArchived} />
+        }
         contentContainerStyle={
-          quotes.length === 0
+          visibleQuotes.length === 0
             ? styles.emptyContent
             : {
-                paddingBottom: showArchived
+                paddingBottom: showArchived || followUpMode
                   ? insets.bottom + TAB_BAR_HEIGHT + 16
                   : insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm + 56 + 16,
               }
@@ -450,7 +571,7 @@ export default function QuotesScreen(): JSX.Element {
         onDismiss={() => setReadyDraftId(null)}
       />
 
-      {!showArchived && (
+      {!showArchived && !followUpMode && (
         <>
           {/* Manual Quote FAB — above voice FAB */}
           <Pressable

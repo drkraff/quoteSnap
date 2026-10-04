@@ -41,6 +41,7 @@ export async function applyServerQuoteInWrite(
 ): Promise<void> {
   const updatedAt = parseServerDate(serverQuote.updatedAt);
   await localQuote.update((record) => {
+    // followed_up_at and follow_up_dismissed stay as stored locally.
     record.status = serverQuote.status;
     record.customerPhone = serverQuote.customerPhone;
     record.totalCents = serverQuote.totalCents;

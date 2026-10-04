@@ -13,6 +13,9 @@ describe('QUOTE_LIST_OBSERVE_COLUMNS', () => {
       'customer_phone',
       'voice_job_id',
       'server_id',
+      'sent_at',
+      'followed_up_at',
+      'follow_up_dismissed',
     ]);
   });
 
@@ -87,5 +90,16 @@ describe('quoteListRenderKey', () => {
   it('does not invent a quote row when the list is empty', () => {
     expect(quoteListRenderKey([], true)).toBe('1:');
     expect(quoteListRenderKey([], false)).toBe('0:');
+  });
+
+  it('changes when sent_at, follow-up snooze, or dismiss changes', () => {
+    const sent = quoteListRenderKey([{ ...row, status: 'sent', sentAt: 1 }], true);
+    expect(sent).not.toBe(quoteListRenderKey([{ ...row, status: 'sent', sentAt: 2 }], true));
+    expect(sent).not.toBe(
+      quoteListRenderKey([{ ...row, status: 'sent', sentAt: 1, followedUpAt: 3 }], true),
+    );
+    expect(sent).not.toBe(
+      quoteListRenderKey([{ ...row, status: 'sent', sentAt: 1, followUpDismissed: true }], true),
+    );
   });
 });
