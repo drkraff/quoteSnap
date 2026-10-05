@@ -9,3 +9,5 @@ This file used to be GSD session state. It drifted (claimed Phase 05 still EXECU
 - Historical plan write-ups: `phases/**`
 
 If you need “what to do next,” read CONTEXT.md. Do not treat any leftover “type `approved`” / `/gsd:transition` notes as an agent protocol.
+
+As of 2026-10-05: Phase 6a backend approval is in the API. SMS-01, SMS-03, and SMS-08 are pending. Local reminders, duplicate quote, on-device stats, and request-log/voice-cost observability are in the tree. PHOTO-01 Vision is not started. Physical Android UAT is not signed off.

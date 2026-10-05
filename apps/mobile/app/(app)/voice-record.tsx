@@ -37,13 +37,18 @@ import {
 import {
   VOICE_UPLOAD_RETRY_BODY,
   VOICE_UPLOAD_RETRY_LABEL,
+  shouldClearVoiceCheckpointOnLeave,
   shouldPersistRecordingOnBackground,
   voiceEnqueueFailureUx,
   voiceStopFailureUx,
 } from '../../src/quotes/voice-recording-session';
-import { RESUME_KIND_VOICE } from '../../src/quotes/resume-checkpoint';
+import {
+  RESUME_KIND_VOICE,
+  pendingVoiceUploadFromCheckpoint,
+} from '../../src/quotes/resume-checkpoint';
 import {
   clearResumeCheckpoints,
+  loadResumeCheckpoint,
   upsertResumeCheckpoint,
 } from '../../src/quotes/resume-checkpoint-store';
 
@@ -65,6 +70,7 @@ export default function VoiceRecordScreen(): JSX.Element {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stoppingRef = useRef(false);
   const pendingUploadRef = useRef<{ quoteId: string; filePath: string } | null>(null);
+  const keepVoiceCheckpointRef = useRef(false);
   const [pendingUpload, setPendingUpload] = useState<{ quoteId: string; filePath: string } | null>(
     null,
   );
@@ -84,7 +90,40 @@ export default function VoiceRecordScreen(): JSX.Element {
     useCallback(() => {
       setRecordingState('idle');
       setDurationSeconds(0);
+      const contractorId = useAuthStore.getState().contractor?.id ?? '';
+      const reuseId = parseReuseQuoteId(reuseQuoteId);
+      let cancelled = false;
+      if (contractorId && reuseId) {
+        keepVoiceCheckpointRef.current = true;
+        void (async () => {
+          try {
+            const checkpoint = await loadResumeCheckpoint(contractorId);
+            const found = await findQuoteRecord(() =>
+              database.get<Quote>('quotes').find(reuseId),
+            );
+            const pending = pendingVoiceUploadFromCheckpoint({
+              checkpoint,
+              routeQuoteId: reuseId,
+              quoteStatus: found.ok ? found.record.status : null,
+            });
+            if (cancelled) {
+              keepVoiceCheckpointRef.current = pending != null;
+              return;
+            }
+            if (pending) {
+              keepVoiceCheckpointRef.current = true;
+              rememberPending(pending);
+              setRecordingState('stopped');
+            } else {
+              keepVoiceCheckpointRef.current = false;
+            }
+          } catch {
+            keepVoiceCheckpointRef.current = true;
+          }
+        })();
+      }
       return () => {
+        cancelled = true;
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
@@ -96,14 +135,17 @@ export default function VoiceRecordScreen(): JSX.Element {
             // Intentional leave — discard the in-progress cache take.
           });
         }
-        const contractorId = useAuthStore.getState().contractor?.id ?? '';
-        if (contractorId) {
+        const keep = pendingUploadRef.current != null || keepVoiceCheckpointRef.current;
+        if (
+          contractorId
+          && shouldClearVoiceCheckpointOnLeave(keep)
+        ) {
           void clearResumeCheckpoints(contractorId, RESUME_KIND_VOICE).catch(() => {
             // Leaving the recorder must not throw.
           });
         }
       };
-    }, [])
+    }, [rememberPending, reuseQuoteId]),
   );
 
   const handleStartRecording = useCallback(async () => {
@@ -130,6 +172,7 @@ export default function VoiceRecordScreen(): JSX.Element {
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
       );
 
+      keepVoiceCheckpointRef.current = false;
       recordingRef.current = recording;
       setRecordingState('recording');
       setDurationSeconds(0);

@@ -7,6 +7,9 @@
 
 import type { CatalogUnit } from '../catalog/units';
 
+/** Signed Postgres INTEGER upper bound. Amounts above this are not a price. */
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+
 export const MAX_IMPORT_TEXT_CHARS = 50_000;
 export const MAX_IMPORTED_LINES = 100;
 export const MAX_OLD_QUOTE_FILES = 3;
@@ -89,14 +92,21 @@ const UNIT_PATTERNS: UnitPattern[] = [
 const HEADER_RE =
   /^(?:quote(?:\s*#|\s+for|:)?|invoice(?:\s*#|:)?|estimate(?:\s*#|:)?|date\s*:|customer\s*:|client\s*:|bill\s+to|sold\s+to|job\s+address|phone\s*:|email\s*:|address\s*:|thanks?\b|thank\s+you|page\s+\d|payment\b|due\s+date|balance\s+due|amount\s+due|sub-?total\b|subtotal\b|total(?:\s+due)?\b|tax\b|qty\b.*\b(?:price|amount|unit)\b|(?:item|description)\b.*\bprice\b)/i;
 
-const DOLLAR_RE =
-  /\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/g;
+/**
+ * A full money token. Comma groups are only accepted when the commas are
+ * present; a long uncomma'd amount must not stop after the first 1–3 digits.
+ * A leftover digit, comma, or dot means the token is not a price.
+ */
+const MONEY_TOKEN = String.raw`((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)(?![\d,.])`;
 
-const AT_PRICE_RE =
-  /@\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/i;
+const DOLLAR_RE = new RegExp(String.raw`\$\s*${MONEY_TOKEN}`, 'g');
 
-const UNIT_PRICE_SUFFIX_RE =
-  /(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(?:\/\s*(h(?:rs?|ours?)?|ea(?:ch)?|ft|lf|sf|sqft)|(?:ea\.?|each))\b/i;
+const AT_PRICE_RE = new RegExp(String.raw`@\s*\$?\s*${MONEY_TOKEN}`, 'i');
+
+const UNIT_PRICE_SUFFIX_RE = new RegExp(
+  String.raw`${MONEY_TOKEN}\s*(?:\/\s*(h(?:rs?|ours?)?|ea(?:ch)?|ft|lf|sf|sqft)|(?:ea\.?|each))\b`,
+  'i',
+);
 
 const TRAILING_PLAIN_MONEY_RE =
   /(?:^|\s)(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+\.\d{2})\s*$/;
@@ -114,8 +124,13 @@ function moneyToCents(raw: string): number | null {
     return null;
   }
   const [whole, frac = ""] = stripped.split(".");
-  const cents = Number(whole) * 100 + Number((frac + "00").slice(0, 2));
-  if (!Number.isInteger(cents) || cents <= 0) {
+  const wholeNum = Number(whole);
+  const fracNum = Number((frac + "00").slice(0, 2));
+  if (!Number.isSafeInteger(wholeNum) || !Number.isSafeInteger(fracNum)) {
+    return null;
+  }
+  const cents = wholeNum * 100 + fracNum;
+  if (!Number.isSafeInteger(cents) || cents <= 0 || cents > POSTGRES_INTEGER_MAX) {
     return null;
   }
   return cents;

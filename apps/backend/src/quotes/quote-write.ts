@@ -812,6 +812,23 @@ export async function applyQuotePut(
       existingResult.rows as QuoteLineItemRow[],
     );
     totalCents = totalCentsFromLineItems(resolvedLines);
+  } else if (parsed.totalCents !== undefined) {
+    const existingResult = await queryFn(SELECT_LINE_ITEMS_SQL, [args.quoteId]);
+    const fromLines = totalCentsFromLineItems(
+      (existingResult.rows as QuoteLineItemRow[]).map((row) => ({
+        quantity: row.quantity,
+        unitPriceCents: row.unit_price_cents,
+        optionRole: row.option_role,
+        optionGroupId: row.option_group_id,
+      })),
+    );
+    if (parsed.totalCents !== fromLines) {
+      return {
+        status: 400,
+        json: { error: "totalCents does not match the line items" },
+      };
+    }
+    totalCents = fromLines;
   }
 
   if (totalCents !== undefined && !isStorableNonNegativeCents(totalCents)) {

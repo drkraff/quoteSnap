@@ -89,8 +89,9 @@ export function canResumeDraftQuote(quote: ResumeQuoteSnapshot | null | undefine
 }
 
 /**
- * Stop already created the local quote + m4a. Do not send the contractor
- * back to the mic — FAIL-03/poller own that row.
+ * Stop already created the local quote + m4a. When an upload queue row owns
+ * it, do not send the contractor back to the mic — FAIL-03 owns that row.
+ * An ai_processing take with no queue row is recovered by pickResumeTarget.
  */
 export function voiceStopAlreadyPersisted(
   quote: ResumeQuoteSnapshot | null | undefined,
@@ -98,9 +99,48 @@ export function voiceStopAlreadyPersisted(
   return quote?.status === 'ai_processing';
 }
 
+const AUDIO_QUEUE_STATUSES = new Set(['pending', 'in_progress', 'failed', 'dead_letter']);
+
+/** True when a voice upload row already owns this quote. */
+export function voiceUploadQueuedForResume(
+  items: { entityType: string; entityId: string; action: string; status: string }[],
+  quoteId: string | null | undefined,
+): boolean {
+  const id = quoteId?.trim() ?? '';
+  if (!id) return false;
+  return items.some(
+    (item) =>
+      item.entityType === 'audio'
+      && item.entityId === id
+      && item.action === 'create'
+      && AUDIO_QUEUE_STATUSES.has(item.status),
+  );
+}
+
+/**
+ * Saved file from a stop whose enqueue never landed. Reopening the recorder
+ * can retry that file. A queued ai_processing take stays with FAIL-03.
+ */
+export function pendingVoiceUploadFromCheckpoint(input: {
+  checkpoint: ResumeCheckpointFields | null;
+  routeQuoteId: string;
+  quoteStatus: string | null | undefined;
+}): { quoteId: string; filePath: string } | null {
+  if (input.quoteStatus !== 'ai_processing') return null;
+  const checkpoint = input.checkpoint;
+  if (!checkpoint || checkpoint.kind !== RESUME_KIND_VOICE) return null;
+  const routeQuoteId = input.routeQuoteId.trim();
+  if (!routeQuoteId || checkpoint.quoteId !== routeQuoteId) return null;
+  const filePath = checkpoint.audioUri?.trim() ?? '';
+  if (!filePath) return null;
+  return { quoteId: routeQuoteId, filePath };
+}
+
 export function pickResumeTarget(input: {
   checkpoint: ResumeCheckpointFields | null;
   quote?: ResumeQuoteSnapshot | null;
+  /** Explicit false: stop saved the file and nothing is in the upload queue. */
+  voiceUploadQueued?: boolean;
 }): ResumeTarget | null {
   const checkpoint = input.checkpoint;
   if (!checkpoint) return null;
@@ -117,6 +157,18 @@ export function pickResumeTarget(input: {
   }
 
   if (voiceStopAlreadyPersisted(input.quote)) {
+    if (
+      input.voiceUploadQueued === false
+      && checkpoint.quoteId
+      && checkpoint.audioUri
+    ) {
+      const href = resumeHref({
+        kind: RESUME_KIND_VOICE,
+        quoteId: checkpoint.quoteId,
+      });
+      if (!href) return null;
+      return { kind: RESUME_KIND_VOICE, href, quoteId: checkpoint.quoteId };
+    }
     return null;
   }
 

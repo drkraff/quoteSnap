@@ -127,6 +127,63 @@ describe("errorHandler", () => {
   });
 });
 
+describe("malformed JSON bodies", () => {
+  it("returns 400 with a plain message and a redacted log", async () => {
+    const captured = captureConsoleError();
+    const app = express();
+    app.use(requestIdMiddleware);
+    app.use(express.json());
+    app.post("/echo", (_req, res) => {
+      res.json({ ok: true });
+    });
+    app.use(errorHandler);
+    const server = await listen(app);
+    const secret = "sk-proj-abc123def456ghi789";
+    const phone = "+15555550100";
+    try {
+      const res = await fetch(`${server.url}/echo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Request-Id": "req-bad-json",
+        },
+        body: `{"password":"hunter2","customerPhone":"${phone}","note":"${secret}"`,
+      });
+      const body: unknown = await res.json();
+      assert.equal(res.status, 400);
+      assert.deepEqual(body, { error: "That request could not be read." });
+      const text = JSON.stringify(body);
+      assert.equal(text.includes("hunter2"), false);
+      assert.equal(text.includes(phone), false);
+      assert.equal(text.includes(secret), false);
+      assert.equal(text.includes("SyntaxError"), false);
+      assert.equal(text.includes("Unexpected"), false);
+      assert.equal(text.includes("stack"), false);
+      assert.equal(res.headers.get("x-request-id"), "req-bad-json");
+      assert.equal(captured.lines.length, 1);
+      const line = JSON.parse(captured.lines[0]!) as {
+        status: number;
+        msg: string;
+        stack?: string;
+        error: { message: string };
+      };
+      assert.equal(line.msg, "unhandled_error");
+      assert.equal(line.status, 400);
+      assert.equal(line.stack, undefined);
+      const logged = JSON.stringify(line);
+      assert.equal(logged.includes("hunter2"), false);
+      assert.equal(logged.includes(phone), false);
+      assert.equal(logged.includes(secret), false);
+      // The parser message says "at position". A stack frame is "at name (file:line:col)".
+      assert.doesNotMatch(logged, /at\s+\S+\s+\([^)]+:\d+:\d+\)/);
+      assert.equal(logged.includes("\n    at "), false);
+    } finally {
+      captured.restore();
+      await server.close();
+    }
+  });
+});
+
 describe("oversized bodies and multer limits", () => {
   it("maps an oversize JSON body to 413 with a plain message and a redacted log", async () => {
     const captured = captureConsoleError();

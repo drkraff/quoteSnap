@@ -25,3 +25,12 @@ export function voiceStopFailureUx(input: {
 export function voiceEnqueueFailureUx(queued: boolean): 'leave' | 'retry_on_screen' {
   return queued ? 'leave' : 'retry_on_screen';
 }
+
+/**
+ * A failed queue write leaves the m4a and the resume checkpoint. Closing the
+ * recorder must keep that checkpoint. An in-progress cache take, or a take
+ * that already joined the queue, is cleared on leave.
+ */
+export function shouldClearVoiceCheckpointOnLeave(keepForRecovery: boolean): boolean {
+  return !keepForRecovery;
+}

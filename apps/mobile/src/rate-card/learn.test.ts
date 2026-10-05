@@ -75,6 +75,24 @@ describe('buildRateCardLearnPayload', () => {
         catalog,
       ),
     ).toBeNull();
+    expect(
+      buildRateCardLearnPayload(
+        { name: 'Pipe Repair', unit: 'each', unitPriceCents: -50 },
+        catalog,
+      ),
+    ).toBeNull();
+    expect(
+      buildRateCardLearnPayload(
+        { name: 'Pipe Repair', unit: 'each', unitPriceCents: 2_147_483_648 },
+        catalog,
+      ),
+    ).toBeNull();
+    expect(
+      buildRateCardLearnPayload(
+        { name: 'Pipe Repair', unit: 'each', unitPriceCents: 2_147_483_647 },
+        catalog,
+      )?.unitPriceCents,
+    ).toBe(2_147_483_647);
   });
 
   it('upserts an adhoc draft price-edit under the exact line name', () => {
@@ -130,6 +148,9 @@ describe('rateCardQueueEntityId', () => {
     expect(
       rateCardQueueEntityId({ name: 'Copper Pipe', unit: 'foot', trade: 'plumbing' }),
     ).not.toBe(rateCardQueueEntityId({ name: 'Copper Pipes', unit: 'foot', trade: 'plumbing' }));
+    expect(rateCardQueueEntityId({ name: 'Café valve', unit: 'each' })).not.toBe(
+      rateCardQueueEntityId({ name: 'Cafe valve', unit: 'each' }),
+    );
   });
 });
 

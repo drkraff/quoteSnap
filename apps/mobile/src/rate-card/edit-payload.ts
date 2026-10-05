@@ -1,6 +1,10 @@
 import { parseCatalogUnit } from '../catalog/units';
 import { displayRateCardName, rateCardTradeKey } from './normalize';
-import { rateCardQueueEntityId, type RateCardUpsertPayload } from './learn';
+import {
+  isLearnableUnitPriceCents,
+  rateCardQueueEntityId,
+  type RateCardUpsertPayload,
+} from './learn';
 
 export type RateCardEditSource = {
   displayName: string;
@@ -16,7 +20,7 @@ export function buildRateCardEditPayload(
   entry: RateCardEditSource,
   unitPriceCents: number,
 ): RateCardUpsertPayload | null {
-  if (!Number.isInteger(unitPriceCents) || unitPriceCents <= 0) {
+  if (!isLearnableUnitPriceCents(unitPriceCents)) {
     return null;
   }
   const name = displayRateCardName(entry.displayName);

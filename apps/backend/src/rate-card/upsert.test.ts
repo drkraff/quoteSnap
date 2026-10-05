@@ -146,6 +146,32 @@ describe("parseRateCardUpsertBody", () => {
     });
   });
 
+  it("rejects cents above a signed Postgres integer and still accepts the max", () => {
+    assert.equal(
+      parseRateCardUpsertBody({ name: "Pipe", unit: "each", unitPriceCents: -1 }).ok,
+      false,
+    );
+    assert.equal(
+      parseRateCardUpsertBody({ name: "Pipe", unit: "each", unitPriceCents: 2_147_483_648 }).ok,
+      false,
+    );
+    const max = parseRateCardUpsertBody({
+      name: "Pipe",
+      unit: "each",
+      unitPriceCents: 2_147_483_647,
+    });
+    assert.equal(max.ok, true);
+    if (max.ok) {
+      assert.equal(max.unitPriceCents, 2_147_483_647);
+    }
+    const distinct = parseRateCardUpsertBody({ name: "Café valve", unit: "each", unitPriceCents: 1250 });
+    const folded = parseRateCardUpsertBody({ name: "Cafe valve", unit: "each", unitPriceCents: 1250 });
+    assert.equal(distinct.ok && folded.ok, true);
+    if (distinct.ok && folded.ok) {
+      assert.notEqual(distinct.normalizedName, folded.normalizedName);
+    }
+  });
+
   it("rejects blank names, unknown units, and non-positive cents", () => {
     assert.equal(parseRateCardUpsertBody({ unit: "each", unitPriceCents: 100 }).ok, false);
     assert.equal(
@@ -415,6 +441,48 @@ describe("lookupRateCardEntry", () => {
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+describe("upsertRateCardEntry races", () => {
+  it("updates the row another insert just committed instead of throwing", async () => {
+    const winner = entryRow({
+      normalized_name: "copper pipe",
+      display_name: "Copper Pipe",
+      unit_price_cents: 4500,
+      use_count: 1,
+    });
+    let inserts = 0;
+    const queryFn: RateCardQueryFn = async (sql, params) => {
+      if (sql === SELECT_RATE_CARD_BY_KEY_SQL) {
+        return { rows: inserts === 0 ? [] : [winner] };
+      }
+      if (sql === INSERT_RATE_CARD_SQL) {
+        inserts += 1;
+        const err = new Error("duplicate key value violates unique constraint");
+        (err as Error & { code: string }).code = "23505";
+        throw err;
+      }
+      if (sql === UPDATE_RATE_CARD_SQL) {
+        winner.display_name = params?.[0] as string;
+        winner.unit_price_cents = params?.[1] as number;
+        winner.use_count += 1;
+        winner.source = params?.[2] as RateCardRow["source"];
+        winner.price_history = JSON.parse(params?.[3] as string);
+        return { rows: [winner] };
+      }
+      throw new Error(`unexpected sql: ${sql}`);
+    };
+    const outcome = await upsertRateCardEntry(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      body: { name: "Copper Pipe", unit: "foot", unitPriceCents: 5200, trade: "plumbing" },
+      recordedAtIso: RECORDED_AT,
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.entry.unitPriceCents, 5200);
+    assert.equal(outcome.json.entry.useCount, 2);
+    assert.equal(inserts, 1);
+  });
+});
 
 describe("rate card isolation", () => {
   it("is not imported by catalog or quote write (learn/attach stay out of SKU CRUD and PUT)", () => {

@@ -151,6 +151,39 @@ describe("importedLinesToUpsertBodies", () => {
     ]);
   });
 
+  it("keeps an uncomma'd dollar amount instead of a shorter prefix", () => {
+    const parsed = parseImportedQuoteText(
+      "Copper pipe @ $1234567.89\nPanel $1234.56\nCafé valve @ $12.50\n",
+    );
+    const byName = Object.fromEntries(parsed.lines.map((line) => [line.name, line]));
+    assert.equal(byName["Copper pipe"]?.unitPriceCents, 123456789);
+    assert.equal(byName["Panel"]?.unitPriceCents, 123456);
+    assert.equal(byName["Café valve"]?.unitPriceCents, 1250);
+    assert.equal(parsed.lines.some((line) => line.unitPriceCents === 12300), false);
+    assert.equal(parsed.lines.some((line) => line.unitPriceCents === 123456), true);
+    assert.notEqual(byName["Café valve"]?.name, "Cafe valve");
+  });
+
+  it("does not learn zero, negative, over-max, or a truncated prefix", () => {
+    const parsed = parseImportedQuoteText(
+      "Zero @ $0.00\nHuge @ $30000000.00\nWidget 123456789.12\nExtra $12.567\n",
+    );
+    assert.equal(parsed.lines.length, 0);
+    assert.equal(parsed.lines.some((line) => line.unitPriceCents === 0), false);
+    assert.equal(parsed.lines.some((line) => line.unitPriceCents < 0), false);
+    assert.equal(parsed.lines.some((line) => line.unitPriceCents === 300), false);
+    assert.equal(parsed.lines.some((line) => line.unitPriceCents === 1200), false);
+  });
+
+  it("keeps the largest storable cent and still reads comma amounts", () => {
+    const parsed = parseImportedQuoteText(
+      "Max item @ $21474836.47\nComma $1,234.56\n",
+    );
+    const byName = Object.fromEntries(parsed.lines.map((line) => [line.name, line]));
+    assert.equal(byName["Max item"]?.unitPriceCents, 2147483647);
+    assert.equal(byName["Comma"]?.unitPriceCents, 123456);
+  });
+
   it("omits trade rather than inventing one", () => {
     const bodies = importedLinesToUpsertBodies(
       [{ name: "Replace outlet", unit: "each", unitPriceCents: 8500 }],

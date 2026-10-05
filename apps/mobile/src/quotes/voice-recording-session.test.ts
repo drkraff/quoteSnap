@@ -1,6 +1,7 @@
 import {
   VOICE_UPLOAD_RETRY_BODY,
   VOICE_UPLOAD_RETRY_LABEL,
+  shouldClearVoiceCheckpointOnLeave,
   shouldPersistRecordingOnBackground,
   voiceEnqueueFailureUx,
   voiceStopFailureUx,
@@ -30,5 +31,12 @@ describe('voiceEnqueueFailureUx', () => {
     expect(VOICE_UPLOAD_RETRY_BODY.toLowerCase()).toContain('try again');
     expect(VOICE_UPLOAD_RETRY_LABEL).toBe('Try again');
     expect(VOICE_UPLOAD_RETRY_BODY.toLowerCase()).not.toContain('stack');
+  });
+});
+
+describe('shouldClearVoiceCheckpointOnLeave', () => {
+  it('keeps the checkpoint after a failed queue write so the take can be resumed', () => {
+    expect(shouldClearVoiceCheckpointOnLeave(true)).toBe(false);
+    expect(shouldClearVoiceCheckpointOnLeave(false)).toBe(true);
   });
 });

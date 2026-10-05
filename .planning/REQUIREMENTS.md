@@ -3,6 +3,8 @@
 **Defined:** 2026-03-25
 **Operational status:** [CONTEXT.md](../CONTEXT.md) — this file is the **ID catalog**, not a live dashboard.
 
+**As of 2026-10-05:** Phase 6a backend approval is in the API. **SMS-01**, **SMS-03**, and **SMS-08** stay unchecked. Local follow-up reminders, duplicate quote, on-device stats, and request-log / voice-cost observability are in the tree and are not new v1 IDs. **PHOTO-01** Vision is not started. Physical Android UAT is not done. A checked box means the behavior is in code and covered by tests where CI can run them. It is not device proof.
+
 **Core Value:** A contractor can describe a job on-site and have a customer-approved quote before driving off the street — with zero paperwork at night.
 
 Checkboxes mean “accepted as in-scope and (if checked) implemented in code,” not “human UAT passed.” Phase 5 voice items are code-complete; physical Android UAT is still open. Do not delete IDs.
@@ -211,4 +213,4 @@ Backend approval (no Twilio account, no device, no mobile UI) implements SMS-02,
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-10-04 — Phase 6 backend approval without Twilio or FCM: SMS-02, SMS-04, SMS-05, SMS-06, SMS-07, SMS-09, SMS-10. SMS-01, SMS-03, SMS-08, FAIL-06, and FAIL-08 stay pending. Status narrative lives in CONTEXT.md*
+*Last updated: 2026-10-05 — Phase 6a backend approval is in the API (SMS-02, SMS-04, SMS-05, SMS-06, SMS-07, SMS-09, SMS-10). SMS-01, SMS-03, SMS-08, FAIL-06, and FAIL-08 stay pending. Local reminders, duplicate quote, on-device stats, and request-log/voice-cost observability are implemented and are not new IDs. PHOTO-01 Vision is not started. Physical Android UAT is not done. Status narrative lives in CONTEXT.md*
