@@ -11,6 +11,12 @@ describe('computeMaterialSellCents / parseSignupMarkupPercent', () => {
     expect(computeMaterialSellCents(4000, 20)).toBe(4800);
     expect(computeMaterialSellCents(333, 15)).toBe(383);
     expect(computeMaterialSellCents(1000, 0)).toBe(1000);
+    // 50 * 1.15 is 57.5; float Math.round yields 57, half-up integer cents is 58.
+    expect(computeMaterialSellCents(50, 15)).toBe(58);
+  });
+
+  it('returns null when the sell price cannot be stored in a Postgres integer', () => {
+    expect(computeMaterialSellCents(2_000_000_000, 50)).toBeNull();
   });
 
   it('does not invent a sell price when cost or markup is missing', () => {

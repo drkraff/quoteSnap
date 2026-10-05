@@ -1,5 +1,10 @@
 import { parseCatalogUnit } from "../catalog/units.js";
 import { displayRateCardName } from "../rate-card/normalize.js";
+import {
+  isStorableNonNegativeCents,
+  isStorableQuantity,
+  POSTGRES_INTEGER_MAX,
+} from "../quotes/integer-money.js";
 import type { AILineItem } from "../types/voice.js";
 import { normalizeRoomName } from "../quotes/rooms.js";
 import {
@@ -7,7 +12,6 @@ import {
   attachVoiceLinePrices,
   ensureLaborLineFromSpokenHours,
   parseSpokenHours,
-  totalCentsFromPricedLines,
   voiceLineNeedsRateCard,
   type RateCardCentsLookup,
 } from "./voice-price-attach.js";
@@ -59,17 +63,55 @@ export function parseSpokenUnitPriceCents(value: unknown): number | null {
   if (!Number.isInteger(value) || (value as number) <= 0) {
     return null;
   }
+  if ((value as number) > POSTGRES_INTEGER_MAX) {
+    return null;
+  }
   return value as number;
 }
 
 function parseVoiceQuantity(value: unknown): number {
-  if (Number.isInteger(value) && (value as number) >= 1) {
-    return value as number;
+  if (isStorableQuantity(value)) {
+    return value;
   }
   if (typeof value === "number" && Number.isFinite(value) && value >= 1) {
-    return Math.max(1, Math.round(value));
+    const rounded = Math.round(value);
+    if (isStorableQuantity(rounded)) {
+      return rounded;
+    }
   }
   return 1;
+}
+
+/**
+ * A line whose extension, or the running total after it, cannot fit in
+ * `integer` is stored blank/`unknown`. Earlier lines stay. No smaller price
+ * is invented.
+ */
+function fitVoiceLinesToIntegerColumns(lineItems: ValidatedLineItem[]): {
+  lineItems: ValidatedLineItem[];
+  totalCents: number;
+} {
+  let total = 0;
+  const fitted = lineItems.map((line) => {
+    const price = line.unitPriceCents;
+    if (price == null) {
+      return line;
+    }
+    const extension = line.quantity * price;
+    const next = total + extension;
+    if (
+      !isStorableNonNegativeCents(price) ||
+      !Number.isSafeInteger(extension) ||
+      extension > POSTGRES_INTEGER_MAX ||
+      !Number.isSafeInteger(next) ||
+      next > POSTGRES_INTEGER_MAX
+    ) {
+      return { ...line, unitPriceCents: null, priceSource: "unknown" as const };
+    }
+    total = next;
+    return line;
+  });
+  return { lineItems: fitted, totalCents: total };
 }
 
 function parseVoiceConfidence(value: unknown): number {
@@ -194,10 +236,7 @@ export function validateAndBuildLineItems(
     return finalizeLine(line, rateCardCents, hourlyRateCents, markupPercent);
   });
 
-  return {
-    lineItems,
-    totalCents: totalCentsFromPricedLines(lineItems),
-  };
+  return fitVoiceLinesToIntegerColumns(lineItems);
 }
 
 export async function validateAndBuildLineItemsAsync(
@@ -223,10 +262,7 @@ export async function validateAndBuildLineItemsAsync(
     options?.hourlyRateCents ?? null,
     options?.markupPercent ?? null,
   );
-  return {
-    lineItems,
-    totalCents: totalCentsFromPricedLines(lineItems),
-  };
+  return fitVoiceLinesToIntegerColumns(lineItems);
 }
 
 export { attachOneVoicePrice, attachVoiceLinePrices, parseSpokenHours };

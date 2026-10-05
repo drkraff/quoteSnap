@@ -460,6 +460,12 @@ describe("computeMaterialSellCents / parseSignupMarkupPercent", () => {
     assert.equal(computeMaterialSellCents(4000, 20), 4800);
     assert.equal(computeMaterialSellCents(333, 15), 383);
     assert.equal(computeMaterialSellCents(1000, 0), 1000);
+    // 50 * 1.15 is 57.5; float Math.round yields 57, half-up integer cents is 58.
+    assert.equal(computeMaterialSellCents(50, 15), 58);
+  });
+
+  it("returns null when the sell price cannot be stored in a Postgres integer", () => {
+    assert.equal(computeMaterialSellCents(2_000_000_000, 50), null);
   });
 
   it("does not invent a sell price without a positive cost or a valid markup", () => {
