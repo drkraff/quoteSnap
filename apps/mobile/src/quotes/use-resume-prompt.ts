@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
+import { Q } from '@nozbe/watermelondb';
 import { database } from '../db';
 import { Quote } from '../db/models/quote';
+import { SyncQueueItem } from '../db/models/sync-queue-item';
 import { useAuthStore } from '../store/auth-store';
 import { findQuoteRecord } from './find-quote';
 import {
@@ -12,6 +14,7 @@ import {
   pickResumeTarget,
   releaseResumePromptSlot,
   resumePromptBody,
+  voiceUploadQueuedForResume,
 } from './resume-checkpoint';
 import {
   clearResumeCheckpoints,
@@ -60,7 +63,32 @@ export function useResumeAfterCrashPrompt(navigate: (href: string) => void): voi
         return;
       }
 
-      const target = pickResumeTarget({ checkpoint, quote });
+      let voiceUploadQueued = false;
+      if (quoteId) {
+        try {
+          const queued = await database
+            .get<SyncQueueItem>('sync_queue_items')
+            .query(Q.where('entity_id', quoteId))
+            .fetch();
+          voiceUploadQueued = voiceUploadQueuedForResume(
+            queued.map((item) => ({
+              entityType: item.entityType,
+              entityId: item.entityId,
+              action: item.action,
+              status: item.status,
+            })),
+            quoteId,
+          );
+        } catch {
+          // Cannot prove the queue is empty. Leave a processing take with FAIL-03.
+          voiceUploadQueued = true;
+        }
+      }
+      if (cancelled) {
+        return;
+      }
+
+      const target = pickResumeTarget({ checkpoint, quote, voiceUploadQueued });
       shown = true;
       if (!target) {
         if (checkpoint) {

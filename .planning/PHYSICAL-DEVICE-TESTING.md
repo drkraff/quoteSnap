@@ -2,6 +2,8 @@
 
 Procedure for QuoteSnap on a real Android device. Product/status briefing: [CONTEXT.md](../CONTEXT.md).
 
+**Not signed off.** No physical Android UAT run is recorded for this tree. The steps below are the procedure, not evidence that a device passed them.
+
 **Phase 5 UAT:** [docs/UAT-PHASE5.md](../docs/UAT-PHASE5.md) — the three pending human tests, preconditions, and hosted-proof slots.
 
 **Metro morning (first-win quoting, after 14:00, physical device / Metro, no emulator):** [docs/METRO-UAT-CHECKLIST.md](../docs/METRO-UAT-CHECKLIST.md) — skip-catalog account, adhoc voice prices, My rates, rooms/photos, Share quote. Not SMS, not an EAS APK.

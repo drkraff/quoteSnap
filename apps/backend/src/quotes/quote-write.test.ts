@@ -1016,6 +1016,80 @@ describe("applyQuotePut", () => {
     }
   });
 
+  it("rejects a totalCents-only PUT that does not match stored line items", async () => {
+    const existing: QuoteLineItemRow[] = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        quote_id: QUOTE_ID,
+        name: "Faucet",
+        quantity: 1,
+        unit_price_cents: 10000,
+        created_at: new Date("2026-09-01T12:01:00.000Z"),
+        confidence: null,
+        catalog_item_id: null,
+        unit: "each",
+        private_note: null,
+        price_source: "known",
+        option_group_id: null,
+        option_role: null,
+        room_id: null,
+        client_id: null,
+      },
+    ];
+    const { queryFn, calls } = mockDb({
+      quote: quoteRow({ status: "draft_local", total_cents: 10000 }),
+      existingLines: existing,
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { totalCents: 10001 },
+    });
+    assert.deepEqual(outcome, {
+      status: 400,
+      json: { error: "totalCents does not match the line items" },
+    });
+    assert.equal(calls.some((c) => c.sql.startsWith("UPDATE quotes")), false);
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+    assert.equal(calls.some((c) => c.sql === INSERT_LINE_ITEM_SQL), false);
+  });
+
+  it("accepts a totalCents-only PUT that matches the stored line sum", async () => {
+    const existing: QuoteLineItemRow[] = [
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        quote_id: QUOTE_ID,
+        name: "Faucet",
+        quantity: 2,
+        unit_price_cents: 1500,
+        created_at: new Date("2026-09-01T12:01:00.000Z"),
+        confidence: null,
+        catalog_item_id: null,
+        unit: "each",
+        private_note: null,
+        price_source: "known",
+        option_group_id: null,
+        option_role: null,
+        room_id: null,
+        client_id: null,
+      },
+    ];
+    const { queryFn, calls } = mockDb({
+      quote: quoteRow({ status: "draft_local", total_cents: 0 }),
+      existingLines: existing,
+    });
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: { totalCents: 3000 },
+    });
+    assert.equal(outcome.status, 200);
+    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    assert.ok(update);
+    assert.equal(update!.params?.[0], 3000);
+    assert.equal(calls.some((c) => c.sql === DELETE_LINE_ITEMS_SQL), false);
+  });
+
   it("rejects totalCents-only PUT on sent without touching line items", async () => {
     const { queryFn, calls } = mockDb({ quote: quoteRow({ status: "sent", total_cents: 3000 }) });
     const outcome = await applyQuotePut(queryFn, {

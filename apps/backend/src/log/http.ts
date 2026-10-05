@@ -31,6 +31,7 @@ export const requestIdMiddleware: RequestHandler = (req, res, next) => {
 
 export const BODY_TOO_LARGE_MESSAGE = "That upload is too large.";
 export const UPLOAD_REJECTED_MESSAGE = "That upload could not be accepted.";
+export const MALFORMED_BODY_MESSAGE = "That request could not be read.";
 
 function errorField(err: unknown, key: string): unknown {
   if (!err || typeof err !== "object") return undefined;
@@ -38,8 +39,9 @@ function errorField(err: unknown, key: string): unknown {
 }
 
 /**
- * Body-parser's oversize JSON and multer's limit errors are client mistakes.
- * Anything else stays a generic 500. The message is fixed copy — never err.message.
+ * Body-parser's oversize or unreadable JSON, and multer's limit errors, are
+ * client mistakes. Anything else stays a generic 500. The message is fixed
+ * copy — never err.message, and never the request body.
  */
 export function httpClientError(err: unknown): { status: 413 | 400; error: string } | null {
   const type = errorField(err, "type");
@@ -55,6 +57,12 @@ export function httpClientError(err: unknown): { status: 413 | 400; error: strin
   ) {
     return { status: 413, error: BODY_TOO_LARGE_MESSAGE };
   }
+  if (
+    type === "entity.parse.failed"
+    || (name === "SyntaxError" && (status === 400 || statusCode === 400))
+  ) {
+    return { status: 400, error: MALFORMED_BODY_MESSAGE };
+  }
   if (name === "MulterError" || (typeof code === "string" && code.startsWith("LIMIT_"))) {
     return { status: 400, error: UPLOAD_REJECTED_MESSAGE };
   }
@@ -63,9 +71,10 @@ export function httpClientError(err: unknown): { status: 413 | 400; error: strin
 
 /**
  * Unexpected errors become one structured log line and a generic JSON 500.
- * Oversize JSON and multer limits are 413 / 400 with plain copy. The body
- * never includes a stack or the internal message. Route handlers that already
- * sent a response (including the approval page HTML) are left alone.
+ * Oversize JSON is 413, unreadable JSON and multer limits are 400, all with
+ * plain copy. The body never includes a stack, the parser message, or the
+ * request body. Route handlers that already sent a response (including the
+ * approval page HTML) are left alone.
  */
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   const client = httpClientError(err);

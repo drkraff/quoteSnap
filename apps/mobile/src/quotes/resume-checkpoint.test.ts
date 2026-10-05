@@ -7,12 +7,14 @@ import {
   beginResumePromptIfNeeded,
   canResumeDraftQuote,
   parseResumeCheckpointRow,
+  pendingVoiceUploadFromCheckpoint,
   pickResumeTarget,
   releaseResumePromptSlot,
   resetResumePromptSlotForTests,
   resumeHref,
   resumePromptBody,
   voiceStopAlreadyPersisted,
+  voiceUploadQueuedForResume,
 } from './resume-checkpoint';
 
 describe('parseResumeCheckpointRow', () => {
@@ -180,6 +182,64 @@ describe('pickResumeTarget', () => {
         quote: { status: 'ai_processing' },
       }),
     ).toBeNull();
+    expect(
+      pickResumeTarget({
+        checkpoint: {
+          kind: RESUME_KIND_VOICE,
+          quoteId: 'q-new',
+          audioUri: 'file:///docs/q-new.m4a',
+        },
+        quote: { status: 'ai_processing' },
+        voiceUploadQueued: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('reopens an ai_processing take that never joined the upload queue', () => {
+    expect(
+      pickResumeTarget({
+        checkpoint: {
+          kind: RESUME_KIND_VOICE,
+          quoteId: 'q-new',
+          audioUri: 'file:///docs/q-new.m4a',
+        },
+        quote: { status: 'ai_processing' },
+        voiceUploadQueued: false,
+      }),
+    ).toEqual({
+      kind: RESUME_KIND_VOICE,
+      href: '/voice-record?quoteId=q-new',
+      quoteId: 'q-new',
+    });
+    expect(
+      pendingVoiceUploadFromCheckpoint({
+        checkpoint: {
+          kind: RESUME_KIND_VOICE,
+          quoteId: 'q-new',
+          audioUri: 'file:///docs/q-new.m4a',
+        },
+        routeQuoteId: 'q-new',
+        quoteStatus: 'ai_processing',
+      }),
+    ).toEqual({ quoteId: 'q-new', filePath: 'file:///docs/q-new.m4a' });
+    expect(
+      pendingVoiceUploadFromCheckpoint({
+        checkpoint: {
+          kind: RESUME_KIND_VOICE,
+          quoteId: 'q-new',
+          audioUri: 'file:///docs/q-new.m4a',
+        },
+        routeQuoteId: 'q-new',
+        quoteStatus: 'ai_failed',
+      }),
+    ).toBeNull();
+    expect(
+      voiceUploadQueuedForResume(
+        [{ entityType: 'audio', entityId: 'q-new', action: 'create', status: 'pending' }],
+        'q-new',
+      ),
+    ).toBe(true);
+    expect(voiceUploadQueuedForResume([], 'q-new')).toBe(false);
   });
 
   it('drops a stale retry id when the quote row is gone', () => {

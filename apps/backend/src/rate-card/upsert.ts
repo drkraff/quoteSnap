@@ -9,6 +9,7 @@ import type {
   RateCardHistoryEntry,
   RateCardSource,
 } from "../types/rate-card.js";
+import { POSTGRES_INTEGER_MAX } from "../quotes/integer-money.js";
 import { displayRateCardName, normalizeRateCardName, rateCardTradeKey } from "./normalize.js";
 
 export type RateCardQueryFn = (
@@ -199,6 +200,12 @@ export function parseRateCardUpsertBody(body: unknown): ParsedRateCardUpsert {
   if (!Number.isInteger(raw.unitPriceCents) || (raw.unitPriceCents as number) <= 0) {
     return { ok: false, error: "unitPriceCents must be an integer greater than 0" };
   }
+  if ((raw.unitPriceCents as number) > POSTGRES_INTEGER_MAX) {
+    return {
+      ok: false,
+      error: `unitPriceCents must be an integer from 1 to ${POSTGRES_INTEGER_MAX}`,
+    };
+  }
 
   const source = parseSource(raw.source);
   if (!source.ok) {
@@ -267,6 +274,11 @@ export async function lookupRateCardEntry(
   };
 }
 
+function isUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  return (err as { code?: unknown }).code === "23505";
+}
+
 export async function upsertRateCardEntry(
   queryFn: RateCardQueryFn,
   args: { contractorId: string; body: unknown; recordedAtIso?: string },
@@ -284,25 +296,40 @@ export async function upsertRateCardEntry(
     parsed.tradeKey,
   ]);
 
-  if (existing.rows.length === 0) {
+  let current = existing.rows[0] as RateCardRow | undefined;
+  if (!current) {
     const history = appendPriceHistory([], parsed.unitPriceCents, recordedAtIso);
-    const inserted = await queryFn(INSERT_RATE_CARD_SQL, [
+    try {
+      const inserted = await queryFn(INSERT_RATE_CARD_SQL, [
+        args.contractorId,
+        parsed.normalizedName,
+        parsed.displayName,
+        parsed.unit,
+        parsed.trade,
+        parsed.unitPriceCents,
+        parsed.source,
+        historyToJsonb(history),
+      ]);
+      return {
+        status: 200,
+        json: { entry: rateCardRowToResponse(inserted.rows[0] as RateCardRow) },
+      };
+    } catch (err) {
+      if (!isUniqueViolation(err)) {
+        throw err;
+      }
+    }
+    const raced = await queryFn(SELECT_RATE_CARD_BY_KEY_SQL, [
       args.contractorId,
       parsed.normalizedName,
-      parsed.displayName,
       parsed.unit,
-      parsed.trade,
-      parsed.unitPriceCents,
-      parsed.source,
-      historyToJsonb(history),
+      parsed.tradeKey,
     ]);
-    return {
-      status: 200,
-      json: { entry: rateCardRowToResponse(inserted.rows[0] as RateCardRow) },
-    };
+    current = raced.rows[0] as RateCardRow | undefined;
+    if (!current) {
+      throw new Error("rate card upsert conflict");
+    }
   }
-
-  const current = existing.rows[0] as RateCardRow;
   const history = appendPriceHistory(
     current.price_history,
     parsed.unitPriceCents,

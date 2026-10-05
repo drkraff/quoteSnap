@@ -122,6 +122,32 @@ describe('parseImportedQuoteText', () => {
     ).toBe(false);
   });
 
+  it('keeps an uncomma\'d dollar amount instead of a shorter prefix', () => {
+    const parsed = parseImportedQuoteText(
+      'Copper pipe @ $1234567.89\nPanel $1234.56\nCafé valve @ $12.50\n',
+    );
+    const byName = Object.fromEntries(parsed.lines.map((line) => [line.name, line]));
+    expect(byName['Copper pipe']?.unitPriceCents).toBe(123456789);
+    expect(byName['Panel']?.unitPriceCents).toBe(123456);
+    expect(byName['Café valve']?.unitPriceCents).toBe(1250);
+    expect(parsed.lines.some((line) => line.unitPriceCents === 12300)).toBe(false);
+    expect(byName['Café valve']?.name).not.toBe('Cafe valve');
+  });
+
+  it('does not learn zero, negative, over-max, or a truncated prefix', () => {
+    const parsed = parseImportedQuoteText(
+      'Zero @ $0.00\nHuge @ $30000000.00\nWidget 123456789.12\nExtra $12.567\n',
+    );
+    expect(parsed.lines).toEqual([]);
+  });
+
+  it('keeps the largest storable cent and still reads comma amounts', () => {
+    const parsed = parseImportedQuoteText('Max item @ $21474836.47\nComma $1,234.56\n');
+    const byName = Object.fromEntries(parsed.lines.map((line) => [line.name, line]));
+    expect(byName['Max item']?.unitPriceCents).toBe(2147483647);
+    expect(byName['Comma']?.unitPriceCents).toBe(123456);
+  });
+
   it('defaults missing unit to each only when an item + dollar price are clear', () => {
     expect(parseImportedQuoteText('Replace outlet    $85\n').lines).toEqual([
       { name: 'Replace outlet', unit: 'each', unitPriceCents: 8500 },

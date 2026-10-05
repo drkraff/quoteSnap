@@ -20,6 +20,9 @@ describe('buildRateCardEditPayload', () => {
   it('does not invent a row when unit or cents are missing', () => {
     expect(buildRateCardEditPayload({ ...entry, unit: 'ea' }, 5200)).toBeNull();
     expect(buildRateCardEditPayload(entry, 0)).toBeNull();
+    expect(buildRateCardEditPayload(entry, -1)).toBeNull();
+    expect(buildRateCardEditPayload(entry, 2_147_483_648)).toBeNull();
+    expect(buildRateCardEditPayload(entry, 2_147_483_647)?.unitPriceCents).toBe(2_147_483_647);
     expect(buildRateCardEditPayload({ ...entry, displayName: '  ' }, 5200)).toBeNull();
   });
 

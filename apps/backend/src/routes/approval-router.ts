@@ -16,9 +16,17 @@ export function createApprovalRouter(deps: {
   queryFn: SnapshotQueryFn;
   now?: () => Date;
   limiter?: RequestHandler;
+  /**
+   * Approve/decline must run on one connection. `SELECT … FOR UPDATE` only
+   * blocks the other tap through COMMIT. The default runs the statements on
+   * `queryFn` with no transaction — production passes `withTransaction`.
+   */
+  withTransaction?: <T>(fn: (query: SnapshotQueryFn) => Promise<T>) => Promise<T>;
 }): Router {
   const router = Router();
   const now = deps.now ?? (() => new Date());
+  const inTransaction = deps.withTransaction
+    ?? (<T>(fn: (query: SnapshotQueryFn) => Promise<T>) => fn(deps.queryFn));
   router.use(approvalSecurityHeaders);
   router.use(deps.limiter ?? approvalLimiter);
 
@@ -56,12 +64,14 @@ export function createApprovalRouter(deps: {
       return;
     }
     try {
-      const result = await approvalHttpResult({
-        token,
-        action,
-        queryFn: deps.queryFn,
-        now: now(),
-      });
+      const result = await inTransaction((txQuery) =>
+        approvalHttpResult({
+          token,
+          action,
+          queryFn: txQuery,
+          now: now(),
+        }),
+      );
       res.status(result.status).type("html").send(result.html);
     } catch (err) {
       logRequestFailure(req, err, `POST /q/:token/${action} error`);

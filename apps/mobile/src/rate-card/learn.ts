@@ -24,6 +24,13 @@ export type RateCardUpsertPayload = {
   source: 'typed';
 };
 
+/** Signed Postgres INTEGER upper bound. Larger cents are not a learnable price. */
+export const RATE_CARD_CENTS_MAX = 2_147_483_647;
+
+export function isLearnableUnitPriceCents(value: number): boolean {
+  return Number.isInteger(value) && value > 0 && value <= RATE_CARD_CENTS_MAX;
+}
+
 /**
  * Build a POST /rate-card body from a draft price confirmation.
  * Unit comes from the line or the matching catalog row (local id or serverId).
@@ -33,7 +40,7 @@ export function buildRateCardLearnPayload(
   line: RateCardLearnLine,
   catalogItems: RateCardCatalogHint[],
 ): RateCardUpsertPayload | null {
-  if (!Number.isInteger(line.unitPriceCents) || line.unitPriceCents <= 0) {
+  if (!isLearnableUnitPriceCents(line.unitPriceCents)) {
     return null;
   }
   const name = line.name.trim().replace(/\s+/g, ' ');
