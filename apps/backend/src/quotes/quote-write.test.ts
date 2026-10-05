@@ -191,12 +191,13 @@ describe("parseNonNegativeCents / parseQuantity", () => {
 
   it("requires quantity to be an integer >= 1", () => {
     assert.deepEqual(parseQuantity(1), { ok: true, quantity: 1 });
-    assert.equal(parseQuantity(0).ok, false);
+    const zero = parseQuantity(0);
+    assert.equal(zero.ok, false);
+    if (!zero.ok) {
+      assert.equal(zero.error, "quantity must be an integer >= 1");
+    }
     assert.equal(parseQuantity(1.5).ok, false);
     assert.equal(parseQuantity(-2).ok, false);
-    if (!parseQuantity(0).ok) {
-      assert.equal(parseQuantity(0).error, "quantity must be an integer >= 1");
-    }
   });
 
   it("rejects cents and quantities above a signed Postgres integer", () => {
