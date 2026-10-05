@@ -33,6 +33,37 @@ export type FailedVoiceStatusPayload = {
   failureStage?: AiFailureStage;
 };
 
+const FAILED_VOICE_JOB_STATES = new Set(["failed", "expired", "cancelled"]);
+
+/**
+ * pg-boss keeps a timed-out job `active` until its supervisor runs, and
+ * `cancelled` is not `failed`. Status reads should not wait for the quote reaper.
+ */
+export function voiceJobStateIsFailed(
+  state: string | null | undefined,
+  timing?: {
+    startedOn?: Date | string | null;
+    expireInSeconds?: number | null;
+    now?: Date;
+  },
+): boolean {
+  if (typeof state === "string" && FAILED_VOICE_JOB_STATES.has(state)) {
+    return true;
+  }
+  if (state !== "active" || !timing) return false;
+  const expireInSeconds = timing.expireInSeconds;
+  if (typeof expireInSeconds !== "number" || !Number.isFinite(expireInSeconds) || expireInSeconds <= 0) {
+    return false;
+  }
+  if (timing.startedOn == null) return false;
+  const started = timing.startedOn instanceof Date
+    ? timing.startedOn
+    : new Date(timing.startedOn);
+  if (Number.isNaN(started.getTime())) return false;
+  const now = timing.now ?? new Date();
+  return started.getTime() + expireInSeconds * 1000 <= now.getTime();
+}
+
 export function failedVoiceStatusPayload(
   quoteId: string,
   stage: unknown,

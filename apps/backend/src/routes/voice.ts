@@ -9,7 +9,8 @@ import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
 import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
 import { voiceAudioMimeError, voiceAudioR2Key } from '../voice/audio-upload.js';
-import { failedVoiceStatusPayload } from '../voice/ai-failure.js';
+import { failedVoiceStatusPayload, voiceJobStateIsFailed } from '../voice/ai-failure.js';
+import { voiceFeatureGate } from '../env/optional-features.js';
 import { createVoiceDraftHandler } from './voice-draft.js';
 
 export const router = Router();
@@ -30,6 +31,7 @@ type QuoteRow = {
 router.post(
   '/upload',
   authenticateToken,
+  voiceFeatureGate,
   upload.single('audio'),
   async (req: Request, res: Response): Promise<void> => {
     let quoteId: string | undefined;
@@ -160,7 +162,10 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
 
     if (job.state === 'completed') {
       response = { status: 'complete', draftId: quoteId };
-    } else if (job.state === 'failed') {
+    } else if (voiceJobStateIsFailed(job.state, {
+      startedOn: job.startedOn,
+      expireInSeconds: job.expireInSeconds,
+    })) {
       response = failedVoiceStatusPayload(quoteId, quoteRow.ai_failure_stage);
     } else {
       response = { status: 'processing' };

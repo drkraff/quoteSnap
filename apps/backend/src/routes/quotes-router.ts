@@ -18,6 +18,8 @@ import {
 } from "../quotes/photos.js";
 import { getFromR2 as getFromR2Default } from "../services/r2.js";
 import { isUuid } from "../uuid.js";
+import { photoFeatureGate } from "../env/optional-features.js";
+import { createSendLimiter } from "../quotes/send-limiter.js";
 import {
   LINE_ITEM_COLUMNS,
   QUOTE_COLUMNS,
@@ -40,6 +42,7 @@ export type QuotesRouterDeps = {
   withTransaction: <T>(fn: (query: QuotesRouteQuery) => Promise<T>) => Promise<T>;
   authenticate?: RequestHandler;
   getFromR2?: (key: string) => Promise<Buffer>;
+  sendLimiter?: RequestHandler;
 };
 
 function rejectUnlessUuid(res: Response, id: string, error: string): boolean {
@@ -50,10 +53,27 @@ function rejectUnlessUuid(res: Response, id: string, error: string): boolean {
   return true;
 }
 
+/** Keep a bad id as 404 even when photos are not configured. */
+const rejectBadQuoteId: RequestHandler = (req, res, next) => {
+  const { id } = req.params as { id?: string };
+  if (rejectUnlessUuid(res, id ?? "", "Quote not found")) return;
+  next();
+};
+
+const rejectBadPhotoIds: RequestHandler = (req, res, next) => {
+  const { id, photoId } = req.params as { id?: string; photoId?: string };
+  if (!isUuid(id ?? "") || !isUuid(photoId ?? "")) {
+    res.status(404).json({ error: "Photo not found" });
+    return;
+  }
+  next();
+};
+
 export function createQuotesRouter(deps: QuotesRouterDeps): Router {
   const runQuery = deps.query;
   const authenticate = deps.authenticate ?? authenticateToken;
   const readPhoto = deps.getFromR2 ?? getFromR2Default;
+  const sendLimiter = deps.sendLimiter ?? createSendLimiter();
   const router = Router();
 
   const photoUpload = multer({
@@ -190,7 +210,7 @@ export function createQuotesRouter(deps: QuotesRouterDeps): Router {
   });
 
   // POST /:id/send — snapshot + approval token + dry-run SMS (no Twilio).
-  router.post("/:id/send", authenticate, async (req: Request, res: Response): Promise<void> => {
+  router.post("/:id/send", authenticate, sendLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params as { id: string };
       if (rejectUnlessUuid(res, id, "Quote not found")) {
@@ -224,6 +244,8 @@ export function createQuotesRouter(deps: QuotesRouterDeps): Router {
   router.post(
     "/:id/photos",
     authenticate,
+    rejectBadQuoteId,
+    photoFeatureGate,
     photoUpload.single("photo"),
     async (req: Request, res: Response): Promise<void> => {
       try {
@@ -260,6 +282,8 @@ export function createQuotesRouter(deps: QuotesRouterDeps): Router {
   router.get(
     "/:id/photos/:photoId",
     authenticate,
+    rejectBadPhotoIds,
+    photoFeatureGate,
     async (req: Request, res: Response): Promise<void> => {
       try {
         const contractorId = req.contractor!.contractorId;

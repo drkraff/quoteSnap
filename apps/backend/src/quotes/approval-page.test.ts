@@ -323,4 +323,51 @@ describe("decideApproval", () => {
     assert.match(html, /You declined this quote\./);
     assert.equal(html.includes("You approved this quote"), false);
   });
+
+  it("lets one of two overlapping taps win and shows that same decision to both", async () => {
+    const token = generateApprovalToken();
+    const db = createApprovalDb({
+      tokenHash: hashApprovalToken(token),
+      expires_at: FUTURE,
+      quote_id: QUOTE_ID,
+      payload: payload(),
+      contractor_display_name: "Sam",
+      contractor_trade: "plumbing",
+      status: "sent",
+      approved_at: null,
+      declined_at: null,
+    });
+    let lockedReads = 0;
+    let releaseReads: () => void = () => {};
+    const bothRead = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+    const queryFn: SnapshotQueryFn = async (sql, params) => {
+      const lockedRead = sql.includes("FOR UPDATE");
+      const result = await db.queryFn(sql, params);
+      if (lockedRead) {
+        lockedReads += 1;
+        if (lockedReads === 2) releaseReads();
+        await bothRead;
+      }
+      return result;
+    };
+
+    const [left, right] = await Promise.all([
+      decideApproval(queryFn, token, "approve", NOW),
+      decideApproval(queryFn, token, "decline", NOW),
+    ]);
+
+    assert.equal(lockedReads, 2);
+    const winner = db.row().status;
+    assert.ok(winner === "approved" || winner === "declined");
+    assert.equal(left.kind, winner);
+    assert.equal(right.kind, winner);
+    const stamps = [db.row().approved_at, db.row().declined_at].filter((value) => value != null);
+    assert.equal(stamps.length, 1);
+    assert.equal(stamps[0]?.toISOString(), NOW.toISOString());
+    assert.equal(db.calls.some((sql) => /UPDATE\s+quote_snapshots/i.test(sql)), false);
+    assert.equal(db.calls.filter((sql) => sql === MARK_QUOTE_APPROVED_SQL).length, 1);
+    assert.equal(db.calls.filter((sql) => sql === MARK_QUOTE_DECLINED_SQL).length, 1);
+  });
 });
