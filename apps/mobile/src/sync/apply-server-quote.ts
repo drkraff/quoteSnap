@@ -10,6 +10,7 @@ import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
 import { assignStoredAiFailureStage } from '../quotes/ai-failed-recovery';
 import { mergeStoredPhotosWithServer, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
+import { assignServerRevision } from './server-revision';
 
 export function parseServerDate(iso: string): Date {
   const date = new Date(iso);
@@ -59,6 +60,7 @@ export async function applyServerQuoteInWrite(
       ),
     );
     assignStoredAiFailureStage(record, serverQuote.status, serverQuote.failureStage);
+    assignServerRevision(record, serverQuote.id, serverQuote.updatedAt);
   });
   await draft.update((record) => {
     record.lineItemsJson = lineItemsJson;

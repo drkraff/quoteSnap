@@ -39,6 +39,7 @@ import {
 } from '../../../src/utils/line-items';
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
+import { commitDraftLineEdit } from '../../../src/quotes/commit-draft-lines';
 import { buildRateCardLearnPayload, rateCardQueueEntityId } from '../../../src/rate-card/learn';
 import { isOnline } from '../../../src/sync/network-monitor';
 import {
@@ -483,22 +484,42 @@ export default function DraftScreen(): JSX.Element {
     }
   }
 
-  async function persistLineItems(newItems: LineItem[]): Promise<void> {
+  async function persistLineItems(
+    newItems: LineItem[],
+    options?: { includeTotal?: boolean },
+  ): Promise<void> {
     if (!draft || !quote) return;
+    const includeTotal = options?.includeTotal !== false;
     const newTotal = recalculateTotal(newItems);
-    await database.write(async () => {
-      await draft.update((r) => {
-        r.lineItemsJson = serializeLineItems(newItems);
-      });
-      await quote.update((r) => {
-        r.totalCents = newTotal;
-      });
-    });
-    await enqueue({
-      entityType: 'draft',
-      entityId: draft.id,
-      action: 'update',
-      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
+    const lineItemsJson = serializeLineItems(newItems);
+    const quoteId = quote.id;
+    const draftId = draft.id;
+    const draftRow = draft;
+    const quoteRow = quote;
+    await commitDraftLineEdit({
+      quoteId,
+      writeLocal: async () => {
+        await database.write(async () => {
+          await draftRow.update((r) => {
+            r.lineItemsJson = lineItemsJson;
+          });
+          if (includeTotal) {
+            await quoteRow.update((r) => {
+              r.totalCents = newTotal;
+            });
+          }
+        });
+      },
+      enqueueEdit: async () => {
+        await enqueue({
+          entityType: 'draft',
+          entityId: draftId,
+          action: 'update',
+          payload: includeTotal
+            ? { lineItemsJson, totalCents: newTotal }
+            : { lineItemsJson },
+        });
+      },
     });
   }
 
@@ -507,21 +528,7 @@ export default function DraftScreen(): JSX.Element {
     if (rejectFrozenMoneyWrite()) return;
     await recoverFromAiFailed();
     const newItems = updateQuantity(lineItems, index, delta);
-    const newTotal = recalculateTotal(newItems);
-    await database.write(async () => {
-      await draft.update((r) => {
-        r.lineItemsJson = serializeLineItems(newItems);
-      });
-      await quote.update((r) => {
-        r.totalCents = newTotal;
-      });
-    });
-    await enqueue({
-      entityType: 'draft',
-      entityId: draft.id,
-      action: 'update',
-      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
-    });
+    await persistLineItems(newItems);
   }
 
   async function handlePriceSave(result: PriceEditSave): Promise<void> {
@@ -533,21 +540,7 @@ export default function DraftScreen(): JSX.Element {
       priceSource: result.priceSource,
       materialCostCents: result.materialCostCents,
     });
-    const newTotal = recalculateTotal(newItems);
-    await database.write(async () => {
-      await draft.update((r) => {
-        r.lineItemsJson = serializeLineItems(newItems);
-      });
-      await quote.update((r) => {
-        r.totalCents = newTotal;
-      });
-    });
-    await enqueue({
-      entityType: 'draft',
-      entityId: draft.id,
-      action: 'update',
-      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
-    });
+    await persistLineItems(newItems);
     if (result.unitPriceCents != null && result.unitPriceCents > 0) {
       const learned = buildRateCardLearnPayload(
         {
@@ -578,21 +571,7 @@ export default function DraftScreen(): JSX.Element {
     const deleted = lineItems[index];
     setUndoItem({ item: deleted, index });
     const newItems = removeItem(lineItems, index);
-    const newTotal = recalculateTotal(newItems);
-    await database.write(async () => {
-      await draft.update((r) => {
-        r.lineItemsJson = serializeLineItems(newItems);
-      });
-      await quote.update((r) => {
-        r.totalCents = newTotal;
-      });
-    });
-    await enqueue({
-      entityType: 'draft',
-      entityId: draft.id,
-      action: 'update',
-      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
-    });
+    await persistLineItems(newItems);
     setShowUndo(true);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => {
@@ -610,21 +589,7 @@ export default function DraftScreen(): JSX.Element {
     }
     const restored = [...lineItems];
     restored.splice(undoItem.index, 0, undoItem.item);
-    const newTotal = recalculateTotal(restored);
-    await database.write(async () => {
-      await draft.update((r) => {
-        r.lineItemsJson = serializeLineItems(restored);
-      });
-      await quote.update((r) => {
-        r.totalCents = newTotal;
-      });
-    });
-    await enqueue({
-      entityType: 'draft',
-      entityId: draft.id,
-      action: 'update',
-      payload: { lineItemsJson: serializeLineItems(restored), totalCents: newTotal },
-    });
+    await persistLineItems(restored);
     setShowUndo(false);
     setUndoItem(null);
   }
@@ -641,21 +606,7 @@ export default function DraftScreen(): JSX.Element {
       unitPriceCents: catalogItem.unitPriceCents,
       unit: catalogItems.find((c) => c.id === catalogItem.id)?.unit,
     }, addToRoomId);
-    const newTotal = recalculateTotal(newItems);
-    await database.write(async () => {
-      await draft.update((r) => {
-        r.lineItemsJson = serializeLineItems(newItems);
-      });
-      await quote.update((r) => {
-        r.totalCents = newTotal;
-      });
-    });
-    await enqueue({
-      entityType: 'draft',
-      entityId: draft.id,
-      action: 'update',
-      payload: { lineItemsJson: serializeLineItems(newItems), totalCents: newTotal },
-    });
+    await persistLineItems(newItems);
     setShowCatalogPicker(false);
     setAddToRoomId(null);
   }
@@ -987,17 +938,7 @@ export default function DraftScreen(): JSX.Element {
       return;
     }
     await recoverFromAiFailed();
-    await database.write(async () => {
-      await draft.update((r) => {
-        r.lineItemsJson = serializeLineItems(newItems);
-      });
-    });
-    await enqueue({
-      entityType: 'draft',
-      entityId: draft.id,
-      action: 'update',
-      payload: { lineItemsJson: serializeLineItems(newItems) },
-    });
+    await persistLineItems(newItems, { includeTotal: false });
     setLineNoteIndex(null);
   }
 

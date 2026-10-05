@@ -14,7 +14,12 @@ import {
   dropPendingQuoteDraftUpdatesInWrite,
   ensureNeedsReviewInWrite,
 } from './draft-conflict-queue';
-import { getServerRevision, rememberServerRevision } from './server-revision';
+import {
+  assignServerRevision,
+  getServerRevision,
+  rememberServerRevision,
+  rememberServerRevisionIfAbsent,
+} from './server-revision';
 
 export type DraftForkOutcome = 'conflict' | 'clear' | 'skipped' | 'frozen';
 
@@ -38,6 +43,7 @@ export async function fetchAndResolveDraftFork(args: {
     return 'skipped';
   }
 
+  rememberServerRevisionIfAbsent(serverId, args.quote.serverRevision);
   const lastKnownUpdatedAt = getServerRevision(serverId);
 
   if (isFrozenQuoteStatus(remote.quote.status)) {
@@ -63,7 +69,16 @@ export async function fetchAndResolveDraftFork(args: {
     });
 
   rememberServerRevision(serverId, remote.quote.updatedAt);
-  if (!forked) return 'clear';
+  if (!forked) {
+    if (args.quote.serverRevision !== remote.quote.updatedAt) {
+      await database.write(async () => {
+        await args.quote.update((record) => {
+          assignServerRevision(record, serverId, remote.quote.updatedAt);
+        });
+      });
+    }
+    return 'clear';
+  }
 
   const lineItemsJson = await serverLineItemsJsonForContractor(
     args.quote.contractorId,

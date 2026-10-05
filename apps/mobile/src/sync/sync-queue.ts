@@ -68,6 +68,21 @@ import {
 const queueFlight = createSingleFlight();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+async function stampQuoteServerRevision(
+  quote: Quote | undefined,
+  serverId: string,
+  updatedAt: string | undefined,
+): Promise<void> {
+  if (!quote || typeof updatedAt !== 'string' || updatedAt.trim() === '') return;
+  rememberServerRevision(serverId, updatedAt);
+  if (quote.serverRevision === updatedAt) return;
+  await database.write(async () => {
+    await quote.update((record) => {
+      record.serverRevision = updatedAt;
+    });
+  });
+}
+
 function currentContractorId(): string | null {
   // Lazy require avoids auth-store → API → queue cycles at module load.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -348,9 +363,12 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       await database.write(async () => {
         await localQuote.update((r) => {
           r.serverId = response.id;
+          if (typeof response.updatedAt === 'string' && response.updatedAt.trim() !== '') {
+            r.serverRevision = response.updatedAt;
+          }
         });
       });
-      rememberServerRevision(response.id, response.updatedAt);
+      await stampQuoteServerRevision(localQuote, response.id, response.updatedAt);
     } else if (item.action === 'update') {
       const quoteCollection = database.get<Quote>('quotes');
       const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
@@ -422,7 +440,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           clientId?: string | null;
         }[] | undefined,
       });
-      rememberServerRevision(serverId, updated.updatedAt);
+      await stampQuoteServerRevision(localQuote, serverId, updated.updatedAt);
     }
     return;
   }
@@ -474,7 +492,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         totalCents: payload.totalCents as number | undefined,
         ...(quote.roomsJson != null && quote.roomsJson !== '' ? { rooms } : {}),
       });
-      rememberServerRevision(quote.serverId, updated.updatedAt);
+      await stampQuoteServerRevision(quote, quote.serverId, updated.updatedAt);
     }
     return;
   }

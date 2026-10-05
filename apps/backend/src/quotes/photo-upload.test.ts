@@ -168,6 +168,57 @@ describe("attachQuotePhoto", () => {
       created_at: new Date("2026-09-15T00:00:00.000Z"),
     };
     let attachmentReads = 0;
+    const deleted: string[] = [];
+    const queryFn = mock.fn(async (sql: string) => {
+      if (sql.includes("FROM quotes")) {
+        return { rows: [{ id: QUOTE_ID, status: "draft_local" }] };
+      }
+      if (sql.includes("INSERT INTO quote_attachments")) {
+        const err = new Error("duplicate") as Error & { code: string };
+        err.code = "23505";
+        throw err;
+      }
+      if (sql.includes("FROM quote_attachments")) {
+        attachmentReads += 1;
+        return { rows: attachmentReads === 1 ? [] : [stored] };
+      }
+      return { rows: [] };
+    });
+    const losingId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const outcome = await attachQuotePhoto(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      file: jpegFile,
+      clientId: CLIENT_ID,
+      newAttachmentId: losingId,
+    }, {
+      uploadToR2: async () => {},
+      deleteFromR2: async (key) => {
+        deleted.push(key);
+      },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status === 200) {
+      assert.equal(outcome.json.photo.id, ATTACHMENT_ID);
+      assert.equal(outcome.json.photo.clientId, CLIENT_ID);
+    }
+    assert.deepEqual(deleted, [`photos/${CONTRACTOR_ID}/${losingId}.jpg`]);
+    assert.equal(deleted.includes(stored.r2_key), false);
+  });
+
+  it("still returns the stored photo when deleting the losing R2 object fails", async () => {
+    const stored = {
+      id: ATTACHMENT_ID,
+      quote_id: QUOTE_ID,
+      contractor_id: CONTRACTOR_ID,
+      client_id: CLIENT_ID,
+      line_client_id: null,
+      room_id: null,
+      r2_key: `photos/${CONTRACTOR_ID}/${ATTACHMENT_ID}.jpg`,
+      mime: PHOTO_MIME_JPEG,
+      created_at: new Date("2026-09-15T00:00:00.000Z"),
+    };
+    let attachmentReads = 0;
     const queryFn = mock.fn(async (sql: string) => {
       if (sql.includes("FROM quotes")) {
         return { rows: [{ id: QUOTE_ID, status: "draft_local" }] };
@@ -189,11 +240,61 @@ describe("attachQuotePhoto", () => {
       file: jpegFile,
       clientId: CLIENT_ID,
       newAttachmentId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-    }, { uploadToR2: async () => {} });
+    }, {
+      uploadToR2: async () => {},
+      deleteFromR2: async () => {
+        throw new Error("r2 down");
+      },
+    });
     assert.equal(outcome.status, 200);
     if (outcome.status === 200) {
       assert.equal(outcome.json.photo.id, ATTACHMENT_ID);
-      assert.equal(outcome.json.photo.clientId, CLIENT_ID);
     }
+  });
+
+  it("does not delete the stored object when the race used the same key", async () => {
+    const sameId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const stored = {
+      id: sameId,
+      quote_id: QUOTE_ID,
+      contractor_id: CONTRACTOR_ID,
+      client_id: CLIENT_ID,
+      line_client_id: null,
+      room_id: null,
+      r2_key: `photos/${CONTRACTOR_ID}/${sameId}.jpg`,
+      mime: PHOTO_MIME_JPEG,
+      created_at: new Date("2026-09-15T00:00:00.000Z"),
+    };
+    let attachmentReads = 0;
+    let deleted = 0;
+    const queryFn = mock.fn(async (sql: string) => {
+      if (sql.includes("FROM quotes")) {
+        return { rows: [{ id: QUOTE_ID, status: "draft_local" }] };
+      }
+      if (sql.includes("INSERT INTO quote_attachments")) {
+        const err = new Error("duplicate") as Error & { code: string };
+        err.code = "23505";
+        throw err;
+      }
+      if (sql.includes("FROM quote_attachments")) {
+        attachmentReads += 1;
+        return { rows: attachmentReads === 1 ? [] : [stored] };
+      }
+      return { rows: [] };
+    });
+    const outcome = await attachQuotePhoto(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      file: jpegFile,
+      clientId: CLIENT_ID,
+      newAttachmentId: sameId,
+    }, {
+      uploadToR2: async () => {},
+      deleteFromR2: async () => {
+        deleted += 1;
+      },
+    });
+    assert.equal(outcome.status, 200);
+    assert.equal(deleted, 0);
   });
 });

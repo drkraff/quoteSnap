@@ -1,4 +1,4 @@
-import { uploadToR2 as uploadToR2Default } from "../services/r2.js";
+import { deleteFromR2 as deleteFromR2Default, uploadToR2 as uploadToR2Default } from "../services/r2.js";
 import { isQuoteEditable } from "./quote-write.js";
 import {
   ATTACHMENT_COLUMNS,
@@ -45,9 +45,13 @@ export async function attachQuotePhoto(
     lineClientId?: unknown;
     newAttachmentId: string;
   },
-  deps: { uploadToR2?: typeof uploadToR2Default } = {},
+  deps: {
+    uploadToR2?: typeof uploadToR2Default;
+    deleteFromR2?: (key: string) => Promise<void>;
+  } = {},
 ): Promise<AttachQuotePhotoOutcome> {
   const uploadToR2 = deps.uploadToR2 ?? uploadToR2Default;
+  const deleteFromR2 = deps.deleteFromR2 ?? deleteFromR2Default;
   if (!args.file) {
     return { status: 400, json: { error: PHOTO_FILE_REQUIRED } };
   }
@@ -133,6 +137,16 @@ export async function attachQuotePhoto(
     insertedRow = again.rows[0] as QuoteAttachmentRow | undefined;
     if (!insertedRow) {
       throw new Error("photo client id conflict did not return the existing row");
+    }
+    // The losing upload already put a different object. Drop it. A delete
+    // failure must not turn this idempotent 200 into a 500 (the client would
+    // upload yet another object). The stored row's key is left in place.
+    if (insertedRow.r2_key !== r2Key) {
+      try {
+        await deleteFromR2(r2Key);
+      } catch {
+        // Residual orphan if R2 delete fails. The database row is not duplicated.
+      }
     }
     return {
       status: 200,

@@ -109,7 +109,7 @@ npm workspaces, two apps:
 apps/mobile/     Expo 52, RN 0.76.5, expo-router, WatermelonDB 0.27.1, Zustand
 apps/backend/    Express, raw `pg` via `query()`, pg-boss, OpenAI, R2
 apps/backend/src/db/migrations/   001_foundation … 023_quote_snapshot_delete
-apps/mobile/src/db/               schema v10, models, SQLiteAdapter
+apps/mobile/src/db/               schema v11 (`quotes.server_revision` is the last observed server `updatedAt`, local only), models, SQLiteAdapter
 apps/mobile/src/sync/             enqueue + processQueue (retry/backoff, single-flight, audio parent) + login/restore hydrate (server-as-truth; SYNC-05 draft forks → needs_review; thin SYNC-06 skips money PUTs on frozen quotes)
 .github/workflows/ci.yml
 ```

@@ -100,6 +100,7 @@ type FakeQuote = {
   voiceJobId: string | null;
   roomsJson?: string | null;
   photosJson?: string | null;
+  serverRevision?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -1632,6 +1633,99 @@ describe('processQueue', () => {
     ]);
     expect(quote.customerPhone).toBe('+15550001111');
     expect(queueItems.some((row) => row.status === NEEDS_REVIEW_STATUS)).toBe(true);
+  });
+
+  it('forks from the quote row revision after the in-memory map is cleared', async () => {
+    resetServerRevisionsForTests();
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+      serverRevision: '2026-09-01T12:00:00.000Z',
+    });
+    const draft = makeDraft({
+      id: 'd1',
+      quoteId: 'q1',
+      lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+    });
+    quotes = [quote];
+    drafts = [draft];
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T13:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+      },
+      lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+    });
+    queueItems = [
+      makeQueueItem({
+        entityType: 'draft',
+        entityId: 'd1',
+        action: 'update',
+        payloadJson: JSON.stringify({
+          lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+          totalCents: 3000,
+        }),
+      }),
+    ];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(queueItems.some((row) => row.status === NEEDS_REVIEW_STATUS)).toBe(true);
+    expect(quote.serverRevision).toBe('2026-09-01T13:00:00.000Z');
+  });
+
+  it('still PUTs when the persisted revision matches the server after a restart', async () => {
+    resetServerRevisionsForTests();
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+      serverRevision: '2026-09-01T12:00:00.000Z',
+    });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    mockedFetchQuote.mockResolvedValue({
+      quote: {
+        id: 'srv-q1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T12:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+      },
+      lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+    });
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    queueItems = [
+      makeQueueItem({
+        entityType: 'draft',
+        entityId: 'd1',
+        action: 'update',
+        payloadJson: JSON.stringify({
+          lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 2, unitPriceCents: 1500 }]),
+          totalCents: 3000,
+        }),
+      }),
+    ];
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(quote.serverRevision).toBe('2026-09-01T12:05:00.000Z');
   });
 
   it('does not PUT draft line replacements when the local quote is sent (SYNC-06)', async () => {

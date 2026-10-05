@@ -13,6 +13,11 @@ import {
 } from './hydrate';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
 import { rememberServerRevision, resetServerRevisionsForTests } from './server-revision';
+import {
+  hasPendingLineEdit,
+  markPendingLineEdit,
+  resetPendingLineEditsForTests,
+} from './pending-local-edit';
 
 jest.mock('../db', () => ({
   database: {
@@ -67,6 +72,7 @@ type FakeQuote = {
   roomsJson?: string | null;
   photosJson?: string | null;
   aiFailureStage?: string | null;
+  serverRevision?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -275,6 +281,7 @@ describe('upsertCatalogItems / upsertQuotes', () => {
   beforeEach(() => {
     resetHydrateForTests();
     resetServerRevisionsForTests();
+    resetPendingLineEditsForTests();
     catalogItems = [];
     quotes = [];
     drafts = [];
@@ -1109,6 +1116,237 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(localQuote.customerPhone).toBe('+15550001111');
     expect(pending.status).toBe('pending');
     expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+    expect(localQuote.serverRevision).toBe('2026-09-02T01:00:00.000Z');
+  });
+
+  it('forks from the persisted revision after the in-memory map is cleared', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Pipe', quantity: 2, unitPriceCents: 1500 },
+        { name: 'Elbow', quantity: 1, unitPriceCents: 400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    const pending: FakeQueueItem = {
+      entityType: 'draft',
+      entityId: 'local-draft-1',
+      action: 'update',
+      status: 'pending',
+      async destroyPermanently() {
+        pending.status = 'destroyed';
+      },
+    };
+    queueItems = [pending];
+    resetServerRevisionsForTests();
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      },
+    ]);
+
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+    ]);
+    expect(localQuote.totalCents).toBe(1500);
+    expect(localQuote.serverRevision).toBe('2026-09-02T01:00:00.000Z');
+    expect(pending.status).toBe('destroyed');
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(true);
+  });
+
+  it('keeps local lines when the persisted revision still matches the server', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-02T01:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Pipe', quantity: 2, unitPriceCents: 1500 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [
+      {
+        entityType: 'draft',
+        entityId: 'local-draft-1',
+        action: 'update',
+        status: 'pending',
+      },
+    ];
+    resetServerRevisionsForTests();
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      },
+    ]);
+
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { name: 'Pipe', quantity: 2, unitPriceCents: 1500 },
+    ]);
+    expect(localQuote.totalCents).toBe(3400);
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
+  it('does not replace lines or total while a line edit is not enqueued yet', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Valve', quantity: 1, unitPriceCents: 3400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [];
+    markPendingLineEdit('local-quote-1');
+    resetServerRevisionsForTests();
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      },
+    ]);
+
+    expect(hasPendingLineEdit('local-quote-1')).toBe(true);
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { name: 'Valve', quantity: 1, unitPriceCents: 3400 },
+    ]);
+    expect(localQuote.totalCents).toBe(3400);
+    expect(localQuote.serverRevision).toBe('2026-09-01T00:00:00.000Z');
+    expect(localQuote.customerPhone).toBe('+15550001111');
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
+  it('still applies a frozen server snapshot while a line edit is pending', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Valve', quantity: 1, unitPriceCents: 3400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    markPendingLineEdit('local-quote-1');
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'sent',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: '2026-09-02T01:00:00.000Z',
+        voiceJobId: null,
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      },
+    ]);
+
+    expect(localQuote.status).toBe('sent');
+    expect(localQuote.totalCents).toBe(1500);
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+    ]);
   });
 
   it('applies server line items on a dirty draft fork and parks needs_review (SYNC-05)', async () => {
