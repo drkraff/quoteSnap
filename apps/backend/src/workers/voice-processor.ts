@@ -2,7 +2,7 @@ import { PgBoss } from 'pg-boss';
 import type { Job } from 'pg-boss';
 import OpenAI, { toFile } from 'openai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions/completions.js';
-import pool, { query } from '../db/connection.js';
+import { query, withTransaction } from '../db/connection.js';
 import { getFromR2, deleteFromR2 } from '../services/r2.js';
 import type { VoiceJobData, AILineItem, VoiceExtractResult } from '../types/voice.js';
 import {
@@ -64,17 +64,9 @@ async function commitVoiceQuote(args: {
   clientSentence?: string | null;
   roomsJson?: string | null;
 }): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await replaceVoiceQuoteLines(client, args);
-    await client.query('COMMIT');
-  } catch (txErr) {
-    await client.query('ROLLBACK');
-    throw txErr;
-  } finally {
-    client.release();
-  }
+  await withTransaction(async (tx) => {
+    await replaceVoiceQuoteLines({ query: tx }, args);
+  });
 }
 
 async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {

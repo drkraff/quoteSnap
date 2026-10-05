@@ -16,10 +16,44 @@ export function jwtAccessSecretError(secret: string | undefined): string | null 
   return null;
 }
 
-/** Throws before listen when the access secret is missing, short, or the example. */
+const POSTGRES_URL = /^postgres(?:ql)?:\/\//i;
+
+/**
+ * Missing and non-Postgres URLs fail closed.
+ * The message never includes the value (it may contain a password).
+ */
+export function databaseUrlError(value: string | undefined): string | null {
+  if (value === undefined || value.trim() === "") {
+    return "DATABASE_URL environment variable is required";
+  }
+  const url = value.trim();
+  if (POSTGRES_URL.test(url)) {
+    try {
+      const parsed = new URL(url);
+      const host =
+        parsed.hostname ||
+        parsed.searchParams.get("host") ||
+        parsed.searchParams.get("hostaddr");
+      if (!host) return "DATABASE_URL is invalid";
+      return null;
+    } catch {
+      // `new URL` rejects some libpq forms that still name a host in the query.
+      if (/[?&](?:host|hostaddr)=[^&#\s]+/i.test(url)) return null;
+      return "DATABASE_URL is invalid";
+    }
+  }
+  if (/(?:^|\s)(?:host|hostaddr)\s*=\s*\S+/i.test(url)) return null;
+  return "DATABASE_URL is invalid";
+}
+
+/** Throws before listen when the access secret or database URL is unusable. */
 export function assertBootEnv(env: NodeJS.ProcessEnv = process.env): void {
   const error = jwtAccessSecretError(env["JWT_ACCESS_SECRET"]);
   if (error) {
     throw new Error(error);
+  }
+  const database = databaseUrlError(env["DATABASE_URL"]);
+  if (database) {
+    throw new Error(database);
   }
 }

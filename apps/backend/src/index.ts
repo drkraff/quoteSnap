@@ -1,4 +1,5 @@
 import "dotenv/config";
+import type { Server } from "node:http";
 import express, { Request, Response } from "express";
 import { router as authRouter } from "./routes/auth.js";
 import { router as onboardingRouter } from "./routes/onboarding.js";
@@ -13,6 +14,9 @@ import { errorHandler, requestIdMiddleware } from "./log/http.js";
 import { errorSummary, log } from "./log/logger.js";
 import { applyApiHardening } from "./http/api-hardening.js";
 import { installGracefulShutdown } from "./http/shutdown.js";
+import { runBootOrExit } from "./http/boot.js";
+import { mountHealth } from "./http/health.js";
+import { probeDatabase } from "./http/ready.js";
 import { assertBootEnv } from "./env/boot-env.js";
 import { logOptionalFeatureWarning } from "./env/optional-features.js";
 
@@ -44,12 +48,9 @@ app.use("/voice", voiceRouter);
 // Public customer approval page (snapshot HTML; no app, no session)
 app.use("/q", approvalRouter);
 
-// GET /health — liveness probe
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-  });
+// /health is liveness (no database). /ready checks the pool.
+mountHealth(app, {
+  ready: () => probeDatabase(() => pool.connect()),
 });
 
 // 404 handler
@@ -60,30 +61,52 @@ app.use((_req: Request, res: Response) => {
 app.use(errorHandler);
 
 async function startServer(): Promise<void> {
-  assertBootEnv();
-  logOptionalFeatureWarning(process.env, log);
-  await initBoss();
-  const server = app.listen(PORT, () => {
-    log("info", { msg: "server_listening", port: PORT });
-  });
-  installGracefulShutdown({
-    closeServer: () => new Promise((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    }),
-    stopBoss: () => boss.stop({ graceful: true, timeout: 20000 }),
-    closePool: () => pool.end(),
-    exit: (code) => {
-      process.exit(code);
+  let server: Server | undefined;
+  await runBootOrExit(
+    {
+      assertBootEnv: () => {
+        assertBootEnv();
+      },
+      warnOptional: () => {
+        logOptionalFeatureWarning(process.env, log);
+      },
+      initBoss: () => initBoss(),
+      listen: () => {
+        server = app.listen(PORT, () => {
+          log("info", { msg: "server_listening", port: PORT });
+        });
+      },
+      installShutdown: () => {
+        if (!server) {
+          throw new Error("server failed to listen");
+        }
+        const listening = server;
+        installGracefulShutdown({
+          closeServer: () => new Promise((resolve, reject) => {
+            listening.close((err) => (err ? reject(err) : resolve()));
+          }),
+          stopBoss: () => boss.stop({ graceful: true, timeout: 20000 }),
+          closePool: () => pool.end(),
+          exit: (code) => {
+            process.exit(code);
+          },
+          logError: (err) => {
+            log("error", { msg: "shutdown_failed", error: errorSummary(err) });
+          },
+        });
+      },
     },
-    logError: (err) => {
-      log("error", { msg: "shutdown_failed", error: errorSummary(err) });
+    {
+      exit: (code) => {
+        process.exit(code);
+      },
+      logError: (err) => {
+        log("error", { msg: "server_start_failed", error: errorSummary(err) });
+      },
     },
-  });
+  );
 }
 
-startServer().catch((err) => {
-  log("error", { msg: "server_start_failed", error: errorSummary(err) });
-  process.exit(1);
-});
+void startServer();
 
 export default app;

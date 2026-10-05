@@ -1,9 +1,13 @@
 import "dotenv/config";
 import { Pool, QueryResult } from "pg";
-import { errorSummary, log } from "../log/logger.js";
+import { databaseUrlError } from "../env/boot-env.js";
+import { log } from "../log/logger.js";
+import { attachIdleClientErrorHandler } from "./pool-errors.js";
+import { runTransaction, type TxQueryFn } from "./transaction.js";
 
-if (!process.env["DATABASE_URL"]) {
-  throw new Error("DATABASE_URL environment variable is required");
+const databaseError = databaseUrlError(process.env["DATABASE_URL"]);
+if (databaseError) {
+  throw new Error(databaseError);
 }
 
 const pool = new Pool({
@@ -13,9 +17,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 2_000,
 });
 
-pool.on("error", (err: Error) => {
-  log("error", { msg: "idle_client_error", error: errorSummary(err) });
-});
+attachIdleClientErrorHandler(pool, log);
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -23,26 +25,7 @@ export const query: QueryFn = (text, params) => pool.query(text, params);
 
 /** Run work on a single pooled client inside BEGIN/COMMIT; ROLLBACK on throw. */
 export async function withTransaction<T>(fn: (query: QueryFn) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const txQuery: QueryFn = (text, params) => client.query(text, params);
-    const result = await fn(txQuery);
-    await client.query("COMMIT");
-    return result;
-  } catch (err) {
-    try {
-      await client.query("ROLLBACK");
-    } catch (rollbackErr) {
-      log("error", {
-        msg: "transaction_rollback_failed",
-        error: errorSummary(rollbackErr),
-      });
-    }
-    throw err;
-  } finally {
-    client.release();
-  }
+  return runTransaction(() => pool.connect(), fn as (query: TxQueryFn) => Promise<T>);
 }
 
 export default pool;
