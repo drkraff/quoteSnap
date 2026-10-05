@@ -47,9 +47,52 @@ import {
   shouldParkFrozenMoneyPut,
 } from './frozen-quote';
 import { rememberServerRevision } from './server-revision';
+import { ParentNotReadyError } from './parent-not-ready';
+import { classifyQueueFailure } from './queue-failure';
+import {
+  canCoalesce,
+  coalesceKind,
+  isCoalesceOpenStatus,
+  isSupersededByLaterItem,
+  mergedPayloadJson,
+  type CoalesceItem,
+} from './sync-coalesce';
+import {
+  payloadWithoutSyncOwner,
+  queueItemBlockedForContractor,
+  stampSyncOwner,
+  SYNC_OWNER_KEY,
+  syncOwnerIdFromPayload,
+} from './sync-owner';
 
 const queueFlight = createSingleFlight();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function currentContractorId(): string | null {
+  // Lazy require avoids auth-store → API → queue cycles at module load.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAuthStore } = require('../store/auth-store') as typeof import('../store/auth-store');
+  const id = useAuthStore.getState().contractor?.id ?? '';
+  const trimmed = id.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+async function refreshSessionForQueue(): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAuthStore } = require('../store/auth-store') as typeof import('../store/auth-store');
+  return useAuthStore.getState().refreshSession();
+}
+
+function asCoalesceItem(item: SyncQueueItem): CoalesceItem {
+  return {
+    entityType: item.entityType,
+    entityId: item.entityId,
+    action: item.action,
+    payloadJson: item.payloadJson,
+    status: item.status,
+    createdAt: item.createdAt ?? new Date(0),
+  };
+}
 
 export interface SyncEnqueueParams {
   entityType: 'quote' | 'catalog_item' | 'draft' | 'audio' | 'onboarding' | 'rate_card' | 'photo';
@@ -119,6 +162,8 @@ export async function applyAudioDeadLetterQuoteFailures(): Promise<void> {
 
 export async function enqueue(params: SyncEnqueueParams): Promise<void> {
   const collection = database.get<SyncQueueItem>('sync_queue_items');
+  const payload = stampSyncOwner(params.payload, currentContractorId());
+  const payloadJson = JSON.stringify(payload);
   let reusedDeadLetter: SyncQueueItem | null = null;
   await database.write(async () => {
     if (params.entityType === 'audio' && params.action === 'create') {
@@ -146,11 +191,45 @@ export async function enqueue(params: SyncEnqueueParams): Promise<void> {
         return;
       }
     }
+    const open = (await collection.query().fetch()).filter(
+      (item) => item.status !== 'destroyed' && isCoalesceOpenStatus(item.status) && item.status !== 'in_progress',
+    );
+    const incoming = asCoalesceItem({
+      entityType: params.entityType,
+      entityId: params.entityId,
+      action: params.action,
+      payloadJson,
+      status: 'pending',
+      createdAt: new Date(),
+    } as SyncQueueItem);
+    const kind = coalesceKind(incoming);
+    const matches = kind
+      ? open.filter((item) => canCoalesce(asCoalesceItem(item), incoming))
+      : [];
+    if (matches.length > 0) {
+      const target = matches.reduce((latest, item) =>
+        (item.createdAt?.getTime() ?? 0) >= (latest.createdAt?.getTime() ?? 0) ? item : latest,
+      );
+      const merged = mergedPayloadJson(target.payloadJson, payloadJson, kind as string);
+      await target.update((record) => {
+        record.payloadJson = merged;
+        record.status = 'pending';
+        record.retryCount = 0;
+        record.nextRetryAt = null;
+        record.lastError = null;
+      });
+      for (const extra of matches) {
+        if (extra !== target) {
+          await extra.destroyPermanently();
+        }
+      }
+      return;
+    }
     await collection.create((item) => {
       item.entityType = params.entityType;
       item.entityId = params.entityId;
       item.action = params.action;
-      item.payloadJson = JSON.stringify(params.payload);
+      item.payloadJson = payloadJson;
       item.status = 'pending';
       item.retryCount = 0;
       item.nextRetryAt = null;
@@ -170,7 +249,7 @@ export async function enqueue(params: SyncEnqueueParams): Promise<void> {
 }
 
 async function pushToServer(item: SyncQueueItem): Promise<void> {
-  const payload = JSON.parse(item.payloadJson) as Record<string, unknown>;
+  const payload = payloadWithoutSyncOwner(JSON.parse(item.payloadJson) as Record<string, unknown>);
 
   if (item.entityType === 'onboarding' && item.action === 'profile') {
     await syncQueuedOnboardingProfile({
@@ -197,8 +276,8 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       if (localItems[0]?.serverId) {
         return;
       }
-      const response = await createCatalogItem(
-        catalogCreateSyncPayload(
+      const response = await createCatalogItem({
+        ...catalogCreateSyncPayload(
           {
             name: payload.name as string,
             unit: parseCatalogUnit(payload.unit) ?? (payload.unit as string),
@@ -206,7 +285,8 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           },
           typeof payload.tradeCategory === 'string' ? payload.tradeCategory : null,
         ),
-      );
+        clientKey: item.entityId,
+      });
       // Update local record with server ID
       if (localItems[0]) {
         await database.write(async () => {
@@ -222,7 +302,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         .fetch();
       const serverId = localItems[0]?.serverId;
       if (!serverId) {
-        throw new Error('Cannot sync update: no server ID for catalog item');
+        throw new ParentNotReadyError('Cannot sync update: no server ID for catalog item');
       }
       // CAT-03 undo enqueues `{ isArchived: false }` — must PATCH unarchive, not PUT empty fields (A-05).
       if (payload.isArchived === true) {
@@ -275,7 +355,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       const quoteCollection = database.get<Quote>('quotes');
       const localItems = await quoteCollection.query(Q.where('id', item.entityId)).fetch();
       const serverId = localItems[0]?.serverId;
-      if (!serverId) throw new Error('Cannot sync update: no server ID for quote');
+      if (!serverId) throw new ParentNotReadyError('Cannot sync update: no server ID for quote');
       // Soft-archive is PATCH, not a HIST-01 status PUT (and not a hard delete).
       if (payload.isArchived === true) {
         await archiveQuote(serverId);
@@ -357,7 +437,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     const quotes = await quoteCollection.query(Q.where('id', draft.quoteId)).fetch();
     const quote = quotes[0];
     if (!quote?.serverId) {
-      throw new Error('Cannot sync draft: parent quote has no server ID yet');
+      throw new ParentNotReadyError('Cannot sync draft: parent quote has no server ID yet');
     }
     const lineItemsRaw = payload.lineItemsJson as string | undefined;
     if (lineItemsRaw) {
@@ -408,7 +488,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
 
     const quoteServerId = resolveAudioQuoteServerId(quote);
     try {
-      const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quoteServerId);
+      const { jobId, quoteId: serverQuoteId } = await uploadAudio(filePath, quoteServerId, quote.id);
 
       // Store jobId and serverId on local quote. If Sync issues retried a
       // dead-lettered upload while the row was still ai_failed, resume the
@@ -455,7 +535,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     if (!quote) throw new Error('Cannot sync photo: quote not found');
     const quoteServerId = quote.serverId?.trim();
     if (!quoteServerId) {
-      throw new Error('Cannot sync photo: parent quote has no server ID yet');
+      throw new ParentNotReadyError('Cannot sync photo: parent quote has no server ID yet');
     }
     const current = parsePhotosJson(quote.photosJson);
     const photo = current.find((entry) => entry.id === photoId);
@@ -523,66 +603,156 @@ function scheduleRetryTimer(atMs: number | null): void {
   }, delay);
 }
 
+async function openQueueItems(): Promise<SyncQueueItem[]> {
+  const collection = database.get<SyncQueueItem>('sync_queue_items');
+  const items = await collection.query().fetch();
+  return items.filter((item) => item.status !== 'destroyed');
+}
+
+async function destroyQueueItem(item: SyncQueueItem): Promise<void> {
+  await database.write(async () => {
+    await item.destroyPermanently();
+  });
+}
+
+async function parkDeadLetter(item: SyncQueueItem, lastError: string): Promise<void> {
+  await database.write(async () => {
+    await item.update((record) => {
+      record.status = 'dead_letter';
+      record.lastError = lastError;
+      record.nextRetryAt = null;
+    });
+  });
+  await failQuoteForDeadLetterAudio(item);
+}
+
+async function deferParentNotReady(item: SyncQueueItem, message: string): Promise<void> {
+  await database.write(async () => {
+    await item.update((record) => {
+      record.status = 'pending';
+      record.lastError = message;
+      record.nextRetryAt = null;
+    });
+  });
+}
+
+async function scheduleRetry(item: SyncQueueItem, error: unknown): Promise<void> {
+  const errorMessage = queueFailureMessage(error);
+  const nextCount = item.retryCount + 1;
+  const schedule = applyFailureSchedule(nextCount, Date.now());
+  await database.write(async () => {
+    await item.update((record) => {
+      record.retryCount = nextCount;
+      record.lastError = errorMessage;
+      record.status = schedule.status;
+      record.nextRetryAt = schedule.nextRetryAtMs != null ? new Date(schedule.nextRetryAtMs) : null;
+    });
+  });
+  if (schedule.status === 'dead_letter') {
+    await failQuoteForDeadLetterAudio(item);
+  }
+}
+
+async function releaseForeignQueueItem(item: SyncQueueItem): Promise<void> {
+  if (item.status !== 'in_progress') return;
+  await database.write(async () => {
+    await item.update((record) => {
+      record.status = 'pending';
+    });
+  });
+}
+
+function itemIsSuperseded(item: SyncQueueItem, all: SyncQueueItem[]): boolean {
+  return isSupersededByLaterItem(
+    asCoalesceItem(item),
+    all.filter((other) => other.status !== 'destroyed').map(asCoalesceItem),
+  );
+}
+
+/**
+ * One attempt. Returns 'deferred' when the parent create is still outstanding
+ * so the caller can try again after that create runs in the same pass.
+ */
+async function pushQueueItem(item: SyncQueueItem, all: SyncQueueItem[]): Promise<'done' | 'deferred'> {
+  const owner = syncOwnerIdFromPayload(item.payloadJson);
+  if (queueItemBlockedForContractor(owner, currentContractorId())) {
+    await releaseForeignQueueItem(item);
+    return 'done';
+  }
+  if (itemIsSuperseded(item, all)) {
+    await destroyQueueItem(item);
+    return 'done';
+  }
+
+  try {
+    await database.write(async () => {
+      await item.update((record) => {
+        record.status = 'in_progress';
+      });
+    });
+    await pushToServer(item);
+    await destroyQueueItem(item);
+    return 'done';
+  } catch (error) {
+    let current = error;
+    if (classifyQueueFailure(current) === 'unauthorized') {
+      try {
+        const refreshed = await refreshSessionForQueue();
+        if (refreshed) {
+          await pushToServer(item);
+          await destroyQueueItem(item);
+          return 'done';
+        }
+      } catch (retryError) {
+        current = retryError;
+      }
+    }
+
+    if (itemIsSuperseded(item, all)) {
+      await destroyQueueItem(item);
+      return 'done';
+    }
+
+    const failure = classifyQueueFailure(current);
+    if (failure === 'defer') {
+      await deferParentNotReady(item, queueFailureMessage(current));
+      return 'deferred';
+    }
+    if (failure === 'permanent' || isFrozenQuoteWriteError(current)) {
+      const message = isFrozenQuoteWriteError(current)
+        ? QUOTE_MONEY_FROZEN_ERROR
+        : queueFailureMessage(current);
+      await parkDeadLetter(item, message);
+      return 'done';
+    }
+    await scheduleRetry(item, current);
+    return 'done';
+  }
+}
+
 async function processQueueOnce(): Promise<void> {
   if (!isOnline()) return;
 
   const collection = database.get<SyncQueueItem>('sync_queue_items');
-  const candidates = await collection
-    .query(
-      Q.or(
-        Q.where('status', 'pending'),
-        Q.where('status', 'failed'),
-        Q.where('status', 'in_progress'),
-      ),
-      Q.sortBy('created_at', 'asc'),
-    )
-    .fetch();
-
   const now = Date.now();
-  const due = candidates.filter((item) =>
-    isQueueItemDue({ status: item.status, nextRetryAtMs: nextRetryAtMs(item) }, now),
-  );
+  const all = await openQueueItems();
+  const due = all
+    .filter((item) =>
+      isQueueItemDue({ status: item.status, nextRetryAtMs: nextRetryAtMs(item) }, now),
+    )
+    .sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
 
+  const deferred: SyncQueueItem[] = [];
   for (const item of due) {
-    try {
-      await database.write(async () => {
-        await item.update((record) => {
-          record.status = 'in_progress';
-        });
-      });
+    if (item.status === 'destroyed') continue;
+    const outcome = await pushQueueItem(item, all);
+    if (outcome === 'deferred') deferred.push(item);
+  }
 
-      await pushToServer(item);
-
-      // On success, destroy the queue item
-      await database.write(async () => {
-        await item.destroyPermanently();
-      });
-    } catch (error) {
-      if (isFrozenQuoteWriteError(error)) {
-        await database.write(async () => {
-          await item.update((record) => {
-            record.status = 'dead_letter';
-            record.lastError = QUOTE_MONEY_FROZEN_ERROR;
-            record.nextRetryAt = null;
-          });
-        });
-        continue;
-      }
-      const errorMessage = queueFailureMessage(error);
-      const nextCount = item.retryCount + 1;
-      const schedule = applyFailureSchedule(nextCount, Date.now());
-      await database.write(async () => {
-        await item.update((record) => {
-          record.retryCount = nextCount;
-          record.lastError = errorMessage;
-          record.status = schedule.status;
-          record.nextRetryAt = schedule.nextRetryAtMs != null ? new Date(schedule.nextRetryAtMs) : null;
-        });
-      });
-      if (schedule.status === 'dead_letter') {
-        await failQuoteForDeadLetterAudio(item);
-      }
-    }
+  // A create earlier in this pass may have stamped serverId after a child waited.
+  for (const item of deferred) {
+    if (item.status === 'destroyed' || item.status === 'dead_letter') continue;
+    await pushQueueItem(item, all);
   }
 
   const remaining = await collection
@@ -599,6 +769,35 @@ async function processQueueOnce(): Promise<void> {
       Date.now(),
     ),
   );
+}
+
+/**
+ * Logout stamps unowned rows with the contractor who is leaving so the next
+ * sign-in cannot upload them. Rows that already have an owner stay put.
+ */
+export async function retainQueuedWorkForContractor(contractorId: string): Promise<void> {
+  const id = contractorId.trim();
+  if (id === '') return;
+  const items = await openQueueItems();
+  const unowned = items.filter((item) => syncOwnerIdFromPayload(item.payloadJson) == null);
+  if (unowned.length === 0) return;
+  await database.write(async () => {
+    for (const item of unowned) {
+      let payload: Record<string, unknown> = {};
+      try {
+        const parsed: unknown = JSON.parse(item.payloadJson);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          payload = parsed as Record<string, unknown>;
+        }
+      } catch {
+        payload = {};
+      }
+      payload[SYNC_OWNER_KEY] = id;
+      await item.update((record) => {
+        record.payloadJson = JSON.stringify(payload);
+      });
+    }
+  });
 }
 
 export async function processQueue(): Promise<void> {

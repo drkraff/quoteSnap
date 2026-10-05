@@ -57,3 +57,79 @@ export async function insertCatalogItem(
   );
   return result.rows[0];
 }
+
+export const CATALOG_CLIENT_KEY_MAX_LENGTH = 64;
+
+export const INSERT_CATALOG_ITEM_CLIENT_KEY_SQL = `INSERT INTO catalog_items (contractor_id, name, unit, unit_price_cents, trade_category, client_key)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (contractor_id, client_key) WHERE client_key IS NOT NULL
+       DO NOTHING
+       RETURNING id, name, unit, unit_price_cents, trade_category, is_archived, created_at, updated_at`;
+
+export const SELECT_CATALOG_BY_CLIENT_KEY_SQL = `SELECT id, name, unit, unit_price_cents, trade_category, is_archived, created_at, updated_at
+       FROM catalog_items
+       WHERE contractor_id = $1 AND client_key = $2`;
+
+const CATALOG_CLIENT_KEY_ERROR = `clientKey must be a string of at most ${CATALOG_CLIENT_KEY_MAX_LENGTH} characters`;
+
+export function parseCatalogClientKey(
+  value: unknown,
+): { ok: true; clientKey: string | null } | { ok: false; error: string } {
+  if (value === undefined || value === null) {
+    return { ok: true, clientKey: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, error: CATALOG_CLIENT_KEY_ERROR };
+  }
+  const clientKey = value.trim();
+  if (clientKey.length === 0) {
+    return { ok: true, clientKey: null };
+  }
+  if (clientKey.length > CATALOG_CLIENT_KEY_MAX_LENGTH) {
+    return { ok: false, error: CATALOG_CLIENT_KEY_ERROR };
+  }
+  return { ok: true, clientKey };
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object"
+    && err !== null
+    && "code" in err
+    && (err as { code: unknown }).code === "23505"
+  );
+}
+
+/**
+ * Insert a catalog SKU, or return the row already stored for this contractor
+ * and client key. A retry does not change the original cents.
+ */
+export async function insertCatalogItemIdempotent(
+  query: CatalogCreateQueryFn,
+  contractorId: string,
+  fields: CatalogCreateFields & { clientKey: string },
+): Promise<{ created: boolean; row: unknown }> {
+  const unit = parseCatalogUnit(fields.unit);
+  if (!unit) {
+    throw new Error("insertCatalogItem requires a canonical catalog unit");
+  }
+  const base = catalogCreateInsertParams(contractorId, { ...fields, unit });
+  let inserted: unknown;
+  try {
+    const result = await query(INSERT_CATALOG_ITEM_CLIENT_KEY_SQL, [...base, fields.clientKey]);
+    inserted = result.rows[0];
+  } catch (err) {
+    if (!isUniqueViolation(err)) {
+      throw err;
+    }
+  }
+  if (inserted) {
+    return { created: true, row: inserted };
+  }
+  const existing = await query(SELECT_CATALOG_BY_CLIENT_KEY_SQL, [contractorId, fields.clientKey]);
+  const row = existing.rows[0];
+  if (!row) {
+    throw new Error("catalog client_key conflict did not return the existing row");
+  }
+  return { created: false, row };
+}

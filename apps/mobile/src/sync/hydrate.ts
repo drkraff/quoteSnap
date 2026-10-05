@@ -23,7 +23,7 @@ import {
 } from './draft-conflict-queue';
 import { isFrozenQuoteStatus } from './frozen-quote';
 import { toDraftLineItems } from './draft-line-items';
-import { rememberServerRevision } from './server-revision';
+import { getServerRevision, rememberServerRevision } from './server-revision';
 import { createSingleFlight } from './single-flight';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
@@ -265,7 +265,7 @@ export async function upsertQuotes(
     const pulledServerIds = new Set(quotes.map((quote) => quote.id));
 
     for (const quote of quotes) {
-      rememberServerRevision(quote.id, quote.updatedAt);
+      const lastKnownUpdatedAt = getServerRevision(quote.id);
 
       let local = quoteByServerId.get(quote.id);
       if (!local) {
@@ -305,7 +305,10 @@ export async function upsertQuotes(
           serverStatus: quote.status,
           localLines: comparableLineItems(parseLineItems(draft.lineItemsJson)),
           serverLines: comparableLineItems(serverLineItems),
+          lastKnownUpdatedAt,
+          serverUpdatedAt: quote.updatedAt,
         });
+      rememberServerRevision(quote.id, quote.updatedAt);
 
       if (forked && draft) {
         // SYNC-05: server-as-truth, then park Review-before-sending (do not leave the PUT in the queue).
@@ -316,6 +319,7 @@ export async function upsertQuotes(
       }
 
       const frozen = isFrozenQuoteStatus(quote.status);
+      const draftDirty = draft != null && blockedDraftIds.has(draft.id);
 
       if (!blockedQuoteIds.has(localQuote.id) || frozen) {
         await localQuote.update((record) => {
@@ -323,7 +327,11 @@ export async function upsertQuotes(
           // assign them from the server — login must not clear a snooze.
           record.status = quote.status;
           record.customerPhone = quote.customerPhone;
-          record.totalCents = quote.totalCents;
+          // Line-item edits queue a draft row, not a quote row. The total
+          // lives on the quote and must survive until that draft syncs.
+          if (!draftDirty || frozen) {
+            record.totalCents = quote.totalCents;
+          }
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
           record.privateNote = normalizePrivateNote(quote.privateNote);
@@ -426,10 +434,12 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * Catalog and unblocked quotes are server-as-truth. GET /catalog is actives
  * only: server-backed SKUs missing from that list are soft-archived locally
  * so an archived-only catalog does not show phantom actives. A queued catalog
- * Unarchive (including dead_letter) is not overwritten. A dirty pre-send draft whose
- * line items disagree with the server is applied from the server and parked as
- * `needs_review` (SYNC-05) instead of a silent queue overwrite. Frozen post-send
- * quotes (SYNC-06) always take the server snapshot, even if a draft PUT is queued.
+ * Unarchive (including dead_letter) is not overwritten. A dirty pre-send draft
+ * is a fork only when the remembered server revision moved and the lines
+ * disagree; then the server snapshot is applied and the draft is parked as
+ * `needs_review` (SYNC-05). The same revision keeps the unpushed local lines
+ * and total. Frozen post-send quotes (SYNC-06) always take the server snapshot,
+ * even if a draft PUT is queued.
  * Hydrate pulls
  * active GET /quotes and GET /quotes?archived=true so Archived can restore after
  * login. Server-backed quotes missing from both lists are soft-archived locally.

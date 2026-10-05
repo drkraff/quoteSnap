@@ -13,7 +13,11 @@ export interface VoiceStatusResponse {
   failureStage?: 'asr' | 'mapping' | 'timeout';
 }
 
-export async function uploadAudio(filePath: string, quoteServerId?: string): Promise<UploadAudioResponse> {
+export async function uploadAudio(
+  filePath: string,
+  quoteServerId?: string,
+  clientKey?: string,
+): Promise<UploadAudioResponse> {
   const formData = new FormData();
   formData.append('audio', {
     uri: filePath,
@@ -23,6 +27,10 @@ export async function uploadAudio(filePath: string, quoteServerId?: string): Pro
 
   if (quoteServerId) {
     formData.append('quoteServerId', quoteServerId);
+  }
+  const key = clientKey?.trim() ?? '';
+  if (key !== '') {
+    formData.append('clientKey', key);
   }
 
   // FormData goes through apiClient so expired access tokens refresh the same

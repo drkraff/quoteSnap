@@ -14,6 +14,8 @@ export interface CreateCatalogItemBody {
   unit: string;
   unitPriceCents: number;
   tradeCategory?: string;
+  /** Mobile local row id. A repeat POST returns the first row and its cents. */
+  clientKey?: string;
 }
 
 export interface UpdateCatalogItemBody {

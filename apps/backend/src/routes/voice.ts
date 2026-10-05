@@ -7,7 +7,7 @@ import { uploadToR2, deleteFromR2 } from '../services/r2.js';
 import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
-import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
+import { parseQuoteServerId, parseVoiceClientKey, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
 import { voiceAudioMimeError, voiceAudioR2Key } from '../voice/audio-upload.js';
 import { failedVoiceStatusPayload, voiceJobStateIsFailed } from '../voice/ai-failure.js';
 import { voiceFeatureGate } from '../env/optional-features.js';
@@ -57,10 +57,19 @@ router.post(
         return;
       }
 
+      const parsedKey = parseVoiceClientKey(
+        (req.body as { clientKey?: unknown } | undefined)?.clientKey,
+      );
+      if (!parsedKey.ok) {
+        res.status(400).json({ error: parsedKey.error });
+        return;
+      }
+
       const resolved = await resolveVoiceUploadQuote(
         query,
         contractorId,
         parsedParent.quoteServerId,
+        parsedKey.clientKey,
       );
       if (!resolved.ok) {
         res.status(resolved.status).json({ error: resolved.error });
@@ -68,6 +77,10 @@ router.post(
       }
       quoteId = resolved.quoteId;
       const created = resolved.created;
+      if (resolved.replayJobId) {
+        res.status(202).json({ jobId: resolved.replayJobId, quoteId });
+        return;
+      }
 
       const r2Key = voiceAudioR2Key(contractorId, uuidv4());
 

@@ -29,6 +29,8 @@ export async function createCatalogItem(body: {
   unit: string;
   unitPriceCents: number;
   tradeCategory?: string;
+  /** Local catalog row id. A lost POST returns the same server row. */
+  clientKey?: string;
 }): Promise<CatalogItemResponse> {
   const data = await apiClient.post<CatalogCreateResponse>('/catalog', body);
   return data.item;

@@ -4,6 +4,7 @@ import {
   INSERT_CATALOG_ITEM_SQL,
   catalogCreateInsertParams,
   insertCatalogItem,
+  insertCatalogItemIdempotent,
   normalizeTradeCategory,
 } from "./create.js";
 
@@ -94,5 +95,51 @@ describe("insertCatalogItem", () => {
       created_at: new Date("2026-09-10T00:00:00.000Z"),
       updated_at: new Date("2026-09-10T00:00:00.000Z"),
     });
+  });
+});
+
+describe("insertCatalogItemIdempotent", () => {
+  const stored = {
+    id: "item-1",
+    name: "Custom Valve",
+    unit: "each",
+    unit_price_cents: 12500,
+    trade_category: "plumbing",
+    is_archived: false,
+    created_at: new Date("2026-09-10T00:00:00.000Z"),
+    updated_at: new Date("2026-09-10T00:00:00.000Z"),
+  };
+
+  it("returns the first row and its cents when the client key is repeated", async () => {
+    const calls: string[] = [];
+    const queryFn = async (sql: string) => {
+      calls.push(sql);
+      if (sql.includes("INSERT")) {
+        return { rows: calls.filter((entry) => entry.includes("INSERT")).length === 1 ? [stored] : [] };
+      }
+      return { rows: [stored] };
+    };
+
+    const first = await insertCatalogItemIdempotent(queryFn, CONTRACTOR_ID, {
+      name: "Custom Valve",
+      unit: "each",
+      unitPriceCents: 12500,
+      tradeCategory: "plumbing",
+      clientKey: "local-cat-1",
+    });
+    const second = await insertCatalogItemIdempotent(queryFn, CONTRACTOR_ID, {
+      name: "Custom Valve",
+      unit: "each",
+      unitPriceCents: 1,
+      tradeCategory: "plumbing",
+      clientKey: "local-cat-1",
+    });
+
+    assert.equal(first.created, true);
+    assert.equal(second.created, false);
+    assert.equal((second.row as { id: string }).id, "item-1");
+    assert.equal((second.row as { unit_price_cents: number }).unit_price_cents, 12500);
+    assert.match(calls[0] ?? "", /ON CONFLICT \(contractor_id, client_key\)/);
+    assert.match(calls[2] ?? "", /client_key = \$2/);
   });
 });

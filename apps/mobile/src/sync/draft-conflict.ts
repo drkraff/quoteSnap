@@ -82,16 +82,22 @@ export function isDraftContentFork(args: {
   return lineItemsConflict(args.localLines, args.serverLines);
 }
 
-/** Hydrate: dirty local draft + different server lines on a still-editable quote. */
+/**
+ * Hydrate: a dirty pre-send draft is a fork only when the server revision moved.
+ * Unpushed local edits against the same server row stay on the device.
+ */
 export function shouldApplyHydrateDraftConflict(args: {
   dirty: boolean;
   serverStatus: string;
   localLines: ComparableLine[];
   serverLines: ComparableLine[];
+  lastKnownUpdatedAt: string | null;
+  serverUpdatedAt: string;
 }): boolean {
   if (!args.dirty) return false;
   if (!isPreSendDraftStatus(args.serverStatus)) return false;
-  return lineItemsConflict(args.localLines, args.serverLines);
+  if (!lineItemsConflict(args.localLines, args.serverLines)) return false;
+  return isServerRevisionFork(args.lastKnownUpdatedAt, args.serverUpdatedAt);
 }
 
 export function sendBlockedByReview(needsReview: boolean): boolean {
