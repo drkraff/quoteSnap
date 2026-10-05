@@ -24,12 +24,21 @@ import { replaceVoiceQuoteLines } from '../voice/commit-voice-result.js';
 import { joinAssumptionsToClientSentence } from '../voice/assumptions.js';
 import { attachVoiceRooms } from '../quotes/rooms.js';
 import { randomUUID } from 'node:crypto';
+import { errorSummary, log } from '../log/logger.js';
+import {
+  MAPPING_MODEL,
+  WHISPER_MODEL,
+  buildVoiceCostLog,
+  readAudioDurationSeconds,
+  readMappingUsage,
+  readTranscriptionUsage,
+} from '../voice/voice-cost.js';
 
 export const boss = new PgBoss(process.env['DATABASE_URL']!);
 
 export async function initBoss(): Promise<void> {
   boss.on('error', (err: Error) => {
-    console.error('pg-boss error:', err);
+    log('error', { msg: 'pg_boss_error', error: errorSummary(err) });
   });
 
   await boss.start();
@@ -75,6 +84,8 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
   let builtTotalCents = 0;
   let clientSentence: string | null = null;
   let builtRoomsJson: string | null = null;
+  let transcriptionResponse: unknown = null;
+  let mappingResponse: unknown = null;
 
   try {
     // a) Fetch audio from R2
@@ -90,15 +101,19 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
     const whisperLanguage = resolveWhisperLanguage(process.env['WHISPER_LANGUAGE']);
     const transcription = await openai.audio.transcriptions.create({
-      model: 'whisper-1',
+      model: WHISPER_MODEL,
       file: audioFile,
       ...(whisperLanguage ? { language: whisperLanguage } : {}),
     });
+    transcriptionResponse = transcription;
     const transcript = transcription.text;
     // PII: do not log transcript text (CONTEXT invariant 11). Length only.
-    console.log(
-      `[voice] job ${job.id} quote ${quoteId} transcript chars=${transcript.length}`
-    );
+    log('info', {
+      msg: 'voice_transcript',
+      quoteId,
+      jobId: job.id,
+      transcriptChars: transcript.length,
+    });
 
     stage = 'mapping';
 
@@ -135,7 +150,7 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
 
     // e) GPT-4o function calling — extract lines; never ask the model for a guessed price
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: MAPPING_MODEL,
       messages: [
         {
           role: 'system',
@@ -234,6 +249,7 @@ Rules:
       ],
       tool_choice: { type: 'function', function: { name: 'create_quote_items' } },
     });
+    mappingResponse = completion;
 
     // f) Parse response — narrow type to function tool call
     const rawToolCall = completion.choices[0]?.message.tool_calls?.[0];
@@ -304,10 +320,20 @@ Rules:
     try {
       await deleteFromR2(r2Key);
     } catch (deleteErr) {
-      console.error(`Failed to delete R2 audio ${r2Key} after successful processing:`, deleteErr);
+      log('error', {
+        msg: 'voice_audio_delete_failed',
+        quoteId,
+        jobId: job.id,
+        error: errorSummary(deleteErr),
+      });
     }
   } catch (err) {
-    console.error(`voice-process job ${job.id} failed:`, err);
+    log('error', {
+      msg: 'voice_process_failed',
+      quoteId,
+      jobId: job.id,
+      error: errorSummary(err),
+    });
 
     // AI failure is not an SMS send failure (failed_send).
     try {
@@ -324,16 +350,34 @@ Rules:
             roomsJson: builtRoomsJson,
           });
         } catch (partialErr) {
-          console.error('Failed to persist partial mapping draft:', partialErr);
+          log('error', {
+            msg: 'voice_partial_draft_failed',
+            quoteId,
+            jobId: job.id,
+            error: errorSummary(partialErr),
+          });
           await markQuoteAiFailed(query, quoteId, 'mapping');
         }
       } else {
         await markQuoteAiFailed(query, quoteId, stage);
       }
     } catch (updateErr) {
-      console.error('Failed to update quote status to ai_failed:', updateErr);
+      log('error', {
+        msg: 'voice_ai_failed_status_update_failed',
+        quoteId,
+        jobId: job.id,
+        error: errorSummary(updateErr),
+      });
     }
 
     throw err;
+  } finally {
+    log('info', buildVoiceCostLog({
+      quoteId,
+      jobId: job.id,
+      audioDurationSeconds: readAudioDurationSeconds(transcriptionResponse),
+      transcriptionUsage: readTranscriptionUsage(transcriptionResponse),
+      mappingUsage: readMappingUsage(mappingResponse),
+    }));
   }
 }

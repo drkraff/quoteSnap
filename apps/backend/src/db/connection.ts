@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { Pool, QueryResult } from "pg";
+import { errorSummary, log } from "../log/logger.js";
 
 if (!process.env["DATABASE_URL"]) {
   throw new Error("DATABASE_URL environment variable is required");
@@ -13,7 +14,7 @@ const pool = new Pool({
 });
 
 pool.on("error", (err: Error) => {
-  console.error("Unexpected error on idle client", err);
+  log("error", { msg: "idle_client_error", error: errorSummary(err) });
 });
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<QueryResult>;
@@ -33,7 +34,10 @@ export async function withTransaction<T>(fn: (query: QueryFn) => Promise<T>): Pr
     try {
       await client.query("ROLLBACK");
     } catch (rollbackErr) {
-      console.error("Transaction rollback failed:", rollbackErr);
+      log("error", {
+        msg: "transaction_rollback_failed",
+        error: errorSummary(rollbackErr),
+      });
     }
     throw err;
   } finally {

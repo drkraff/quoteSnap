@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { authenticateToken } from "../middleware/auth.js";
+import { logRequestFailure } from "../log/logger.js";
 import { query, withTransaction } from "../db/connection.js";
 import { applyQuotePut, parseQuoteCreateBody, parseQuotePutBody } from "../quotes/quote-write.js";
 import { sendQuoteForApproval } from "../quotes/send-quote.js";
@@ -80,7 +81,7 @@ router.get("/", authenticateToken, async (req: Request, res: Response): Promise<
     );
     res.json({ quotes });
   } catch (err) {
-    console.error("GET /quotes error:", err);
+    logRequestFailure(req, err, "GET /quotes error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -112,7 +113,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
     const quote = quoteRowToResponse(result.rows[0] as QuoteRow);
     res.status(201).json({ quote });
   } catch (err) {
-    console.error("POST /quotes error:", err);
+    logRequestFailure(req, err, "POST /quotes error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -152,7 +153,7 @@ router.get("/:id", authenticateToken, async (req: Request, res: Response): Promi
 
     res.json({ quote: { ...quote, photos }, lineItems });
   } catch (err) {
-    console.error("GET /quotes/:id error:", err);
+    logRequestFailure(req, err, "GET /quotes/:id error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -172,7 +173,7 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
     );
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("PUT /quotes/:id error:", err);
+    logRequestFailure(req, err, "PUT /quotes/:id error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -200,7 +201,7 @@ router.post("/:id/send", authenticateToken, async (req: Request, res: Response):
     );
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("POST /quotes/:id/send error:", err);
+    logRequestFailure(req, err, "POST /quotes/:id/send error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -232,7 +233,7 @@ router.post(
       });
       res.status(outcome.status).json(outcome.json);
     } catch (err) {
-      console.error("POST /quotes/:id/photos error:", err);
+      logRequestFailure(req, err, "POST /quotes/:id/photos error");
       res.status(500).json({ error: "Internal server error" });
     }
   },
@@ -261,7 +262,7 @@ router.get(
       res.setHeader("Cache-Control", "private, max-age=3600");
       res.send(bytes);
     } catch (err) {
-      console.error("GET /quotes/:id/photos/:photoId error:", err);
+      logRequestFailure(req, err, "GET /quotes/:id/photos/:photoId error");
       res.status(500).json({ error: "Internal server error" });
     }
   },
@@ -279,7 +280,7 @@ router.patch("/:id/archive", authenticateToken, async (req: Request, res: Respon
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("PATCH /quotes/:id/archive error:", err);
+    logRequestFailure(req, err, "PATCH /quotes/:id/archive error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

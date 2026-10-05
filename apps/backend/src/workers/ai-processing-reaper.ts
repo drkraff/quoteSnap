@@ -1,5 +1,6 @@
 import type { PgBoss } from 'pg-boss';
 import type { Job } from 'pg-boss';
+import { log } from '../log/logger.js';
 
 /** Quotes stuck in ai_processing longer than this become ai_failed. */
 export const DEFAULT_AI_PROCESSING_TIMEOUT_MS = 15 * 60 * 1000;
@@ -66,9 +67,10 @@ export async function startAiProcessingReaper(
     );
     const reapedIds = await reapStaleAiProcessingQuotes(runQuery, timeoutMs);
     if (reapedIds.length > 0) {
-      console.info(
-        `[ai-processing-reaper] marked ${reapedIds.length} stale quote(s) as ai_failed`
-      );
+      log('info', {
+        msg: 'ai_processing_reaped',
+        count: reapedIds.length,
+      });
     }
   });
 }

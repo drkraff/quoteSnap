@@ -95,7 +95,8 @@ describe("resolveSmsSender", () => {
     assert.deepEqual(result, { mode: "dry-run" });
     assert.equal(lines.length, 1);
     assert.match(lines[0]!, /\[sms:dry-run\]/);
-    assert.match(lines[0]!, /url=https:\/\/quotes\.example\/q\/abc/);
+    assert.match(lines[0]!, /url=https:\/\/quotes\.example\/q\/:redacted/);
+    assert.equal(lines[0]!.includes("/q/abc"), false);
     assert.equal(lines[0]!.includes("+15555550100"), false);
     assert.equal(lines[0]!.includes("5555550100"), false);
     assert.match(lines[0]!, /to=\*\*\*0100/);

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { query, withTransaction } from "../db/connection.js";
+import { logRequestFailure } from "../log/logger.js";
 import { authLimiter } from "../auth/auth-limiter.js";
 import { contractorPublicFromRow, type ContractorRow } from "../auth/contractor-public.js";
 import {
@@ -100,7 +101,7 @@ router.post("/register", authLimiter, async (req: Request, res: Response): Promi
       res.status(409).json({ error: "Account already exists" });
       return;
     }
-    console.error("Register error:", err);
+    logRequestFailure(req, err, "Register error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -173,7 +174,7 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
       ...tokens,
     });
   } catch (err) {
-    console.error("Login error:", err);
+    logRequestFailure(req, err, "Login error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -199,7 +200,7 @@ router.post("/refresh", authLimiter, async (req: Request, res: Response): Promis
 
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("Refresh error:", err);
+    logRequestFailure(req, err, "Refresh error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -222,7 +223,7 @@ router.post("/logout", async (req: Request, res: Response): Promise<void> => {
     // Always return 200 — no information leak about token validity
     res.status(200).json({ message: "Logged out" });
   } catch (err) {
-    console.error("Logout error:", err);
+    logRequestFailure(req, err, "Logout error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

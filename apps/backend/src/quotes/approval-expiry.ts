@@ -1,4 +1,5 @@
 import type { Job, PgBoss } from "pg-boss";
+import { log } from "../log/logger.js";
 
 /** SMS-05: mark still-sent quotes expired after the approval token TTL. */
 export const QUOTE_APPROVAL_EXPIRY_QUEUE = "quote-approval-expiry";
@@ -50,9 +51,10 @@ export async function startQuoteApprovalExpiry(
   await boss.work(QUOTE_APPROVAL_EXPIRY_QUEUE, async (_jobs: Job[]) => {
     const expiredIds = await expireSentApprovalQuotes(runQuery, new Date());
     if (expiredIds.length > 0) {
-      console.info(
-        `[quote-approval-expiry] marked ${expiredIds.length} quote(s) expired`,
-      );
+      log("info", {
+        msg: "quote_approval_expired",
+        count: expiredIds.length,
+      });
     }
   });
 }

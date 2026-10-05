@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler, type Response } from "expres
 import { approvalHttpResult } from "../quotes/approval-page.js";
 import type { SnapshotQueryFn } from "../quotes/quote-snapshot.js";
 import { approvalLimiter, approvalSecurityHeaders } from "../quotes/approval-security.js";
+import { logRequestFailure } from "../log/logger.js";
 
 /**
  * Public hosted approval page. Mount at /q.
@@ -27,7 +28,7 @@ export function createApprovalRouter(deps: {
       });
       res.status(result.status).type("html").send(result.html);
     } catch (err) {
-      console.error("GET /q/:token error:", err);
+      logRequestFailure(req, err, "GET /q/:token error");
       res.status(500).type("html").send("Something went wrong.");
     }
   });
@@ -55,7 +56,7 @@ export function createApprovalRouter(deps: {
       });
       res.status(result.status).type("html").send(result.html);
     } catch (err) {
-      console.error(`POST /q/:token/${action} error:`, err);
+      logRequestFailure(req, err, `POST /q/:token/${action} error`);
       res.status(500).type("html").send("Something went wrong.");
     }
   }

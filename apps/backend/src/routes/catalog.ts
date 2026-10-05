@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
+import { logRequestFailure } from "../log/logger.js";
 import { query } from "../db/connection.js";
 import { applyCatalogArchivePatch } from "../catalog/archive.js";
 import { LIST_ACTIVE_CATALOG_SQL } from "../catalog/list.js";
@@ -52,7 +53,7 @@ router.get("/", authenticateToken, async (req: Request, res: Response): Promise<
     const items = (result.rows as CatalogRow[]).map(rowToResponse);
     res.json({ items });
   } catch (err) {
-    console.error("GET /catalog error:", err);
+    logRequestFailure(req, err, "GET /catalog error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -99,7 +100,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
     const item = rowToResponse(result.rows[0] as CatalogRow);
     res.status(201).json({ item });
   } catch (err) {
-    console.error("POST /catalog error:", err);
+    logRequestFailure(req, err, "POST /catalog error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -170,7 +171,7 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response): Promi
     const item = rowToResponse(result.rows[0] as CatalogRow);
     res.json({ item });
   } catch (err) {
-    console.error("PUT /catalog/:id error:", err);
+    logRequestFailure(req, err, "PUT /catalog/:id error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -187,7 +188,7 @@ router.patch("/:id/archive", authenticateToken, async (req: Request, res: Respon
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("PATCH /catalog/:id/archive error:", err);
+    logRequestFailure(req, err, "PATCH /catalog/:id/archive error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

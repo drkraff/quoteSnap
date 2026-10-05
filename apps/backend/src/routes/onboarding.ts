@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { withTransaction } from "../db/connection.js";
+import { logRequestFailure } from "../log/logger.js";
 import { applyOnboardingProfile, parseOnboardingProfileBody } from "../onboarding/profile.js";
 import { applyOnboardingSeed, parseSeedBody } from "../onboarding/seed.js";
 
@@ -25,7 +26,7 @@ router.post("/profile", authenticateToken, async (req: Request, res: Response): 
     );
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("Onboarding profile error:", err);
+    logRequestFailure(req, err, "Onboarding profile error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -44,7 +45,7 @@ router.post("/seed", authenticateToken, async (req: Request, res: Response): Pro
     );
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("Seed error:", err);
+    logRequestFailure(req, err, "Seed error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
