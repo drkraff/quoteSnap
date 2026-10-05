@@ -89,6 +89,14 @@ import {
   createOptionalExpoNotificationScheduler,
   planFollowUpNotification,
 } from '../../src/quotes/follow-up-notification';
+import {
+  DUPLICATE_QUOTE_FAILED_MESSAGE,
+  DUPLICATE_QUOTE_FAILED_TITLE,
+  DUPLICATE_QUOTE_MISSING_MESSAGE,
+  createDuplicateTapGuard,
+  duplicateQuoteOnDevice,
+  runDuplication,
+} from '../../src/quotes/duplicate-quote';
 
 const followUpScheduler = createOptionalExpoNotificationScheduler();
 
@@ -106,6 +114,8 @@ export default function QuotesScreen(): JSX.Element {
     null,
   );
   const [isCreating, setIsCreating] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const duplicateGuard = useRef(createDuplicateTapGuard()).current;
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadLetterItems = useDeadLetterItems();
@@ -413,6 +423,30 @@ export default function QuotesScreen(): JSX.Element {
     }
   }
 
+  async function handleDuplicateQuote(quote: Quote): Promise<void> {
+    try {
+      await runDuplication(duplicateGuard, async () => {
+        setDuplicating(true);
+        try {
+          const created = await duplicateQuoteOnDevice({
+            sourceQuoteId: quote.id,
+            contractorId: useAuthStore.getState().contractor?.id ?? '',
+          });
+          if (!created.ok) {
+            Alert.alert(DUPLICATE_QUOTE_FAILED_TITLE, DUPLICATE_QUOTE_MISSING_MESSAGE);
+            return;
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          router.push(`/draft/${created.quoteId}` as any);
+        } finally {
+          setDuplicating(false);
+        }
+      });
+    } catch {
+      Alert.alert(DUPLICATE_QUOTE_FAILED_TITLE, DUPLICATE_QUOTE_FAILED_MESSAGE);
+    }
+  }
+
   async function handleManualQuotePress(): Promise<void> {
     if (isCreating) return;
     setIsCreating(true);
@@ -523,6 +557,8 @@ export default function QuotesScreen(): JSX.Element {
               onPress={handleQuotePress}
               swipeAction={swipeAction}
               onSwipeAction={swipeHandlerFor(swipeAction)}
+              onDuplicate={(row) => { void handleDuplicateQuote(row); }}
+              duplicateDisabled={duplicating}
             />
           );
         }}
