@@ -15,7 +15,7 @@ describe('sync queue owner', () => {
     expect(payloadWithoutSyncOwner(stamped)).not.toHaveProperty(SYNC_OWNER_KEY);
   });
 
-  it('does not send another contractor's queued work, including while signed out', () => {
+  it("blocks another contractor's queued work, including while signed out", () => {
     expect(queueItemBlockedForContractor('contractor-a', 'contractor-b')).toBe(true);
     expect(queueItemBlockedForContractor('contractor-a', null)).toBe(true);
     expect(queueItemBlockedForContractor('contractor-a', 'contractor-a')).toBe(false);

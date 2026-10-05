@@ -60,7 +60,7 @@ jest.mock('../api/rate-card', () => ({
   deleteRateCardEntry: jest.fn(),
 }));
 
-const authState = {
+const mockAuthState = {
   contractorId: 'contractor-1' as string | null,
   refreshSession: jest.fn(async () => false),
 };
@@ -68,8 +68,8 @@ const authState = {
 jest.mock('../store/auth-store', () => ({
   useAuthStore: {
     getState: () => ({
-      contractor: authState.contractorId ? { id: authState.contractorId } : null,
-      refreshSession: authState.refreshSession,
+      contractor: mockAuthState.contractorId ? { id: mockAuthState.contractorId } : null,
+      refreshSession: mockAuthState.refreshSession,
     }),
   },
 }));
@@ -224,9 +224,9 @@ describe('processQueue', () => {
     mockedUploadQuotePhoto.mockReset();
     mockedUpsertRateCardEntry.mockReset();
     mockedDeleteRateCardEntry.mockReset();
-    authState.contractorId = 'contractor-1';
-    authState.refreshSession.mockReset();
-    authState.refreshSession.mockResolvedValue(false);
+    mockAuthState.contractorId = 'contractor-1';
+    mockAuthState.refreshSession.mockReset();
+    mockAuthState.refreshSession.mockResolvedValue(false);
     resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
@@ -2341,14 +2341,14 @@ describe('processQueue', () => {
       payloadJson: JSON.stringify({ customerPhone: '555' }),
     });
     queueItems = [item];
-    authState.refreshSession.mockResolvedValue(true);
+    mockAuthState.refreshSession.mockResolvedValue(true);
     mockedUpdateQuoteOnServer
       .mockRejectedValueOnce({ status: 401, error: 'Unauthorized' })
       .mockResolvedValueOnce({ updatedAt: '2026-10-05T00:00:00.000Z' });
 
     await processQueue();
 
-    expect(authState.refreshSession).toHaveBeenCalledTimes(1);
+    expect(mockAuthState.refreshSession).toHaveBeenCalledTimes(1);
     expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(2);
     expect(item.status).toBe('destroyed');
     expect(item.retryCount).toBe(0);
@@ -2388,7 +2388,7 @@ describe('processQueue', () => {
       payloadJson: JSON.stringify({ customerPhone: '555', _syncOwnerId: 'contractor-b' }),
     });
     queueItems = [item];
-    authState.contractorId = 'contractor-a';
+    mockAuthState.contractorId = 'contractor-a';
 
     await processQueue();
 
@@ -2406,7 +2406,7 @@ describe('processQueue', () => {
     queueItems = [item];
 
     await retainQueuedWorkForContractor('contractor-a');
-    authState.contractorId = 'contractor-b';
+    mockAuthState.contractorId = 'contractor-b';
     await processQueue();
 
     expect(JSON.parse(item.payloadJson)._syncOwnerId).toBe('contractor-a');
