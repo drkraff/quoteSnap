@@ -2,11 +2,16 @@ import * as SecureStore from 'expo-secure-store';
 import { resetApiClientForTests } from './client';
 import { getDraftLineItems, getVoiceStatus, uploadAudio } from './voice';
 import { useAuthStore } from '../store/auth-store';
+import { retainQueuedWorkForContractor } from '../sync/sync-queue';
 
 jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(() => Promise.resolve()),
   getItemAsync: jest.fn(() => Promise.resolve(null)),
   deleteItemAsync: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('../sync/sync-queue', () => ({
+  retainQueuedWorkForContractor: jest.fn(() => Promise.resolve()),
 }));
 
 const contractor = {
@@ -216,6 +221,7 @@ describe('voice API uses apiClient refresh', () => {
     });
 
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(retainQueuedWorkForContractor).toHaveBeenCalledWith(contractor.id);
     expect(fetchCalls().map((call) => call.path)).toEqual([
       '/voice/status/job-99',
       '/auth/refresh',

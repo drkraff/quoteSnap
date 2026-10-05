@@ -1,11 +1,16 @@
 import * as SecureStore from 'expo-secure-store';
 import { apiClient, resetApiClientForTests } from './client';
 import { useAuthStore } from '../store/auth-store';
+import { retainQueuedWorkForContractor } from '../sync/sync-queue';
 
 jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(() => Promise.resolve()),
   getItemAsync: jest.fn(() => Promise.resolve(null)),
   deleteItemAsync: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('../sync/sync-queue', () => ({
+  retainQueuedWorkForContractor: jest.fn(() => Promise.resolve()),
 }));
 
 const contractor = {
@@ -167,6 +172,7 @@ describe('apiClient auth vs resource 401 handling', () => {
 
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().refreshToken).toBeNull();
+    expect(retainQueuedWorkForContractor).toHaveBeenCalledWith(contractor.id);
     expect(fetchCalls().map((call) => call.path)).toEqual([
       '/quotes',
       '/auth/refresh',
