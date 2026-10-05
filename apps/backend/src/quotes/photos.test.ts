@@ -103,6 +103,8 @@ describe("photoR2Key / attachmentRowToResponse", () => {
     const key = photoR2Key(CLIENT_ID, PHOTO_ID, PHOTO_MIME_JPEG);
     assert.equal(key, `photos/${CLIENT_ID}/${PHOTO_ID}.jpg`);
     assert.equal(key.includes("http"), false);
+    assert.throws(() => photoR2Key("../evil", PHOTO_ID, PHOTO_MIME_JPEG), /invalid photo key/);
+    assert.throws(() => photoR2Key(CLIENT_ID, "not-a-uuid", PHOTO_MIME_JPEG), /invalid photo key/);
 
     const row: QuoteAttachmentRow = {
       id: PHOTO_ID,

@@ -31,6 +31,24 @@ export const REVOKE_REFRESH_TOKEN_SQL =
 export const INSERT_REFRESH_TOKEN_SQL = `INSERT INTO refresh_tokens (contractor_id, token_hash, expires_at)
      VALUES ($1, $2, NOW() + INTERVAL '30 days')`;
 
+/** Presented token was already revoked. Used only after the live-row lock misses. */
+export const SELECT_REVOKED_REFRESH_TOKEN_SQL = `SELECT contractor_id, revoked_at
+       FROM refresh_tokens
+       WHERE token_hash = $1
+         AND revoked_at IS NOT NULL`;
+
+/** Reuse of a revoked token outside the overlap window kills the contractor's other live refresh rows. */
+export const REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL = `UPDATE refresh_tokens
+     SET revoked_at = NOW()
+     WHERE contractor_id = $1
+       AND revoked_at IS NULL`;
+
+/**
+ * Overlapping refresh of the same token revokes it and then the waiter
+ * observes that revoke. Family revocation waits out that race.
+ */
+export const REFRESH_REUSE_GRACE_MS = 30_000;
+
 export type RotateRefreshOutcome =
   | { status: 401; json: { error: string } }
   | { status: 200; json: TokenPair };
@@ -43,13 +61,23 @@ export function generateRefreshToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
+/** Unparseable `revoked_at` fails closed and revokes the family. */
+function reuseOutsideGrace(revokedAt: unknown, now = Date.now()): boolean {
+  const time = revokedAt instanceof Date
+    ? revokedAt.getTime()
+    : new Date(String(revokedAt)).getTime();
+  if (!Number.isFinite(time)) return true;
+  return now - time > REFRESH_REUSE_GRACE_MS;
+}
+
 /**
  * Rotate one refresh token on a single query function: lock the current row,
  * revoke it, insert the replacement. A second overlapping rotation of the same
  * hash blocks on `FOR UPDATE` and then sees `revoked_at IS NOT NULL` → 401.
  *
- * Reuse-detection (revoke the contractor's other refresh rows on reuse) is
- * intentionally not in this change.
+ * A revoked token presented after `REFRESH_REUSE_GRACE_MS` revokes that
+ * contractor's other live refresh rows. A revoke inside the grace window
+ * (the overlapping waiter) returns 401 and leaves the newly issued token.
  */
 export async function rotateRefreshToken(
   queryFn: RefreshQueryFn,
@@ -62,6 +90,13 @@ export async function rotateRefreshToken(
   const tokenHash = hashRefreshToken(args.refreshToken);
   const tokenResult = await queryFn(SELECT_REFRESH_TOKEN_FOR_UPDATE_SQL, [tokenHash]);
   if (tokenResult.rows.length === 0) {
+    const revoked = await queryFn(SELECT_REVOKED_REFRESH_TOKEN_SQL, [tokenHash]);
+    if (revoked.rows.length > 0) {
+      const row = revoked.rows[0] as { contractor_id: string; revoked_at: unknown };
+      if (reuseOutsideGrace(row.revoked_at)) {
+        await queryFn(REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL, [row.contractor_id]);
+      }
+    }
     return { status: 401, json: { error: INVALID_REFRESH_TOKEN_ERROR } };
   }
   const tokenRow = tokenResult.rows[0] as { id: string; contractor_id: string };

@@ -1,7 +1,11 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
-import { approvalHttpResult } from "../quotes/approval-page.js";
+import { approvalHttpResult, renderNotFoundPage } from "../quotes/approval-page.js";
 import type { SnapshotQueryFn } from "../quotes/quote-snapshot.js";
-import { approvalLimiter, approvalSecurityHeaders } from "../quotes/approval-security.js";
+import {
+  approvalLimiter,
+  approvalSecurityHeaders,
+  isCrossSiteApprovalPost,
+} from "../quotes/approval-security.js";
 import { logRequestFailure } from "../log/logger.js";
 
 /**
@@ -47,6 +51,10 @@ export function createApprovalRouter(deps: {
     action: "approve" | "decline",
   ): Promise<void> {
     const token = String(req.params.token ?? "");
+    if (isCrossSiteApprovalPost(req)) {
+      res.status(403).type("html").send(renderNotFoundPage());
+      return;
+    }
     try {
       const result = await approvalHttpResult({
         token,

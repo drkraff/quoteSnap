@@ -311,6 +311,7 @@ function htmlDocument(title: string, main: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
 <title>${escapeHtml(title)}</title>
 <style>${PAGE_STYLE}</style>
 </head>

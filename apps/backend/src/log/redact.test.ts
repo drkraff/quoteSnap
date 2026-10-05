@@ -52,6 +52,13 @@ describe("redactString", () => {
     assert.equal(redactString(plain), plain);
   });
 
+  it("redacts database URL userinfo", () => {
+    const url = "postgresql://quotes:s3cret@db.internal:5432/quotesnap";
+    const out = redactString(`connect ${url} failed`);
+    assert.equal(out.includes("s3cret"), false);
+    assert.match(out, /\[redacted\]@/);
+  });
+
   it("leaves ordinary quote text in place", () => {
     const text = "14 linear feet of pipe at catalog item faucet";
     assert.equal(redactString(text), text);

@@ -8,6 +8,7 @@ import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
 import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
+import { voiceAudioMimeError, voiceAudioR2Key } from '../voice/audio-upload.js';
 import { failedVoiceStatusPayload } from '../voice/ai-failure.js';
 import { createVoiceDraftHandler } from './voice-draft.js';
 
@@ -40,6 +41,12 @@ router.post(
         return;
       }
 
+      const mimeError = voiceAudioMimeError(req.file.mimetype);
+      if (mimeError) {
+        res.status(400).json({ error: mimeError });
+        return;
+      }
+
       const parsedParent = parseQuoteServerId(
         (req.body as { quoteServerId?: unknown } | undefined)?.quoteServerId,
       );
@@ -60,7 +67,7 @@ router.post(
       quoteId = resolved.quoteId;
       const created = resolved.created;
 
-      const r2Key = `audio/${contractorId}/${uuidv4()}.m4a`;
+      const r2Key = voiceAudioR2Key(contractorId, uuidv4());
 
       let audioUploaded = false;
       let jobEnqueued = false;

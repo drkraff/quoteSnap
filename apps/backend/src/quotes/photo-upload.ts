@@ -2,9 +2,11 @@ import { uploadToR2 as uploadToR2Default } from "../services/r2.js";
 import { isQuoteEditable } from "./quote-write.js";
 import {
   ATTACHMENT_COLUMNS,
+  PHOTO_BYTES_ERROR,
   PHOTO_FILE_REQUIRED,
   attachmentRowToResponse,
   parsePhotoUploadFields,
+  photoBytesMatchMime,
   photoR2Key,
   type QuoteAttachmentRow,
   type QuotePhotoResponse,
@@ -59,6 +61,9 @@ export async function attachQuotePhoto(
   });
   if (!parsed.ok) {
     return { status: 400, json: { error: parsed.error } };
+  }
+  if (!photoBytesMatchMime(args.file.buffer, parsed.mime)) {
+    return { status: 400, json: { error: PHOTO_BYTES_ERROR } };
   }
 
   const quoteResult = await queryFn(

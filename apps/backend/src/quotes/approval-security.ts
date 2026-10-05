@@ -21,6 +21,32 @@ export const APPROVAL_SECURITY_HEADERS = {
   "X-Robots-Tag": "noindex",
 } as const;
 
+function headerValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
+/**
+ * Browser cross-site approve/decline. A missing Origin still proceeds: the
+ * token is the capability, and non-browser clients do not send Origin.
+ * `Sec-Fetch-Site: cross-site` or an Origin host other than this host is rejected.
+ */
+export function isCrossSiteApprovalPost(req: Request): boolean {
+  const fetchSite = headerValue(req.headers["sec-fetch-site"]).toLowerCase();
+  if (fetchSite === "cross-site") return true;
+  const origin = headerValue(req.headers.origin);
+  if (!origin) return false;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return true;
+  }
+  const host = headerValue(req.headers.host);
+  if (!host) return true;
+  return originHost.toLowerCase() !== host.toLowerCase();
+}
+
 export function approvalSecurityHeaders(
   _req: Request,
   res: Response,

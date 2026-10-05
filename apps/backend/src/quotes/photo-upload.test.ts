@@ -1,7 +1,7 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { attachQuotePhoto } from "./photo-upload.js";
-import { PHOTO_FILE_REQUIRED, PHOTO_MIME_JPEG } from "./photos.js";
+import { PHOTO_BYTES_ERROR, PHOTO_FILE_REQUIRED, PHOTO_MIME_JPEG } from "./photos.js";
 
 const QUOTE_ID = "11111111-1111-4111-8111-111111111111";
 const CONTRACTOR_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -130,5 +130,28 @@ describe("attachQuotePhoto", () => {
     }
     assert.equal(uploaded[0], `photos/${CONTRACTOR_ID}/${ATTACHMENT_ID}.jpg`);
     assert.equal(uploaded[0]!.startsWith("http"), false);
+  });
+
+  it("rejects HTML bytes labeled image/jpeg before storage", async () => {
+    const queryFn = mock.fn(async () => ({ rows: [] }));
+    let uploaded = 0;
+    const outcome = await attachQuotePhoto(
+      queryFn,
+      {
+        quoteId: QUOTE_ID,
+        contractorId: CONTRACTOR_ID,
+        file: {
+          buffer: Buffer.from("<html><script>alert(1)</script></html>"),
+          mimetype: PHOTO_MIME_JPEG,
+          size: 42,
+        },
+        clientId: CLIENT_ID,
+        newAttachmentId: ATTACHMENT_ID,
+      },
+      { uploadToR2: async () => { uploaded += 1; } },
+    );
+    assert.deepEqual(outcome, { status: 400, json: { error: PHOTO_BYTES_ERROR } });
+    assert.equal(uploaded, 0);
+    assert.equal(queryFn.mock.calls.length, 0);
   });
 });

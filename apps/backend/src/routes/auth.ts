@@ -21,6 +21,11 @@ import {
   hashRefreshToken,
   rotateRefreshToken,
 } from "../auth/refresh.js";
+import {
+  PASSWORD_TOO_LONG,
+  passwordExceedsBcryptLimit,
+  passwordPolicyError,
+} from "../auth/password.js";
 
 export const router = Router();
 
@@ -32,7 +37,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function generateAccessToken(payload: ContractorPayload): string {
   const secret = process.env["JWT_ACCESS_SECRET"];
   if (!secret) throw new Error("JWT_ACCESS_SECRET not set");
-  return jwt.sign(payload, secret, { expiresIn: "15m" });
+  return jwt.sign(payload, secret, { algorithm: "HS256", expiresIn: "15m" });
 }
 
 async function issueTokenPair(contractorId: string, email: string | null, phone: string | null): Promise<TokenPair> {
@@ -56,8 +61,9 @@ router.post("/register", authLimiter, async (req: Request, res: Response): Promi
     const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
 
     // Validate: password required, at least one of email or phone
-    if (!password || password.length < 8) {
-      res.status(400).json({ error: "Password must be at least 8 characters" });
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      res.status(400).json({ error: policyError });
       return;
     }
     if (!email && !phoneRaw) {
@@ -115,6 +121,10 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
 
     if (!password) {
       res.status(400).json({ error: "Password is required" });
+      return;
+    }
+    if (typeof password === "string" && passwordExceedsBcryptLimit(password)) {
+      res.status(400).json({ error: PASSWORD_TOO_LONG });
       return;
     }
 

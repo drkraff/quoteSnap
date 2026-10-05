@@ -7,14 +7,19 @@ import { router as quotesRouter } from "./routes/quotes.js";
 import { router as rateCardRouter } from "./routes/rate-card.js";
 import { router as voiceRouter } from "./routes/voice.js";
 import { router as approvalRouter } from "./routes/approval.js";
-import { initBoss } from "./workers/voice-processor.js";
+import { boss, initBoss } from "./workers/voice-processor.js";
+import pool from "./db/connection.js";
 import { errorHandler, requestIdMiddleware } from "./log/http.js";
 import { errorSummary, log } from "./log/logger.js";
+import { applyApiHardening } from "./http/api-hardening.js";
+import { installGracefulShutdown } from "./http/shutdown.js";
+import { assertBootEnv } from "./env/boot-env.js";
 
 const app = express();
 const PORT = process.env["PORT"] ? parseInt(process.env["PORT"], 10) : 3000;
 
 app.use(requestIdMiddleware);
+applyApiHardening(app);
 app.use(express.json());
 
 // Auth routes
@@ -54,9 +59,23 @@ app.use((_req: Request, res: Response) => {
 app.use(errorHandler);
 
 async function startServer(): Promise<void> {
+  assertBootEnv();
   await initBoss();
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     log("info", { msg: "server_listening", port: PORT });
+  });
+  installGracefulShutdown({
+    closeServer: () => new Promise((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    }),
+    stopBoss: () => boss.stop({ graceful: true, timeout: 20000 }),
+    closePool: () => pool.end(),
+    exit: (code) => {
+      process.exit(code);
+    },
+    logError: (err) => {
+      log("error", { msg: "shutdown_failed", error: errorSummary(err) });
+    },
   });
 }
 

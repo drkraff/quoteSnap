@@ -7,7 +7,9 @@ import {
   INVALID_REFRESH_TOKEN_ERROR,
   REVOKE_REFRESH_TOKEN_SQL,
   SELECT_CONTRACTOR_FOR_REFRESH_SQL,
+  REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL,
   SELECT_REFRESH_TOKEN_FOR_UPDATE_SQL,
+  SELECT_REVOKED_REFRESH_TOKEN_SQL,
   hashRefreshToken,
   rotateRefreshToken,
 } from "./refresh.js";
@@ -95,6 +97,9 @@ describe("rotateRefreshToken", () => {
         }
         return { rows: [] };
       }
+      if (sql === SELECT_REVOKED_REFRESH_TOKEN_SQL) {
+        return { rows: [] };
+      }
       throw new Error(`unexpected sql: ${sql}`);
     };
 
@@ -107,6 +112,8 @@ describe("rotateRefreshToken", () => {
       if (c.sql === SELECT_CONTRACTOR_FOR_REFRESH_SQL) return "contractor";
       if (c.sql === REVOKE_REFRESH_TOKEN_SQL) return "revoke";
       if (c.sql === INSERT_REFRESH_TOKEN_SQL) return "insert";
+      if (c.sql === SELECT_REVOKED_REFRESH_TOKEN_SQL) return "reuse";
+      if (c.sql === REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL) return "family";
       return "other";
     });
   }
@@ -125,6 +132,48 @@ describe("rotateRefreshToken", () => {
     assert.deepEqual(calls[3]?.params, [CONTRACTOR_ID, hashRefreshToken(NEXT_REFRESH)]);
   });
 
+  it("revokes the contractor's other refresh tokens when a revoked token is reused after the grace window", async () => {
+    const calls: string[] = [];
+    const queryFn: RefreshQueryFn = async (sql) => {
+      calls.push(sql);
+      if (sql === SELECT_REFRESH_TOKEN_FOR_UPDATE_SQL) return { rows: [] };
+      if (sql === SELECT_REVOKED_REFRESH_TOKEN_SQL) {
+        return {
+          rows: [{
+            contractor_id: CONTRACTOR_ID,
+            revoked_at: new Date(Date.now() - 60 * 60 * 1000),
+          }],
+        };
+      }
+      if (sql === REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL) return { rows: [] };
+      throw new Error(`unexpected sql: ${sql}`);
+    };
+    const outcome = await rotateRefreshToken(queryFn, rotateArgs());
+    assert.deepEqual(outcome, {
+      status: 401,
+      json: { error: INVALID_REFRESH_TOKEN_ERROR },
+    });
+    assert.equal(calls.includes(REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL), true);
+  });
+
+  it("does not revoke the family when the same token was rotated inside the grace window", async () => {
+    const calls: string[] = [];
+    const queryFn: RefreshQueryFn = async (sql) => {
+      calls.push(sql);
+      if (sql === SELECT_REFRESH_TOKEN_FOR_UPDATE_SQL) return { rows: [] };
+      if (sql === SELECT_REVOKED_REFRESH_TOKEN_SQL) {
+        return {
+          rows: [{ contractor_id: CONTRACTOR_ID, revoked_at: new Date() }],
+        };
+      }
+      if (sql === REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL) return { rows: [] };
+      throw new Error(`unexpected sql: ${sql}`);
+    };
+    const outcome = await rotateRefreshToken(queryFn, rotateArgs());
+    assert.equal(outcome.status, 401);
+    assert.equal(calls.includes(REVOKE_CONTRACTOR_REFRESH_TOKENS_SQL), false);
+  });
+
   it("returns 401 without revoke or insert when the locked select matches no row", async () => {
     const { calls, queryFn } = mockDb({ token: null });
     const outcome = await rotateRefreshToken(queryFn, rotateArgs());
@@ -132,7 +181,7 @@ describe("rotateRefreshToken", () => {
       status: 401,
       json: { error: INVALID_REFRESH_TOKEN_ERROR },
     });
-    assert.deepEqual(callKinds(calls), ["lock"]);
+    assert.deepEqual(callKinds(calls), ["lock", "reuse"]);
   });
 
   it("returns 401 without revoke or insert when the contractor is missing", async () => {
@@ -246,6 +295,15 @@ describe("overlapping refresh on a row lock", () => {
       }
       if (sql === INSERT_REFRESH_TOKEN_SQL) {
         store.insert(params?.[1] as string);
+        return { rows: [] };
+      }
+      if (sql === SELECT_REVOKED_REFRESH_TOKEN_SQL) {
+        const hash = params?.[0] as string;
+        if (store.row.token_hash === hash && store.row.revoked_at !== null) {
+          return {
+            rows: [{ contractor_id: store.row.contractor_id, revoked_at: store.row.revoked_at }],
+          };
+        }
         return { rows: [] };
       }
       throw new Error(`unexpected sql: ${sql}`);
