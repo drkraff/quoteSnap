@@ -341,6 +341,7 @@ describe("parseQuoteCreateBody", () => {
       totalCents: 0,
       privateNote: null,
       clientSentence: null,
+      clientKey: null,
     });
   });
 
@@ -385,6 +386,7 @@ describe("parseQuoteCreateBody", () => {
       totalCents: 0,
       privateNote: null,
       clientSentence: null,
+      clientKey: null,
     });
   });
 });
@@ -1654,17 +1656,16 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 describe("POST /quotes skippable catalog", () => {
   it("inserts a draft without joining or counting catalog_items", () => {
-    const src = readFileSync(path.join(here, "../routes/quotes.ts"), "utf8");
-    const postStart = src.indexOf("// POST / — create a new quote");
-    const postEnd = src.indexOf("// GET /:id");
-    assert.ok(postStart >= 0 && postEnd > postStart);
-    const postSlice = src.slice(postStart, postEnd);
+    const src = readFileSync(path.join(here, "create-quote.ts"), "utf8");
     assert.match(
-      postSlice,
-      /INSERT INTO quotes \(contractor_id, status, customer_phone, total_cents, private_note, client_sentence\)/,
+      src,
+      /INSERT INTO quotes \(contractor_id, status, customer_phone, total_cents, private_note, client_sentence, client_key\)/,
     );
-    assert.doesNotMatch(postSlice, /catalog_items/);
-    assert.doesNotMatch(postSlice, /COUNT_CONTRACTOR_CATALOG/);
-    assert.doesNotMatch(postSlice, /itemCount/);
+    assert.match(src, /ON CONFLICT \(contractor_id, client_key\) WHERE client_key IS NOT NULL/);
+    assert.match(src, /DO NOTHING/);
+    assert.doesNotMatch(src, /catalog_items/);
+    assert.doesNotMatch(src, /COUNT_CONTRACTOR_CATALOG/);
+    assert.doesNotMatch(src, /itemCount/);
+    assert.doesNotMatch(src, /UPDATE/);
   });
 });

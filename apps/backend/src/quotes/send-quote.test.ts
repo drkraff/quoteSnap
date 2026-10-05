@@ -384,10 +384,14 @@ describe("sendQuoteForApproval", () => {
 
   it("is mounted as an authenticated route and the public page is mounted at /q", () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const quotes = readFileSync(path.join(here, "../routes/quotes.ts"), "utf8");
+    const quotes = readFileSync(path.join(here, "../routes/quotes-router.ts"), "utf8");
+    const wiring = readFileSync(path.join(here, "../routes/quotes.ts"), "utf8");
     const index = readFileSync(path.join(here, "../index.ts"), "utf8");
-    assert.match(quotes, /router\.post\("\/:id\/send", authenticateToken/);
+    assert.match(quotes, /router\.post\("\/:id\/send", authenticate/);
+    assert.match(quotes, /authenticate \?\? authenticateToken/);
     assert.match(quotes, /resolveSmsSender\(process\.env\["SMS_SENDER"\]\)/);
+    assert.match(wiring, /createQuotesRouter\(/);
+    assert.match(index, /app\.use\("\/quotes", quotesRouter\)/);
     assert.match(index, /app\.use\("\/q", approvalRouter\)/);
   });
 });

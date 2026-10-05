@@ -127,6 +127,8 @@ export type ParsedQuoteCreateBody =
       totalCents: number;
       privateNote: string | null;
       clientSentence: string | null;
+      /** Null when omitted or blank. Older clients omit it and still insert. */
+      clientKey: string | null;
     };
 
 export type QuotePutOutcome =
@@ -234,6 +236,8 @@ export function parseQuantity(
 }
 
 const CUSTOMER_PHONE_MAX_LENGTH = 20;
+const CLIENT_KEY_MAX_LENGTH = 64;
+const CLIENT_KEY_ERROR = `clientKey must be a string of at most ${CLIENT_KEY_MAX_LENGTH} characters`;
 
 /** Draft phones stay free-form. Only the column width and a string type are enforced. */
 function parseOptionalCustomerPhone(
@@ -249,6 +253,26 @@ function parseOptionalCustomerPhone(
     return { ok: false, error: "customerPhone must be at most 20 characters" };
   }
   return { ok: true, phone: value };
+}
+
+/** Blank or omitted → no key (a new row). A real key is trimmed and length-capped. */
+function parseOptionalClientKey(
+  value: unknown,
+): { ok: true; clientKey: string | null } | { ok: false; error: string } {
+  if (value === undefined || value === null) {
+    return { ok: true, clientKey: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, error: CLIENT_KEY_ERROR };
+  }
+  const clientKey = value.trim();
+  if (clientKey.length === 0) {
+    return { ok: true, clientKey: null };
+  }
+  if (clientKey.length > CLIENT_KEY_MAX_LENGTH) {
+    return { ok: false, error: CLIENT_KEY_ERROR };
+  }
+  return { ok: true, clientKey };
 }
 
 function hasOwn(obj: object, key: string): boolean {
@@ -617,7 +641,24 @@ export function parseQuoteCreateBody(body: unknown): ParsedQuoteCreateBody {
     clientSentence = parsed.sentence;
   }
 
-  return { ok: true, status, customerPhone, totalCents, privateNote, clientSentence };
+  let clientKey: string | null = null;
+  if (hasOwn(raw, "clientKey")) {
+    const parsedKey = parseOptionalClientKey(raw.clientKey);
+    if (!parsedKey.ok) {
+      return parsedKey;
+    }
+    clientKey = parsedKey.clientKey;
+  }
+
+  return {
+    ok: true,
+    status,
+    customerPhone,
+    totalCents,
+    privateNote,
+    clientSentence,
+    clientKey,
+  };
 }
 
 export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {

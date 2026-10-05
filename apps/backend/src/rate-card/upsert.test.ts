@@ -424,6 +424,7 @@ describe("rate card isolation", () => {
       "../catalog/update.ts",
       "../routes/catalog.ts",
       "../routes/quotes.ts",
+      "../routes/quotes-router.ts",
     ];
     for (const rel of files) {
       const src = readFileSync(path.join(here, rel), "utf8");

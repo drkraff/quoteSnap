@@ -1026,9 +1026,53 @@ describe('processQueue', () => {
       status: 'draft_local',
       customerPhone: undefined,
       totalCents: 0,
+      privateNote: undefined,
+      clientSentence: undefined,
+      clientKey: 'local-quote-1',
     });
     expect(quote.serverId).toBe('srv-new');
     expect(item.status).toBe('destroyed');
+  });
+
+  it('retries a lost quote create with the same local id and does not change the total', async () => {
+    const quote = makeQuote({
+      id: 'local-quote-1',
+      serverId: null,
+      status: 'draft_local',
+      totalCents: 0,
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'create',
+      payloadJson: JSON.stringify({ status: 'draft_local', totalCents: 0 }),
+    });
+    queueItems = [item];
+    mockedCreateQuoteOnServer.mockRejectedValueOnce(new Error('response lost'));
+
+    await processQueue();
+
+    expect(quote.serverId).toBeNull();
+    expect(quote.totalCents).toBe(0);
+    expect(mockedCreateQuoteOnServer).toHaveBeenCalledWith(
+      expect.objectContaining({ clientKey: 'local-quote-1', totalCents: 0 }),
+    );
+
+    item.nextRetryAt = new Date(Date.now() - 1);
+    mockedCreateQuoteOnServer.mockResolvedValueOnce({
+      id: 'srv-same',
+      updatedAt: '2026-10-05T00:00:00.000Z',
+    });
+
+    await processQueue();
+
+    expect(mockedCreateQuoteOnServer).toHaveBeenCalledTimes(2);
+    expect(mockedCreateQuoteOnServer.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({ clientKey: 'local-quote-1', totalCents: 0 }),
+    );
+    expect(quote.serverId).toBe('srv-same');
+    expect(quote.totalCents).toBe(0);
   });
 
   it('does not POST a second quote when a queued create already has a server id', async () => {
