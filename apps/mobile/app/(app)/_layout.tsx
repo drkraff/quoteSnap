@@ -96,6 +96,13 @@ export default function AppLayout(): JSX.Element {
           headerTitle: SYNC_ISSUES_TITLE,
         }}
       />
+      <Tabs.Screen
+        name="stats"
+        options={{
+          href: tabBarHref('stats'),
+          headerTitle: 'Stats',
+        }}
+      />
     </Tabs>
   );
 }
