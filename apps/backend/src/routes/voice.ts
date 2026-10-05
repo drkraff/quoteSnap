@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth.js';
+import { logRequestFailure } from '../log/logger.js';
 import { uploadToR2, deleteFromR2 } from '../services/r2.js';
 import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
@@ -91,21 +92,21 @@ router.post(
                 [quoteId]
               );
             } catch (markErr) {
-              console.error('Failed to mark quote ai_failed after upload/enqueue error:', markErr);
+              logRequestFailure(req, markErr, 'Failed to mark quote ai_failed after upload/enqueue error');
             }
           }
           if (audioUploaded) {
             try {
               await deleteFromR2(r2Key);
             } catch (deleteErr) {
-              console.error('Failed to delete orphaned R2 audio after enqueue error:', deleteErr);
+              logRequestFailure(req, deleteErr, 'Failed to delete orphaned R2 audio after enqueue error');
             }
           }
         }
         throw pipelineErr;
       }
     } catch (err) {
-      console.error('POST /voice/upload error:', err);
+      logRequestFailure(req, err, 'POST /voice/upload error');
       // Include quoteId so a client that never got 202 can stamp serverId and
       // retry against the same row instead of INSERT-ing a duplicate.
       res.status(500).json(
@@ -164,7 +165,7 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
 
     res.json(response);
   } catch (err) {
-    console.error('GET /voice/status/:jobId error:', err);
+    logRequestFailure(req, err, 'GET /voice/status/:jobId error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -245,7 +246,7 @@ router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Respo
       lineItems,
     });
   } catch (err) {
-    console.error('GET /voice/draft/:quoteId error:', err);
+    logRequestFailure(req, err, 'GET /voice/draft/:quoteId error');
     res.status(500).json({ error: 'Internal server error' });
   }
 });

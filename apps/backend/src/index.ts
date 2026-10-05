@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response } from "express";
 import { router as authRouter } from "./routes/auth.js";
 import { router as onboardingRouter } from "./routes/onboarding.js";
 import { router as catalogRouter } from "./routes/catalog.js";
@@ -8,10 +8,13 @@ import { router as rateCardRouter } from "./routes/rate-card.js";
 import { router as voiceRouter } from "./routes/voice.js";
 import { router as approvalRouter } from "./routes/approval.js";
 import { initBoss } from "./workers/voice-processor.js";
+import { errorHandler, requestIdMiddleware } from "./log/http.js";
+import { errorSummary, log } from "./log/logger.js";
 
 const app = express();
 const PORT = process.env["PORT"] ? parseInt(process.env["PORT"], 10) : 3000;
 
+app.use(requestIdMiddleware);
 app.use(express.json());
 
 // Auth routes
@@ -48,21 +51,17 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: "Not found" });
 });
 
-// Error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: "Internal server error" });
-});
+app.use(errorHandler);
 
 async function startServer(): Promise<void> {
   await initBoss();
   app.listen(PORT, () => {
-    console.info(`QuoteSnap backend running on port ${PORT}`);
+    log("info", { msg: "server_listening", port: PORT });
   });
 }
 
 startServer().catch((err) => {
-  console.error('Failed to start server:', err);
+  log("error", { msg: "server_start_failed", error: errorSummary(err) });
   process.exit(1);
 });
 

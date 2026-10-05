@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import { query } from "../db/connection.js";
+import { logRequestFailure } from "../log/logger.js";
 import { importOldQuotes } from "../rate-card/import-apply.js";
 import {
   deleteRateCardEntry,
@@ -22,7 +23,7 @@ router.post("/import", authenticateToken, async (req: Request, res: Response): P
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("POST /rate-card/import error:", err);
+    logRequestFailure(req, err, "POST /rate-card/import error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -37,7 +38,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("POST /rate-card error:", err);
+    logRequestFailure(req, err, "POST /rate-card error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -71,7 +72,7 @@ router.get("/", authenticateToken, async (req: Request, res: Response): Promise<
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("GET /rate-card error:", err);
+    logRequestFailure(req, err, "GET /rate-card error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -87,7 +88,7 @@ router.delete("/:id", authenticateToken, async (req: Request, res: Response): Pr
     });
     res.status(outcome.status).json(outcome.json);
   } catch (err) {
-    console.error("DELETE /rate-card/:id error:", err);
+    logRequestFailure(req, err, "DELETE /rate-card/:id error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import pool from "./connection.js";
+import { errorSummary, log } from "../log/logger.js";
 import { resolveMigrationsDir } from "./migrations-path.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -101,7 +102,7 @@ if (isMain) {
       process.exit(0);
     })
     .catch((err: unknown) => {
-      console.error("Migration error:", err);
+      log("error", { msg: "migration_failed", error: errorSummary(err) });
       process.exit(1);
     });
 }

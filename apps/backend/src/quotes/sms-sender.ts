@@ -3,6 +3,8 @@
  * The only implementation in this tree is dry-run/log. Twilio is not wired.
  */
 
+import { redactString } from "../log/redact.js";
+
 export type SmsQuoteLink = {
   toPhone: string;
   approvalUrl: string;
@@ -35,7 +37,9 @@ export function createDryRunSmsSender(
     mode: "dry-run",
     async sendQuoteLink(message: SmsQuoteLink): Promise<SmsSendResult> {
       log(
-        `[sms:dry-run] quote=${message.quoteId} to=${redactPhone(message.toPhone)} url=${message.approvalUrl}`,
+        redactString(
+          `[sms:dry-run] quote=${message.quoteId} to=${redactPhone(message.toPhone)} url=${message.approvalUrl}`,
+        ),
       );
       return { mode: "dry-run" };
     },
