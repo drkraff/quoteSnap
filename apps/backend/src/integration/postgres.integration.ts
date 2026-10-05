@@ -38,6 +38,7 @@ import {
   upsertRateCardEntry,
   type RateCardQueryFn,
 } from "../rate-card/upsert.js";
+import { insertCatalogItemIdempotent } from "../catalog/create.js";
 
 if (!process.env["JWT_ACCESS_SECRET"] || process.env["JWT_ACCESS_SECRET"].length < 32) {
   process.env["JWT_ACCESS_SECRET"] = "integration-test-jwt-secret-32-chars-min";
@@ -240,6 +241,37 @@ describe("postgres integration", { concurrency: false }, () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("stores one catalog item when two creates share a client key", async () => {
+    const contractorId = await insertContractor();
+    const clientKey = `local-${randomUUID()}`;
+    const first = await insertCatalogItemIdempotent(query, contractorId, {
+      name: "Custom Valve",
+      unit: "each",
+      unitPriceCents: 12500,
+      tradeCategory: "plumbing",
+      clientKey,
+    });
+    const second = await insertCatalogItemIdempotent(query, contractorId, {
+      name: "Custom Valve",
+      unit: "each",
+      unitPriceCents: 1,
+      tradeCategory: "plumbing",
+      clientKey,
+    });
+    assert.equal(first.created, true);
+    assert.equal(second.created, false);
+    const firstRow = first.row as { id: string; unit_price_cents: number };
+    const secondRow = second.row as { id: string; unit_price_cents: number };
+    assert.equal(secondRow.id, firstRow.id);
+    assert.equal(firstRow.unit_price_cents, 12500);
+    assert.equal(secondRow.unit_price_cents, 12500);
+    const stored = await query(
+      `SELECT id, unit_price_cents FROM catalog_items WHERE contractor_id = $1 AND client_key = $2`,
+      [contractorId, clientKey],
+    );
+    assert.equal(stored.rows.length, 1);
   });
 
   it("rejects quote snapshot UPDATE and DELETE", async () => {

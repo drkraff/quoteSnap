@@ -118,7 +118,17 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   },
 
   async logout() {
-    const { refreshToken } = get();
+    const { refreshToken, contractor } = get();
+    if (contractor?.id) {
+      try {
+        // Lazy require: sync-queue pulls the database, and this store is imported from API tests.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { retainQueuedWorkForContractor } = require('../sync/sync-queue') as typeof import('../sync/sync-queue');
+        await retainQueuedWorkForContractor(contractor.id);
+      } catch {
+        // Stamping the queue must not block signing out.
+      }
+    }
     // Best-effort server-side revocation — do not throw on failure
     if (refreshToken) {
       try {

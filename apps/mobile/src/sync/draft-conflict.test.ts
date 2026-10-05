@@ -101,15 +101,40 @@ describe('isServerRevisionFork / isDraftContentFork', () => {
 });
 
 describe('shouldApplyHydrateDraftConflict', () => {
-  it('applies when a dirty pre-send draft disagrees with the server', () => {
+  it('applies when a dirty pre-send draft disagrees and the server revision moved', () => {
     expect(
       shouldApplyHydrateDraftConflict({
         dirty: true,
         serverStatus: 'draft_local',
         localLines: comparableLineItems([pipe, elbow]),
         serverLines: comparableLineItems([pipe]),
+        lastKnownUpdatedAt: '2026-09-01T00:00:00.000Z',
+        serverUpdatedAt: '2026-09-02T00:00:00.000Z',
       }),
     ).toBe(true);
+  });
+
+  it('keeps an unsynced local edit when the server revision has not moved', () => {
+    expect(
+      shouldApplyHydrateDraftConflict({
+        dirty: true,
+        serverStatus: 'draft_local',
+        localLines: comparableLineItems([pipe, elbow]),
+        serverLines: comparableLineItems([pipe]),
+        lastKnownUpdatedAt: '2026-09-02T00:00:00.000Z',
+        serverUpdatedAt: '2026-09-02T00:00:00.000Z',
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyHydrateDraftConflict({
+        dirty: true,
+        serverStatus: 'draft_local',
+        localLines: comparableLineItems([pipe, elbow]),
+        serverLines: comparableLineItems([pipe]),
+        lastKnownUpdatedAt: null,
+        serverUpdatedAt: '2026-09-02T00:00:00.000Z',
+      }),
+    ).toBe(false);
   });
 
   it('does not apply when local is not dirty (silent server-as-truth hydrate)', () => {
@@ -119,6 +144,8 @@ describe('shouldApplyHydrateDraftConflict', () => {
         serverStatus: 'draft_local',
         localLines: comparableLineItems([elbow]),
         serverLines: comparableLineItems([pipe]),
+        lastKnownUpdatedAt: '2026-09-01T00:00:00.000Z',
+        serverUpdatedAt: '2026-09-02T00:00:00.000Z',
       }),
     ).toBe(false);
   });
@@ -130,6 +157,8 @@ describe('shouldApplyHydrateDraftConflict', () => {
         serverStatus: 'draft_local',
         localLines: comparableLineItems([pipe]),
         serverLines: comparableLineItems([pipe]),
+        lastKnownUpdatedAt: '2026-09-01T00:00:00.000Z',
+        serverUpdatedAt: '2026-09-02T00:00:00.000Z',
       }),
     ).toBe(false);
   });
@@ -141,6 +170,8 @@ describe('shouldApplyHydrateDraftConflict', () => {
         serverStatus: 'sent',
         localLines: comparableLineItems([pipe]),
         serverLines: comparableLineItems([elbow]),
+        lastKnownUpdatedAt: '2026-09-01T00:00:00.000Z',
+        serverUpdatedAt: '2026-09-02T00:00:00.000Z',
       }),
     ).toBe(false);
   });

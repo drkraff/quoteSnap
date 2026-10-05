@@ -5,8 +5,9 @@ import { query } from "../db/connection.js";
 import { applyCatalogArchivePatch } from "../catalog/archive.js";
 import { LIST_ACTIVE_CATALOG_SQL } from "../catalog/list.js";
 import {
-  INSERT_CATALOG_ITEM_SQL,
-  catalogCreateInsertParams,
+  insertCatalogItem,
+  insertCatalogItemIdempotent,
+  parseCatalogClientKey,
 } from "../catalog/create.js";
 import { catalogUpdateAssignments } from "../catalog/update.js";
 import {
@@ -87,17 +88,32 @@ router.post("/", authenticateToken, async (req: Request, res: Response): Promise
       return;
     }
 
-    const result = await query(
-      INSERT_CATALOG_ITEM_SQL,
-      catalogCreateInsertParams(contractorId, {
-        name: body.name,
-        unit,
-        unitPriceCents: body.unitPriceCents,
-        tradeCategory: body.tradeCategory,
-      })
+    const parsedKey = parseCatalogClientKey(
+      (body as { clientKey?: unknown }).clientKey,
     );
+    if (!parsedKey.ok) {
+      res.status(400).json({ error: parsedKey.error });
+      return;
+    }
 
-    const item = rowToResponse(result.rows[0] as CatalogRow);
+    const fields = {
+      name: body.name,
+      unit,
+      unitPriceCents: body.unitPriceCents,
+      tradeCategory: body.tradeCategory,
+    };
+    if (parsedKey.clientKey) {
+      const outcome = await insertCatalogItemIdempotent(query, contractorId, {
+        ...fields,
+        clientKey: parsedKey.clientKey,
+      });
+      const item = rowToResponse(outcome.row as CatalogRow);
+      res.status(outcome.created ? 201 : 200).json({ item });
+      return;
+    }
+
+    const row = await insertCatalogItem(query, contractorId, fields);
+    const item = rowToResponse(row as CatalogRow);
     res.status(201).json({ item });
   } catch (err) {
     logRequestFailure(req, err, "POST /catalog error");

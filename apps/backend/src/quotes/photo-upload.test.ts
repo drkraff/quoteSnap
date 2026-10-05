@@ -154,4 +154,46 @@ describe("attachQuotePhoto", () => {
     assert.equal(uploaded, 0);
     assert.equal(queryFn.mock.calls.length, 0);
   });
+
+  it("returns the existing attachment when a retry hits the client id unique index", async () => {
+    const stored = {
+      id: ATTACHMENT_ID,
+      quote_id: QUOTE_ID,
+      contractor_id: CONTRACTOR_ID,
+      client_id: CLIENT_ID,
+      line_client_id: null,
+      room_id: null,
+      r2_key: `photos/${CONTRACTOR_ID}/${ATTACHMENT_ID}.jpg`,
+      mime: PHOTO_MIME_JPEG,
+      created_at: new Date("2026-09-15T00:00:00.000Z"),
+    };
+    let attachmentReads = 0;
+    const queryFn = mock.fn(async (sql: string) => {
+      if (sql.includes("FROM quotes")) {
+        return { rows: [{ id: QUOTE_ID, status: "draft_local" }] };
+      }
+      if (sql.includes("INSERT INTO quote_attachments")) {
+        const err = new Error("duplicate") as Error & { code: string };
+        err.code = "23505";
+        throw err;
+      }
+      if (sql.includes("FROM quote_attachments")) {
+        attachmentReads += 1;
+        return { rows: attachmentReads === 1 ? [] : [stored] };
+      }
+      return { rows: [] };
+    });
+    const outcome = await attachQuotePhoto(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      file: jpegFile,
+      clientId: CLIENT_ID,
+      newAttachmentId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    }, { uploadToR2: async () => {} });
+    assert.equal(outcome.status, 200);
+    if (outcome.status === 200) {
+      assert.equal(outcome.json.photo.id, ATTACHMENT_ID);
+      assert.equal(outcome.json.photo.clientId, CLIENT_ID);
+    }
+  });
 });

@@ -95,25 +95,53 @@ export async function attachQuotePhoto(
   const r2Key = photoR2Key(args.contractorId, attachmentId, parsed.mime);
   await uploadToR2(r2Key, args.file.buffer, parsed.mime);
 
-  const inserted = await queryFn(
-    `INSERT INTO quote_attachments (
-       id, quote_id, contractor_id, client_id, line_client_id, room_id, r2_key, mime
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING ${ATTACHMENT_COLUMNS}`,
-    [
-      attachmentId,
-      args.quoteId,
-      args.contractorId,
-      parsed.clientId,
-      parsed.lineClientId,
-      parsed.roomId,
-      r2Key,
-      parsed.mime,
-    ],
-  );
+  let insertedRow: QuoteAttachmentRow | undefined;
+  try {
+    const inserted = await queryFn(
+      `INSERT INTO quote_attachments (
+         id, quote_id, contractor_id, client_id, line_client_id, room_id, r2_key, mime
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING ${ATTACHMENT_COLUMNS}`,
+      [
+        attachmentId,
+        args.quoteId,
+        args.contractorId,
+        parsed.clientId,
+        parsed.lineClientId,
+        parsed.roomId,
+        r2Key,
+        parsed.mime,
+      ],
+    );
+    insertedRow = inserted.rows[0] as QuoteAttachmentRow | undefined;
+  } catch (err) {
+    const code = typeof err === "object" && err !== null && "code" in err
+      ? (err as { code: unknown }).code
+      : undefined;
+    if (code !== "23505") {
+      throw err;
+    }
+  }
+
+  if (!insertedRow) {
+    const again = await queryFn(
+      `SELECT ${ATTACHMENT_COLUMNS}
+       FROM quote_attachments
+       WHERE quote_id = $1 AND contractor_id = $2 AND client_id = $3`,
+      [args.quoteId, args.contractorId, parsed.clientId],
+    );
+    insertedRow = again.rows[0] as QuoteAttachmentRow | undefined;
+    if (!insertedRow) {
+      throw new Error("photo client id conflict did not return the existing row");
+    }
+    return {
+      status: 200,
+      json: { photo: attachmentRowToResponse(insertedRow) },
+    };
+  }
 
   return {
     status: 201,
-    json: { photo: attachmentRowToResponse(inserted.rows[0] as QuoteAttachmentRow) },
+    json: { photo: attachmentRowToResponse(insertedRow) },
   };
 }

@@ -24,8 +24,41 @@ export type ParseQuoteServerIdResult =
   | { ok: false; error: string };
 
 export type ResolveVoiceUploadQuoteResult =
-  | { ok: true; quoteId: string; created: boolean }
-  | { ok: false; status: 404; error: string };
+  | { ok: true; quoteId: string; created: boolean; replayJobId?: string }
+  | { ok: false; status: 404 | 400; error: string };
+
+const CLIENT_KEY_MAX_LENGTH = 64;
+const CLIENT_KEY_ERROR = `clientKey must be a string of at most ${CLIENT_KEY_MAX_LENGTH} characters`;
+
+/**
+ * Multipart field `clientKey` (local quote id). Blank/omitted → insert without a key.
+ */
+export function parseVoiceClientKey(raw: unknown): { ok: true; clientKey: string | null } | { ok: false; error: string } {
+  const value = firstStringField(raw);
+  if (value === undefined || value === null) {
+    return { ok: true, clientKey: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, error: CLIENT_KEY_ERROR };
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return { ok: true, clientKey: null };
+  }
+  if (trimmed.length > CLIENT_KEY_MAX_LENGTH) {
+    return { ok: false, error: CLIENT_KEY_ERROR };
+  }
+  return { ok: true, clientKey: trimmed };
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object"
+    && err !== null
+    && "code" in err
+    && (err as { code: unknown }).code === "23505"
+  );
+}
 
 function firstStringField(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -62,17 +95,64 @@ export async function resolveVoiceUploadQuote(
   runQuery: VoiceUploadQueryFn,
   contractorId: string,
   quoteServerId: string | null,
+  clientKey: string | null = null,
 ): Promise<ResolveVoiceUploadQuoteResult> {
   if (quoteServerId === null) {
-    const inserted = await runQuery(
-      `INSERT INTO quotes (contractor_id, status, total_cents) VALUES ($1, 'ai_processing', 0) RETURNING id`,
-      [contractorId],
-    );
-    const row = inserted.rows[0] as { id: string } | undefined;
-    if (!row?.id) {
+    if (clientKey) {
+      const existing = await runQuery(
+        `SELECT id, status, voice_job_id FROM quotes WHERE contractor_id = $1 AND client_key = $2`,
+        [contractorId, clientKey],
+      );
+      const row = existing.rows[0] as { id: string; status: string; voice_job_id: string | null } | undefined;
+      if (row?.id) {
+        const jobId = typeof row.voice_job_id === "string" ? row.voice_job_id.trim() : "";
+        if (jobId !== "" && row.status !== "ai_failed") {
+          return { ok: true, quoteId: row.id, created: false, replayJobId: jobId };
+        }
+        await runQuery(
+          `UPDATE quotes SET status = 'ai_processing', ai_failure_stage = NULL, voice_job_id = NULL WHERE id = $1 AND contractor_id = $2`,
+          [row.id, contractorId],
+        );
+        return { ok: true, quoteId: row.id, created: false };
+      }
+    }
+
+    let insertedId: string | undefined;
+    try {
+      const inserted = await runQuery(
+        clientKey
+          ? `INSERT INTO quotes (contractor_id, status, total_cents, client_key) VALUES ($1, 'ai_processing', 0, $2)
+             ON CONFLICT (contractor_id, client_key) WHERE client_key IS NOT NULL
+             DO NOTHING
+             RETURNING id`
+          : `INSERT INTO quotes (contractor_id, status, total_cents) VALUES ($1, 'ai_processing', 0) RETURNING id`,
+        clientKey ? [contractorId, clientKey] : [contractorId],
+      );
+      insertedId = (inserted.rows[0] as { id: string } | undefined)?.id;
+    } catch (err) {
+      if (!clientKey || !isUniqueViolation(err)) {
+        throw err;
+      }
+    }
+    if (insertedId) {
+      return { ok: true, quoteId: insertedId, created: true };
+    }
+    if (!clientKey) {
       throw new Error("INSERT quotes did not return id");
     }
-    return { ok: true, quoteId: row.id, created: true };
+    const raced = await runQuery(
+      `SELECT id, status, voice_job_id FROM quotes WHERE contractor_id = $1 AND client_key = $2`,
+      [contractorId, clientKey],
+    );
+    const racedRow = raced.rows[0] as { id: string; status: string; voice_job_id: string | null } | undefined;
+    if (!racedRow?.id) {
+      throw new Error("quote client_key conflict did not return the existing row");
+    }
+    const racedJob = typeof racedRow.voice_job_id === "string" ? racedRow.voice_job_id.trim() : "";
+    if (racedJob !== "" && racedRow.status !== "ai_failed") {
+      return { ok: true, quoteId: racedRow.id, created: false, replayJobId: racedJob };
+    }
+    return { ok: true, quoteId: racedRow.id, created: false };
   }
 
   const existing = await runQuery(

@@ -9,7 +9,7 @@ import { seedCatalog, saveOnboardingProfile } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
-import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue, applyAudioDeadLetterQuoteFailures } from './sync-queue';
+import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue, applyAudioDeadLetterQuoteFailures, retainQueuedWorkForContractor } from './sync-queue';
 import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer, uploadQuotePhoto } from '../api/quotes';
 import { upsertRateCardEntry, deleteRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
@@ -58,6 +58,20 @@ jest.mock('../api/rate-card', () => ({
   upsertRateCardEntry: jest.fn(),
   lookupRateCardEntry: jest.fn(),
   deleteRateCardEntry: jest.fn(),
+}));
+
+const authState = {
+  contractorId: 'contractor-1' as string | null,
+  refreshSession: jest.fn(async () => false),
+};
+
+jest.mock('../store/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      contractor: authState.contractorId ? { id: authState.contractorId } : null,
+      refreshSession: authState.refreshSession,
+    }),
+  },
 }));
 
 type FakeQueueItem = {
@@ -210,6 +224,9 @@ describe('processQueue', () => {
     mockedUploadQuotePhoto.mockReset();
     mockedUpsertRateCardEntry.mockReset();
     mockedDeleteRateCardEntry.mockReset();
+    authState.contractorId = 'contractor-1';
+    authState.refreshSession.mockReset();
+    authState.refreshSession.mockResolvedValue(false);
     resetServerRevisionsForTests();
     mockedDatabase.get.mockImplementation((table: string) => ({
       query: () => ({
@@ -475,7 +492,7 @@ describe('processQueue', () => {
 
     await processQueue();
 
-    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
+    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined, 'local-quote-1');
     expect(quote.serverId).toBe('server-q1');
     expect(quote.voiceJobId).toBe('job-1');
     expect(item.status).toBe('destroyed');
@@ -503,6 +520,7 @@ describe('processQueue', () => {
     expect(mockedUploadAudio).toHaveBeenCalledWith(
       '/tmp/a.m4a',
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'local-quote-1',
     );
     expect(quote.serverId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
     expect(quote.voiceJobId).toBe('job-2');
@@ -526,7 +544,7 @@ describe('processQueue', () => {
 
     await processQueue();
 
-    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
+    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined, 'local-quote-1');
     expect(quote.serverId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
     expect(quote.voiceJobId).toBeNull();
     expect(item.status).toBe('pending');
@@ -544,6 +562,7 @@ describe('processQueue', () => {
     expect(mockedUploadAudio).toHaveBeenCalledWith(
       '/tmp/a.m4a',
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'local-quote-1',
     );
     expect(quote.voiceJobId).toBe('job-2');
     expect(item.status).toBe('destroyed');
@@ -571,6 +590,7 @@ describe('processQueue', () => {
     expect(JSON.parse(queueItems[0]!.payloadJson)).toEqual({
       filePath: '/tmp/a.m4a',
       quoteLocalId: quote.id,
+      _syncOwnerId: 'contractor-1',
     });
     expect(mockedUploadAudio).not.toHaveBeenCalled();
     expect(quote.status).toBe('ai_processing');
@@ -592,7 +612,7 @@ describe('processQueue', () => {
     ).resolves.toBeUndefined();
     await processQueue();
 
-    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
+    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined, 'local-quote-1');
     expect(queueItems[0]!.status).toBe('pending');
     expect(queueItems[0]!.retryCount).toBe(1);
     expect(queueItems[0]!.lastError).toMatch(/network/i);
@@ -683,7 +703,7 @@ describe('processQueue', () => {
 
     await retryDeadLetterItem(item as never);
 
-    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined);
+    expect(mockedUploadAudio).toHaveBeenCalledWith('/tmp/a.m4a', undefined, 'local-quote-1');
     expect(item.status).toBe('destroyed');
     expect(quote.status).toBe('ai_processing');
     expect(quote.voiceJobId).toBe('job-retry');
@@ -913,6 +933,7 @@ describe('processQueue', () => {
       unit: 'each',
       unitPriceCents: 12500,
       tradeCategory: 'plumbing',
+      clientKey: 'local-cat-1',
     });
     expect(item.status).toBe('destroyed');
   });
@@ -1851,7 +1872,9 @@ describe('processQueue', () => {
     await processQueue();
 
     expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
-    expect(item.status).toBe('pending');
+    expect(item.status).toBe('dead_letter');
+    expect(item.retryCount).toBe(0);
+    expect(item.nextRetryAt).toBeNull();
     expect(item.lastError).toBe('Quote cannot be updated in its current status');
     expect(item.lastError).not.toBe('Unknown error');
   });
@@ -2177,5 +2200,217 @@ describe('processQueue', () => {
     expect(mockedUploadQuotePhoto).not.toHaveBeenCalled();
     expect(item.status).toBe('destroyed');
     expect(JSON.parse(quote.photosJson ?? '[]')).toEqual([]);
+  });
+
+  it('syncs a draft that was queued before its quote create in the same flush', async () => {
+    const quote = makeQuote({ id: 'q1', status: 'draft_local', serverId: null, totalCents: 0 });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1', lineItemsJson: '[]' })];
+    const draftItem = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      createdAt: new Date(1),
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 1, unitPriceCents: 100 }]),
+        totalCents: 100,
+      }),
+    });
+    const createItem = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'create',
+      createdAt: new Date(2),
+      payloadJson: JSON.stringify({ status: 'draft_local', totalCents: 0 }),
+    });
+    queueItems = [draftItem, createItem];
+    mockedCreateQuoteOnServer.mockResolvedValue({
+      id: 'srv-new',
+      updatedAt: '2026-10-05T00:00:00.000Z',
+    });
+    mockedFetchQuote.mockRejectedValue(new Error('offline'));
+    mockedUpdateQuoteOnServer.mockResolvedValue({ updatedAt: '2026-10-05T00:00:01.000Z' });
+
+    await processQueue();
+
+    expect(mockedCreateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(quote.serverId).toBe('srv-new');
+    expect(draftItem.status).toBe('destroyed');
+    expect(createItem.status).toBe('destroyed');
+  });
+
+  it('does not dead-letter a draft while its quote create is waiting to retry', async () => {
+    const quote = makeQuote({ id: 'q1', status: 'draft_local', serverId: null });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    const createItem = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'create',
+      createdAt: new Date(1),
+      nextRetryAt: new Date(Date.now() + 60_000),
+      payloadJson: JSON.stringify({ status: 'draft_local', totalCents: 0 }),
+    });
+    const draftItem = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      createdAt: new Date(2),
+      payloadJson: JSON.stringify({ lineItemsJson: '[]', totalCents: 0 }),
+    });
+    queueItems = [createItem, draftItem];
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await processQueue();
+    }
+
+    expect(mockedCreateQuoteOnServer).not.toHaveBeenCalled();
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(draftItem.status).toBe('pending');
+    expect(draftItem.retryCount).toBe(0);
+    expect(draftItem.status).not.toBe('dead_letter');
+  });
+
+  it('sends only the latest draft snapshot when an older update is still queued', async () => {
+    const quote = makeQuote({ id: 'q1', status: 'draft_local', serverId: 'srv-q1' });
+    quotes = [quote];
+    drafts = [makeDraft({ id: 'd1', quoteId: 'q1' })];
+    const older = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      createdAt: new Date(1),
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Pipe', quantity: 1, unitPriceCents: 100 }]),
+        totalCents: 100,
+      }),
+    });
+    const newer = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      createdAt: new Date(2),
+      payloadJson: JSON.stringify({
+        lineItemsJson: JSON.stringify([{ name: 'Valve', quantity: 1, unitPriceCents: 900 }]),
+        totalCents: 900,
+      }),
+    });
+    queueItems = [older, newer];
+    mockedFetchQuote.mockRejectedValue(new Error('offline'));
+    mockedUpdateQuoteOnServer.mockResolvedValue({ updatedAt: '2026-10-05T00:00:00.000Z' });
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
+    expect(mockedUpdateQuoteOnServer.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ totalCents: 900 }),
+    );
+    expect(older.status).toBe('destroyed');
+    expect(newer.status).toBe('destroyed');
+  });
+
+  it('replaces a pending draft payload when a newer edit is enqueued', async () => {
+    mockedIsOnline.mockReturnValue(false);
+    const quote = makeQuote({ id: 'q1', status: 'draft_local', serverId: 'srv-q1' });
+    quotes = [quote];
+    await enqueue({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payload: { lineItemsJson: '[{"name":"Pipe"}]', totalCents: 100 },
+    });
+    await enqueue({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payload: { lineItemsJson: '[{"name":"Valve"}]', totalCents: 900 },
+    });
+    const live = queueItems.filter((item) => item.status !== 'destroyed');
+    expect(live).toHaveLength(1);
+    expect(JSON.parse(live[0]!.payloadJson).totalCents).toBe(900);
+    expect(JSON.parse(live[0]!.payloadJson).lineItemsJson).toContain('Valve');
+  });
+
+  it('refreshes a 401 and finishes the item instead of parking it', async () => {
+    quotes = [makeQuote({ id: 'q1', status: 'draft_local', serverId: 'srv-q1' })];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      payloadJson: JSON.stringify({ customerPhone: '555' }),
+    });
+    queueItems = [item];
+    authState.refreshSession.mockResolvedValue(true);
+    mockedUpdateQuoteOnServer
+      .mockRejectedValueOnce({ status: 401, error: 'Unauthorized' })
+      .mockResolvedValueOnce({ updatedAt: '2026-10-05T00:00:00.000Z' });
+
+    await processQueue();
+
+    expect(authState.refreshSession).toHaveBeenCalledTimes(1);
+    expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(2);
+    expect(item.status).toBe('destroyed');
+    expect(item.retryCount).toBe(0);
+  });
+
+  it('does not let one permanent 400 block the next queued create', async () => {
+    const bad = makeQueueItem({
+      entityId: 'local-bad',
+      createdAt: new Date(1),
+      payloadJson: JSON.stringify({ name: '', unit: 'each', unitPriceCents: 100 }),
+    });
+    const good = makeQueueItem({
+      entityId: 'local-good',
+      createdAt: new Date(2),
+      payloadJson: JSON.stringify({ name: 'Valve', unit: 'each', unitPriceCents: 100 }),
+    });
+    queueItems = [bad, good];
+    mockedCreateCatalogItem
+      .mockRejectedValueOnce({ status: 400, error: 'name is required' })
+      .mockResolvedValueOnce({ id: 'srv-good' });
+
+    await processQueue();
+
+    expect(bad.status).toBe('dead_letter');
+    expect(bad.retryCount).toBe(0);
+    expect(bad.lastError).toBe('name is required');
+    expect(good.status).toBe('destroyed');
+    expect(mockedCreateCatalogItem).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not upload queued work that belongs to another contractor', async () => {
+    quotes = [makeQuote({ id: 'q1', status: 'draft_local', serverId: 'srv-q1' })];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      payloadJson: JSON.stringify({ customerPhone: '555', _syncOwnerId: 'contractor-b' }),
+    });
+    queueItems = [item];
+    authState.contractorId = 'contractor-a';
+
+    await processQueue();
+
+    expect(mockedUpdateQuoteOnServer).not.toHaveBeenCalled();
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(0);
+  });
+
+  it('stamps unowned rows on logout so the next account cannot upload them', async () => {
+    const item = makeQueueItem({
+      entityType: 'rate_card',
+      action: 'update',
+      payloadJson: JSON.stringify({ name: 'Pipe', unit: 'foot', unitPriceCents: 100 }),
+    });
+    queueItems = [item];
+
+    await retainQueuedWorkForContractor('contractor-a');
+    authState.contractorId = 'contractor-b';
+    await processQueue();
+
+    expect(JSON.parse(item.payloadJson)._syncOwnerId).toBe('contractor-a');
+    expect(mockedUpsertRateCardEntry).not.toHaveBeenCalled();
+    expect(item.status).toBe('pending');
   });
 });

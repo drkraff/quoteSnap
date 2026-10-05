@@ -138,6 +138,18 @@ describe('voice API uses apiClient refresh', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
   });
 
+  it('sends the local quote id as clientKey on upload', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(
+      jsonResponse(202, { jobId: 'job-1', quoteId: 'quote-1' }),
+    );
+
+    await uploadAudio('file:///recordings/job.m4a', undefined, 'local-quote-1');
+
+    const body = fetchCalls()[0]?.init?.body;
+    expect(formDataHas(body, 'clientKey')).toBe(true);
+    expect(formDataHas(body, 'quoteServerId')).toBe(false);
+  });
+
   it('refreshes and retries getVoiceStatus with the new access token', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce(jsonResponse(401, { error: 'Unauthorized' }, 'Unauthorized'))

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseQuoteServerId,
+  parseVoiceClientKey,
   resolveVoiceUploadQuote,
   type VoiceUploadQueryFn,
 } from "./upload-quote.js";
@@ -91,6 +92,46 @@ describe("resolveVoiceUploadQuote", () => {
       calls.some((call) => call.sql.includes("INSERT INTO quotes")),
       false,
     );
+  });
+
+  it("reuses a quote created for the same client key instead of inserting another", async () => {
+    const calls: string[] = [];
+    const runQuery: VoiceUploadQueryFn = async (sql) => {
+      calls.push(sql);
+      if (sql.includes("client_key = $2") && sql.includes("SELECT")) {
+        if (calls.filter((entry) => entry.includes("SELECT")).length === 1) {
+          return { rows: [] };
+        }
+        return {
+          rows: [{ id: QUOTE_ID, status: "ai_processing", voice_job_id: "job-1" }],
+        };
+      }
+      if (sql.includes("INSERT")) {
+        return { rows: calls.filter((entry) => entry.includes("INSERT")).length === 1
+          ? [{ id: QUOTE_ID }]
+          : [] };
+      }
+      return { rows: [] };
+    };
+
+    const first = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, null, "local-quote-1");
+    const second = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, null, "local-quote-1");
+
+    assert.deepEqual(first, { ok: true, quoteId: QUOTE_ID, created: true });
+    assert.deepEqual(second, {
+      ok: true,
+      quoteId: QUOTE_ID,
+      created: false,
+      replayJobId: "job-1",
+    });
+    assert.equal(calls.filter((sql) => sql.includes("INSERT")).length, 1);
+    assert.match(calls.find((sql) => sql.includes("INSERT")) ?? "", /client_key/);
+  });
+
+  it("rejects a client key that is not a string", () => {
+    assert.equal(parseVoiceClientKey(12).ok, false);
+    assert.deepEqual(parseVoiceClientKey("  "), { ok: true, clientKey: null });
+    assert.deepEqual(parseVoiceClientKey("local-quote-1"), { ok: true, clientKey: "local-quote-1" });
   });
 
   it("returns 404 when the UUID is missing or belongs to another contractor", async () => {
