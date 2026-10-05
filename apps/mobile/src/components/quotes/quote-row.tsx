@@ -6,6 +6,7 @@ import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import { quoteRowDisplay } from '../../quotes/quote-row-display';
+import { DUPLICATE_QUOTE_A11Y, DUPLICATE_QUOTE_LABEL } from '../../quotes/duplicate-quote';
 import type { QuoteRowSwipeAction } from '../../quotes/delete-local-quote';
 
 export type { QuoteRowSwipeAction };
@@ -16,6 +17,8 @@ interface QuoteRowProps {
   onPress: (quote: Quote) => void;
   swipeAction: QuoteRowSwipeAction;
   onSwipeAction: (quote: Quote) => void;
+  onDuplicate: (quote: Quote) => void;
+  duplicateDisabled?: boolean;
 }
 
 const SWIPE_ACTION_UI: Record<
@@ -33,6 +36,8 @@ export function QuoteRow({
   onPress,
   swipeAction,
   onSwipeAction,
+  onDuplicate,
+  duplicateDisabled = false,
 }: QuoteRowProps): JSX.Element {
   const {
     isAiProcessing,
@@ -48,6 +53,28 @@ export function QuoteRow({
     online,
   });
   const relativeDate = formatRelativeDate(quote.createdAt);
+
+  function renderLeftActions(): JSX.Element {
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.duplicateAction,
+          (pressed || duplicateDisabled) && styles.duplicateActionPressed,
+        ]}
+        onPress={() => {
+          if (duplicateDisabled) return;
+          onDuplicate(quote);
+        }}
+        disabled={duplicateDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={`${DUPLICATE_QUOTE_A11Y} ${phone}`}
+        accessibilityState={{ disabled: duplicateDisabled }}
+      >
+        <Ionicons name="copy-outline" size={22} color="#ffffff" />
+        <Text style={styles.duplicateLabel}>{DUPLICATE_QUOTE_LABEL}</Text>
+      </Pressable>
+    );
+  }
 
   function renderRightActions(): JSX.Element {
     const isUnarchive = swipeAction === 'unarchive';
@@ -68,7 +95,12 @@ export function QuoteRow({
   }
 
   return (
-    <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+    <Swipeable
+      renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
+      overshootLeft={false}
+      overshootRight={false}
+    >
       <Pressable
         style={({ pressed }) => [
           styles.row,
@@ -195,5 +227,23 @@ const styles = StyleSheet.create({
   },
   unarchiveActionPressed: {
     opacity: 0.85,
+  },
+  duplicateAction: {
+    backgroundColor: colors.accent,
+    width: 88,
+    minHeight: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  duplicateActionPressed: {
+    opacity: 0.85,
+  },
+  duplicateLabel: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 2,
   },
 });

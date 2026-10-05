@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Pressable,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Q } from '@nozbe/watermelondb';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { database } from '../../../src/db';
@@ -37,18 +37,32 @@ import {
 } from '../../../src/quotes/share-customer-quote';
 import { shareCustomerQuoteAndMarkSent } from '../../../src/quotes/share-and-mark-sent';
 import { findQuoteRecord } from '../../../src/quotes/find-quote';
+import {
+  DUPLICATE_QUOTE_A11Y,
+  DUPLICATE_QUOTE_FAILED_MESSAGE,
+  DUPLICATE_QUOTE_FAILED_TITLE,
+  DUPLICATE_QUOTE_HINT,
+  DUPLICATE_QUOTE_LABEL,
+  DUPLICATE_QUOTE_MISSING_MESSAGE,
+  createDuplicateTapGuard,
+  duplicateQuoteOnDevice,
+  runDuplication,
+} from '../../../src/quotes/duplicate-quote';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const contractor = useAuthStore((s) => s.contractor);
+  const duplicateGuard = useRef(createDuplicateTapGuard()).current;
 
   const [quote, setQuote] = useState<QuoteDetailSnapshot | null>(null);
   const [lineItems, setLineItems] = useState<QuoteLineItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +191,31 @@ export default function QuoteDetailScreen(): JSX.Element {
     }
   }
 
+  async function handleDuplicatePress(): Promise<void> {
+    if (!id) return;
+    try {
+      await runDuplication(duplicateGuard, async () => {
+        setDuplicating(true);
+        try {
+          const created = await duplicateQuoteOnDevice({
+            sourceQuoteId: id,
+            contractorId: contractor?.id ?? '',
+          });
+          if (!created.ok) {
+            Alert.alert(DUPLICATE_QUOTE_FAILED_TITLE, DUPLICATE_QUOTE_MISSING_MESSAGE);
+            return;
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          router.push(`/draft/${created.quoteId}` as any);
+        } finally {
+          setDuplicating(false);
+        }
+      });
+    } catch {
+      Alert.alert(DUPLICATE_QUOTE_FAILED_TITLE, DUPLICATE_QUOTE_FAILED_MESSAGE);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -229,6 +268,17 @@ export default function QuoteDetailScreen(): JSX.Element {
       >
         <Text style={styles.shareButtonText}>{SHARE_QUOTE_LABEL}</Text>
       </Pressable>
+      <Pressable
+        style={[styles.duplicateButton, duplicating && styles.shareButtonBusy]}
+        onPress={() => { void handleDuplicatePress(); }}
+        accessibilityRole="button"
+        accessibilityLabel={DUPLICATE_QUOTE_A11Y}
+        accessibilityState={{ disabled: duplicating }}
+        disabled={duplicating}
+      >
+        <Text style={styles.duplicateButtonText}>{DUPLICATE_QUOTE_LABEL}</Text>
+      </Pressable>
+      <Text style={styles.duplicateHint}>{DUPLICATE_QUOTE_HINT}</Text>
     </ScrollView>
   );
 }
@@ -273,5 +323,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: colors.accent,
+  },
+  duplicateButton: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  duplicateButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  duplicateHint: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
   },
 });
