@@ -8,26 +8,52 @@ export type ShutdownDeps = {
   logError: (err: unknown) => void;
 };
 
-/** Close HTTP, then pg-boss, then the pool. A second signal does not start a second pass. */
+/**
+ * Close HTTP, then pg-boss, then the pool.
+ * A second signal force-exits and does not start a second close.
+ */
 export function createShutdownHandler(deps: ShutdownDeps): () => void {
   let started = false;
+  let exiting = false;
+  let poolCloseStarted = false;
+
+  const finish = (code: number) => {
+    if (exiting) return;
+    exiting = true;
+    deps.exit(code);
+  };
+
+  const closePoolOnce = async () => {
+    if (poolCloseStarted) return;
+    poolCloseStarted = true;
+    await deps.closePool();
+  };
+
   return () => {
-    if (started) return;
+    if (started) {
+      finish(1);
+      return;
+    }
     started = true;
     void (async () => {
       try {
         await deps.closeServer();
+        if (exiting) return;
         await deps.stopBoss();
-        await deps.closePool();
-        deps.exit(0);
+        if (exiting) return;
+        await closePoolOnce();
+        if (exiting) return;
+        finish(0);
       } catch (err) {
+        if (exiting) return;
         deps.logError(err);
         try {
-          await deps.closePool();
+          await closePoolOnce();
         } catch {
-          // The pool may already be closed. Exit is the remaining step.
+          // The pool may already be closed, or end failed. Do not call it again.
         }
-        deps.exit(1);
+        if (exiting) return;
+        finish(1);
       }
     })();
   };

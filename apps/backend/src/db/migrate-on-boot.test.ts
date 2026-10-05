@@ -27,6 +27,9 @@ describe("resolveMigrationsDir", () => {
     assert.ok(files.includes("019_quote_attachments.sql"));
     assert.ok(files.includes("020_rate_card_imported_source.sql"));
     assert.ok(files.includes("021_quote_snapshots.sql"));
+    assert.ok(files.includes("022_quote_client_key.sql"));
+    assert.ok(files.includes("023_quote_snapshot_delete.sql"));
+    assert.ok(files.includes("024_catalog_client_key.sql"));
     assert.ok(existsSync(path.join(dir, "009_quote_archive.sql")));
     assert.ok(existsSync(path.join(dir, "010_rate_card_entries.sql")));
     assert.ok(existsSync(path.join(dir, "011_quote_line_item_unit.sql")));
@@ -40,6 +43,8 @@ describe("resolveMigrationsDir", () => {
     assert.ok(existsSync(path.join(dir, "019_quote_attachments.sql")));
     assert.ok(existsSync(path.join(dir, "020_rate_card_imported_source.sql")));
     assert.ok(existsSync(path.join(dir, "021_quote_snapshots.sql")));
+    assert.ok(existsSync(path.join(dir, "023_quote_snapshot_delete.sql")));
+    assert.ok(existsSync(path.join(dir, "024_catalog_client_key.sql")));
   });
 });
 
