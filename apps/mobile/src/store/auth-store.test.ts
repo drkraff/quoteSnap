@@ -277,6 +277,143 @@ describe('auth-store login/restore hydrate', () => {
     await useAuthStore.getState().restoreSession();
 
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useAuthStore.getState().isLoading).toBe(false);
     expect(hydrateFromServer).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('clears a corrupt stored contractor instead of spinning or entering the app', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return 'stored-access';
+        case KEYS.REFRESH_TOKEN:
+          return 'stored-refresh';
+        case KEYS.CONTRACTOR:
+          return '{not-json';
+        case KEYS.ONBOARDING_COMPLETE:
+          return 'true';
+        default:
+          return null;
+      }
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor: null,
+      accessToken: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    expect(hydrateFromServer).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(KEYS.CONTRACTOR);
+  });
+
+  it('rejects a stored contractor with no id', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return 'stored-access';
+        case KEYS.REFRESH_TOKEN:
+          return 'stored-refresh';
+        case KEYS.CONTRACTOR:
+          return JSON.stringify({ email: 'ada@example.com' });
+        default:
+          return null;
+      }
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useAuthStore.getState().isLoading).toBe(false);
+    expect(hydrateFromServer).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalled();
+  });
+});
+
+function jwtWithExp(expSeconds: number): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ exp: expSeconds, sub: 'contractor-1' })).toString(
+    'base64url',
+  );
+  return `${header}.${payload}.sig`;
+}
+
+describe('auth-store restore expired access token', () => {
+  beforeEach(() => {
+    useAuthStore.setState(initialState);
+    jest.mocked(authApi.refresh).mockReset();
+    jest.mocked(authApi.logout).mockReset();
+    jest.mocked(hydrateFromServer).mockReset();
+    jest.mocked(hydrateFromServer).mockResolvedValue(undefined);
+    jest.mocked(SecureStore.setItemAsync).mockClear();
+    jest.mocked(SecureStore.getItemAsync).mockReset();
+    jest.mocked(SecureStore.deleteItemAsync).mockClear();
+  });
+
+  it('refreshes an expired access token and logs out when refresh is rejected', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return jwtWithExp(1_000);
+        case KEYS.REFRESH_TOKEN:
+          return 'old-refresh';
+        case KEYS.CONTRACTOR:
+          return JSON.stringify(contractor);
+        case KEYS.ONBOARDING_COMPLETE:
+          return 'true';
+        default:
+          return null;
+      }
+    });
+    jest.mocked(authApi.refresh).mockRejectedValue({
+      status: 401,
+      error: 'Invalid or expired refresh token',
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(authApi.refresh).toHaveBeenCalledWith('old-refresh');
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    expect(hydrateFromServer).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalled();
+  });
+
+  it('keeps the local session when an expired access token cannot refresh offline', async () => {
+    const expired = jwtWithExp(1_000);
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return expired;
+        case KEYS.REFRESH_TOKEN:
+          return 'valid-refresh';
+        case KEYS.CONTRACTOR:
+          return JSON.stringify(contractor);
+        case KEYS.ONBOARDING_COMPLETE:
+          return 'true';
+        default:
+          return null;
+      }
+    });
+    jest.mocked(authApi.refresh).mockRejectedValue(new TypeError('Network request failed'));
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(authApi.refresh).toHaveBeenCalledWith('valid-refresh');
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor,
+      accessToken: expired,
+      refreshToken: 'valid-refresh',
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
   });
 });

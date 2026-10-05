@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
+import multer from "multer";
 import { errorHandler, requestIdMiddleware, resolveRequestId } from "./http.js";
 import { createApprovalRouter } from "../routes/approval-router.js";
 import { createApprovalLimiter } from "../quotes/approval-security.js";
@@ -119,6 +120,91 @@ describe("errorHandler", () => {
       assert.equal(line.route, "GET /q/:redacted");
       assert.equal(JSON.stringify(line).includes(token), false);
       assert.match(line.error.message, /\/q\/:redacted/);
+    } finally {
+      captured.restore();
+      await server.close();
+    }
+  });
+});
+
+describe("oversized bodies and multer limits", () => {
+  it("maps an oversize JSON body to 413 with a plain message and a redacted log", async () => {
+    const captured = captureConsoleError();
+    const app = express();
+    app.use(requestIdMiddleware);
+    app.use(express.json());
+    app.post("/echo", (_req, res) => {
+      res.json({ ok: true });
+    });
+    app.use(errorHandler);
+    const server = await listen(app);
+    try {
+      const payload = JSON.stringify({
+        note: `sk-proj-abc123def456ghi789 phone=+15555550100 ${"x".repeat(120_000)}`,
+      });
+      const res = await fetch(`${server.url}/echo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Request-Id": "req-too-big",
+        },
+        body: payload,
+      });
+      const body: unknown = await res.json();
+      assert.equal(res.status, 413);
+      assert.deepEqual(body, { error: "That upload is too large." });
+      assert.equal(JSON.stringify(body).includes("sk-proj"), false);
+      assert.equal(JSON.stringify(body).includes("+15555550100"), false);
+      assert.equal(JSON.stringify(body).includes("stack"), false);
+      const line = JSON.parse(captured.lines[0]!) as { status: number; error: { message: string } };
+      assert.equal(line.status, 413);
+      assert.equal(JSON.stringify(line).includes("sk-proj-abc123def456ghi789"), false);
+      assert.equal(JSON.stringify(line).includes("+15555550100"), false);
+      assert.equal(JSON.stringify(line).includes("at "), false);
+    } finally {
+      captured.restore();
+      await server.close();
+    }
+  });
+
+  it("maps a multer file-size limit to 413 and other multer limits to 400", async () => {
+    const captured = captureConsoleError();
+    const app = express();
+    app.use(requestIdMiddleware);
+    const upload = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 16 },
+    });
+    app.post("/audio", upload.single("audio"), (_req, res) => {
+      res.json({ ok: true });
+    });
+    app.post("/one-field", upload.single("audio"), (_req, res) => {
+      res.json({ ok: true });
+    });
+    app.use(errorHandler);
+    const server = await listen(app);
+    try {
+      const tooBig = new FormData();
+      tooBig.append("audio", new Blob([new Uint8Array(64)]), "clip.m4a");
+      const sized = await fetch(`${server.url}/audio`, { method: "POST", body: tooBig });
+      const sizedBody: unknown = await sized.json();
+      assert.equal(sized.status, 413);
+      assert.deepEqual(sizedBody, { error: "That upload is too large." });
+      assert.equal(JSON.stringify(sizedBody).includes("LIMIT_FILE_SIZE"), false);
+
+      const unexpected = new FormData();
+      unexpected.append("photo", new Blob([new Uint8Array(4)]), "still.jpg");
+      const rejected = await fetch(`${server.url}/one-field`, { method: "POST", body: unexpected });
+      const rejectedBody: unknown = await rejected.json();
+      assert.equal(rejected.status, 400);
+      assert.deepEqual(rejectedBody, { error: "That upload could not be accepted." });
+      assert.equal(JSON.stringify(rejectedBody).includes("MulterError"), false);
+
+      for (const lineText of captured.lines) {
+        const line = JSON.parse(lineText) as { status: number; stack?: string };
+        assert.equal(line.stack, undefined);
+        assert.ok(line.status === 413 || line.status === 400);
+      }
     } finally {
       captured.restore();
       await server.close();

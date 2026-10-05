@@ -3,7 +3,9 @@ import { fetchQuotes } from '../api/quotes';
 import { database } from '../db';
 import {
   hydrateFromServer,
+  hydratePullPlan,
   mergeHydratedTradeCategory,
+  parseServerTimestamp,
   resetHydrateForTests,
   toDraftLineItems,
   upsertCatalogItems,
@@ -107,6 +109,45 @@ function attachUpdate<T extends { update: (fn: (record: T) => void) => Promise<v
   };
   return row;
 }
+
+describe('parseServerTimestamp', () => {
+  it('does not stamp device now when the server time is unreadable', () => {
+    expect(parseServerTimestamp('not-a-date').getTime()).toBe(0);
+    expect(parseServerTimestamp('').getTime()).toBe(0);
+    expect(parseServerTimestamp('2026-09-14T12:00:00.000Z').toISOString()).toBe(
+      '2026-09-14T12:00:00.000Z',
+    );
+  });
+});
+
+describe('hydratePullPlan', () => {
+  it('keeps a successful catalog pull when one quote list fails', () => {
+    expect(
+      hydratePullPlan({
+        catalog: 'ok',
+        activeQuotes: 'ok',
+        archivedQuotes: 'failed',
+      }),
+    ).toEqual({ applyCatalog: true, applyQuotes: false });
+  });
+
+  it('does not apply quotes unless both quote lists succeeded', () => {
+    expect(
+      hydratePullPlan({
+        catalog: 'failed',
+        activeQuotes: 'failed',
+        archivedQuotes: 'ok',
+      }),
+    ).toEqual({ applyCatalog: false, applyQuotes: false });
+    expect(
+      hydratePullPlan({
+        catalog: 'ok',
+        activeQuotes: 'ok',
+        archivedQuotes: 'ok',
+      }),
+    ).toEqual({ applyCatalog: true, applyQuotes: true });
+  });
+});
 
 describe('mergeHydratedTradeCategory', () => {
   it('keeps a local tradeCategory when the server stored null (A-15)', () => {
@@ -1378,6 +1419,48 @@ describe('hydrateFromServer', () => {
     expect(mockedFetchQuotes).toHaveBeenCalledTimes(2);
     expect(mockedFetchQuotes).toHaveBeenNthCalledWith(1);
     expect(mockedFetchQuotes).toHaveBeenNthCalledWith(2, { archived: true });
+  });
+
+  it('writes catalog when the archived quote pull fails and does not treat that as an empty archive list', async () => {
+    const created: string[] = [];
+    mockedDatabase.get.mockImplementation((table: string) => ({
+      query: () => ({ fetch: async () => [] }),
+      create: async (writer: (record: Record<string, unknown>) => void) => {
+        created.push(table);
+        const record: Record<string, unknown> & {
+          update: (fn: (row: Record<string, unknown>) => void) => Promise<void>;
+        } = {
+          id: `id-${table}`,
+          async update(fn) {
+            fn(record);
+          },
+        };
+        writer(record);
+        return record;
+      },
+    }));
+    mockedFetchCatalog.mockResolvedValue([
+      {
+        id: 'cat-1',
+        name: 'Pipe',
+        unit: 'each',
+        unitPriceCents: 500,
+        tradeCategory: 'plumbing',
+        isArchived: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+    mockedFetchQuotes.mockImplementation(async (opts?: { archived?: boolean }) => {
+      if (opts?.archived) {
+        throw new Error('archived down');
+      }
+      return [];
+    });
+
+    await expect(hydrateFromServer(contractorId)).rejects.toThrow('archived down');
+    expect(created).toContain('catalog_items');
+    expect(created).not.toContain('quotes');
   });
 
   it('does not run overlapping hydrates concurrently', async () => {

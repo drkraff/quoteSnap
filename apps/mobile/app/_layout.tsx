@@ -6,6 +6,7 @@ import { useAuthStore } from '../src/store/auth-store';
 import { resolveSessionRedirect } from '../src/navigation/authenticated-entry';
 import { initNetworkMonitor } from '../src/sync/network-monitor';
 import { initSyncQueue } from '../src/sync/sync-queue';
+import { RootErrorBoundary } from '../src/navigation/root-error-boundary';
 
 export default function RootLayout(): JSX.Element {
   const { isLoading, contractor, accessToken, onboardingComplete, restoreSession } =
@@ -49,7 +50,9 @@ export default function RootLayout(): JSX.Element {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Slot />
+      <RootErrorBoundary>
+        <Slot />
+      </RootErrorBoundary>
     </GestureHandlerRootView>
   );
 }

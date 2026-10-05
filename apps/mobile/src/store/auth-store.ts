@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as authApi from '../api/auth';
 import type { ContractorResponse } from '../api/auth';
 import { isUnauthorizedError } from '../api/client';
+import { accessTokenExpired, parseStoredContractor } from '../auth/stored-session';
 
 const KEYS = {
   ACCESS_TOKEN: 'quotesnap_access_token',
@@ -170,15 +171,33 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           SecureStore.getItemAsync(KEYS.ONBOARDING_COMPLETE),
         ]);
 
-      if (!storedRefreshToken || !storedContractor) {
-        set({ isLoading: false });
+      const contractor = parseStoredContractor(storedContractor) as Contractor | null;
+      const hadStoredSession = Boolean(
+        storedRefreshToken || storedAccessToken || storedContractor,
+      );
+      if (!storedRefreshToken || !contractor) {
+        if (hadStoredSession) {
+          try {
+            await clearTokens();
+          } catch {
+            // Still leave the app logged out.
+          }
+        }
+        set({
+          contractor: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          onboardingComplete: false,
+          isLoading: false,
+        });
         return;
       }
 
-      const contractor = JSON.parse(storedContractor) as Contractor;
       const onboardingComplete = storedOnboarding === 'true';
+      const accessExpired = accessTokenExpired(storedAccessToken, Date.now());
 
-      if (storedAccessToken) {
+      if (storedAccessToken && !accessExpired) {
         // Set tokens immediately; access token may be expired but will auto-refresh on first API call
         set({
           contractor,
@@ -205,12 +224,20 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
             await pullLocalState(contractor.id);
           } else {
             await clearTokens();
-            set({ isLoading: false });
+            set({
+              contractor: null,
+              accessToken: null,
+              refreshToken: null,
+              isAuthenticated: false,
+              onboardingComplete: false,
+              isLoading: false,
+            });
           }
         } catch {
           // Network / server unavailable — keep the local session; do not revoke.
           set({
             contractor,
+            accessToken: storedAccessToken,
             refreshToken: storedRefreshToken,
             isAuthenticated: true,
             isLoading: false,

@@ -114,6 +114,25 @@ describe('hydrateArchivedFlag', () => {
     ).toBe(true);
   });
 
+  it('does not let the device clock beat an unreadable server time', () => {
+    expect(
+      hydrateArchivedFlag({
+        localIsArchived: false,
+        serverIsArchived: true,
+        localUpdatedAt: '2026-09-14T12:00:00.000Z',
+        serverUpdatedAt: 'not-a-date',
+      }),
+    ).toBe(true);
+    expect(
+      hydrateArchivedFlag({
+        localIsArchived: true,
+        serverIsArchived: false,
+        localUpdatedAt: '2026-09-14T12:00:00.000Z',
+        serverUpdatedAt: '',
+      }),
+    ).toBe(false);
+  });
+
   it('applies a server unarchive', () => {
     expect(
       hydrateArchivedFlag({

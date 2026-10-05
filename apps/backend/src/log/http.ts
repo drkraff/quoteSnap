@@ -29,16 +29,54 @@ export const requestIdMiddleware: RequestHandler = (req, res, next) => {
   next();
 };
 
+export const BODY_TOO_LARGE_MESSAGE = "That upload is too large.";
+export const UPLOAD_REJECTED_MESSAGE = "That upload could not be accepted.";
+
+function errorField(err: unknown, key: string): unknown {
+  if (!err || typeof err !== "object") return undefined;
+  return (err as Record<string, unknown>)[key];
+}
+
+/**
+ * Body-parser's oversize JSON and multer's limit errors are client mistakes.
+ * Anything else stays a generic 500. The message is fixed copy — never err.message.
+ */
+export function httpClientError(err: unknown): { status: 413 | 400; error: string } | null {
+  const type = errorField(err, "type");
+  const status = errorField(err, "status");
+  const statusCode = errorField(err, "statusCode");
+  const code = errorField(err, "code");
+  const name = errorField(err, "name");
+  if (
+    type === "entity.too.large"
+    || status === 413
+    || statusCode === 413
+    || code === "LIMIT_FILE_SIZE"
+  ) {
+    return { status: 413, error: BODY_TOO_LARGE_MESSAGE };
+  }
+  if (name === "MulterError" || (typeof code === "string" && code.startsWith("LIMIT_"))) {
+    return { status: 400, error: UPLOAD_REJECTED_MESSAGE };
+  }
+  return null;
+}
+
 /**
  * Unexpected errors become one structured log line and a generic JSON 500.
- * The body is always `{ error: "Internal server error" }` — no stack, no
- * internal message. Route handlers that already sent a response (including
- * the approval page HTML) are left alone.
+ * Oversize JSON and multer limits are 413 / 400 with plain copy. The body
+ * never includes a stack or the internal message. Route handlers that already
+ * sent a response (including the approval page HTML) are left alone.
  */
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
-  logRequestFailure(req, err, "unhandled_error", 500);
+  const client = httpClientError(err);
+  const status = client?.status ?? 500;
+  logRequestFailure(req, err, "unhandled_error", status);
   if (res.headersSent) {
     next(err);
+    return;
+  }
+  if (client) {
+    res.status(client.status).json({ error: client.error });
     return;
   }
   res.status(500).json({ error: "Internal server error" });

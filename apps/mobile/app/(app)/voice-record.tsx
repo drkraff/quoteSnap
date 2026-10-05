@@ -7,6 +7,7 @@ import {
   Alert,
   Linking,
   SafeAreaView,
+  AppState,
 } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Audio } from 'expo-av';
@@ -31,9 +32,15 @@ import { findQuoteRecord } from '../../src/quotes/find-quote';
 import { parseReuseQuoteId } from '../../src/quotes/retry-voice-quote';
 import { assignStoredAiFailureStage } from '../../src/quotes/ai-failed-recovery';
 import {
-  shouldAlertOnVoiceStopError,
   voiceUploadEnqueueParams,
 } from '../../src/quotes/voice-upload-queue';
+import {
+  VOICE_UPLOAD_RETRY_BODY,
+  VOICE_UPLOAD_RETRY_LABEL,
+  shouldPersistRecordingOnBackground,
+  voiceEnqueueFailureUx,
+  voiceStopFailureUx,
+} from '../../src/quotes/voice-recording-session';
 import { RESUME_KIND_VOICE } from '../../src/quotes/resume-checkpoint';
 import {
   clearResumeCheckpoints,
@@ -56,6 +63,16 @@ export default function VoiceRecordScreen(): JSX.Element {
   const [durationSeconds, setDurationSeconds] = useState(0);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stoppingRef = useRef(false);
+  const pendingUploadRef = useRef<{ quoteId: string; filePath: string } | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{ quoteId: string; filePath: string } | null>(
+    null,
+  );
+
+  const rememberPending = useCallback((next: { quoteId: string; filePath: string } | null) => {
+    pendingUploadRef.current = next;
+    setPendingUpload(next);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -137,18 +154,21 @@ export default function VoiceRecordScreen(): JSX.Element {
   }, [reuseQuoteId]);
 
   const handleStopRecording = useCallback(async () => {
+    if (stoppingRef.current) return;
     const recording = recordingRef.current;
     if (!recording) return;
+    stoppingRef.current = true;
+    recordingRef.current = null;
 
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
+    let persisted = false;
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      recordingRef.current = null;
 
       if (!uri) {
         throw new Error('No recording URI available');
@@ -196,13 +216,12 @@ export default function VoiceRecordScreen(): JSX.Element {
         await FileSystem.deleteAsync(dest, { idempotent: true });
       }
       await FileSystem.moveAsync({ from: uri, to: dest });
+      persisted = true;
 
       // Reset audio mode
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
 
-      // Point the checkpoint at the new quote so a kill here is not a
-      // "reopen the mic" resume — pickResumeTarget treats ai_processing
-      // as already persisted (FAIL-03). Then drop the row on the happy path.
+      // Point the checkpoint at the saved file until the queue row exists.
       try {
         await upsertResumeCheckpoint({
           contractorId,
@@ -210,35 +229,87 @@ export default function VoiceRecordScreen(): JSX.Element {
           quoteId: newQuoteId,
           audioUri: dest,
         });
-        await clearResumeCheckpoints(contractorId, RESUME_KIND_VOICE);
       } catch {
         // Local quote + m4a already exist.
       }
 
-      // FAIL-03: local m4a + quote are already durable. Enqueue (or keep)
-      // the voice job; never Alert if NetInfo is down or POST /voice/upload
-      // fails — SYNC-03 retries in the background.
+      // FAIL-03: local m4a + quote are already durable. Enqueue the voice
+      // job. If the queue write fails, stay here so the contractor can retry
+      // — do not Alert, and do not leave with no queue row.
+      let queued = false;
       try {
         await enqueue(voiceUploadEnqueueParams(newQuoteId, dest));
+        queued = true;
       } catch {
-        // FAIL-03: local quote + m4a already exist. Never Alert mid-flow;
-        // SYNC-03 retries when a queue row can be written / NetInfo returns.
-        if (shouldAlertOnVoiceStopError('after_persist')) {
-          Alert.alert('Recording Error', 'Failed to save recording. Please try again.');
-          setRecordingState('idle');
-          return;
-        }
+        queued = false;
       }
 
+      if (voiceEnqueueFailureUx(queued) === 'retry_on_screen') {
+        rememberPending({ quoteId: newQuoteId, filePath: dest });
+        setRecordingState('stopped');
+        return;
+      }
+
+      try {
+        await clearResumeCheckpoints(contractorId, RESUME_KIND_VOICE);
+      } catch {
+        // Upload is already queued.
+      }
+
+      rememberPending(null);
       setRecordingState('stopped');
       router.back();
     } catch {
-      if (shouldAlertOnVoiceStopError('before_persist')) {
+      let granted = false;
+      try {
+        const permission = await Audio.getPermissionsAsync();
+        granted = permission.granted;
+      } catch {
+        granted = false;
+      }
+      const ux = voiceStopFailureUx({ persisted, permissionGranted: granted });
+      if (ux === 'mic_settings') {
+        Alert.alert(
+          MIC_PERMISSION_TITLE,
+          MIC_PERMISSION_BODY,
+          [
+            { text: MIC_PERMISSION_CANCEL, style: 'cancel' },
+            { text: MIC_PERMISSION_OPEN_SETTINGS, onPress: () => { void Linking.openSettings(); } },
+          ],
+        );
+      } else if (ux === 'save_alert') {
         Alert.alert('Recording Error', 'Failed to save recording. Please try again.');
       }
       setRecordingState('idle');
+    } finally {
+      stoppingRef.current = false;
     }
-  }, [router, reuseQuoteId]);
+  }, [rememberPending, router, reuseQuoteId]);
+
+  const retryPendingUpload = useCallback(async () => {
+    const pending = pendingUploadRef.current;
+    if (!pending) return;
+    try {
+      await enqueue(voiceUploadEnqueueParams(pending.quoteId, pending.filePath));
+      const contractorId = useAuthStore.getState().contractor?.id ?? '';
+      if (contractorId) {
+        await clearResumeCheckpoints(contractorId, RESUME_KIND_VOICE).catch(() => {});
+      }
+      rememberPending(null);
+      router.back();
+    } catch {
+      // Stay on this screen so Try again is still there.
+    }
+  }, [rememberPending, router]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (shouldPersistRecordingOnBackground(next, recordingRef.current != null)) {
+        void handleStopRecording();
+      }
+    });
+    return () => subscription.remove();
+  }, [handleStopRecording]);
 
   const handleMicPress = useCallback(() => {
     if (recordingState === 'idle') {
@@ -268,6 +339,21 @@ export default function VoiceRecordScreen(): JSX.Element {
 
       {/* Content area */}
       <View style={styles.content}>
+        {pendingUpload ? (
+          <View style={styles.retryBlock}>
+            <Text style={styles.hint}>{VOICE_UPLOAD_RETRY_BODY}</Text>
+            <Pressable
+              style={styles.retryButton}
+              onPress={() => {
+                void retryPendingUpload();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={VOICE_UPLOAD_RETRY_LABEL}
+            >
+              <Text style={styles.retryButtonText}>{VOICE_UPLOAD_RETRY_LABEL}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {/* Waveform — visible only during recording */}
         {isRecording && (
           <View style={styles.waveformContainer}>
@@ -284,6 +370,7 @@ export default function VoiceRecordScreen(): JSX.Element {
           onPress={handleMicPress}
           accessibilityLabel={isRecording ? 'Stop recording' : 'Start recording'}
           accessibilityRole="button"
+          disabled={pendingUpload != null}
         >
           <Ionicons
             name={isRecording ? 'stop-outline' : 'mic-outline'}
@@ -371,5 +458,24 @@ const styles = StyleSheet.create({
     lineHeight: typography.label.lineHeight,
     color: colors.mutedText,
     textAlign: 'center',
+  },
+  retryBlock: {
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  retryButton: {
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: 160,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 8,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: typography.body.fontSize,
+    fontWeight: '600',
   },
 });

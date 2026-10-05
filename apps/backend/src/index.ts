@@ -14,6 +14,7 @@ import { errorSummary, log } from "./log/logger.js";
 import { applyApiHardening } from "./http/api-hardening.js";
 import { installGracefulShutdown } from "./http/shutdown.js";
 import { assertBootEnv } from "./env/boot-env.js";
+import { logOptionalFeatureWarning } from "./env/optional-features.js";
 
 const app = express();
 const PORT = process.env["PORT"] ? parseInt(process.env["PORT"], 10) : 3000;
@@ -60,6 +61,7 @@ app.use(errorHandler);
 
 async function startServer(): Promise<void> {
   assertBootEnv();
+  logOptionalFeatureWarning(process.env, log);
   await initBoss();
   const server = app.listen(PORT, () => {
     log("info", { msg: "server_listening", port: PORT });

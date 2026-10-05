@@ -75,7 +75,14 @@ export function hydrateArchivedFlag(input: {
   if (input.localIsArchived === input.serverIsArchived) {
     return input.serverIsArchived;
   }
-  if (toMs(input.localUpdatedAt) > toMs(input.serverUpdatedAt)) {
+  const localMs = toMs(input.localUpdatedAt);
+  const serverMs = toMs(input.serverUpdatedAt);
+  // An unreadable timestamp is not epoch-0 "older". Do not let the device
+  // clock win just because the server time could not be parsed.
+  if (serverMs <= 0 || localMs <= 0) {
+    return input.serverIsArchived;
+  }
+  if (localMs > serverMs) {
     return input.localIsArchived;
   }
   return input.serverIsArchived;

@@ -47,9 +47,30 @@ function isBlockingStatus(status: string): boolean {
   return BLOCKING_QUEUE_STATUSES.has(status);
 }
 
-function parseMs(iso: string): Date {
+/** Invalid server times stay at epoch so they cannot look like "device now". */
+export function parseServerTimestamp(iso: string): Date {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? new Date() : date;
+  return Number.isNaN(date.getTime()) ? new Date(0) : date;
+}
+
+function parseMs(iso: string): Date {
+  return parseServerTimestamp(iso);
+}
+
+/**
+ * A failed quote list must not be applied as an empty pull. That would
+ * archive local rows that were only missing because the request failed.
+ * Catalog can still land when the quote pulls did not.
+ */
+export function hydratePullPlan(input: {
+  catalog: 'ok' | 'failed';
+  activeQuotes: 'ok' | 'failed';
+  archivedQuotes: 'ok' | 'failed';
+}): { applyCatalog: boolean; applyQuotes: boolean } {
+  return {
+    applyCatalog: input.catalog === 'ok',
+    applyQuotes: input.activeQuotes === 'ok' && input.archivedQuotes === 'ok',
+  };
 }
 
 /**
@@ -366,13 +387,35 @@ export async function upsertQuotes(
 }
 
 async function hydrateOnce(contractorId: string): Promise<void> {
-  const [catalogItems, activeQuotes, archivedQuotes] = await Promise.all([
+  const [catalogResult, activeResult, archivedResult] = await Promise.allSettled([
     fetchCatalogItems(),
     fetchQuotes(),
     fetchQuotes({ archived: true }),
   ]);
-  await upsertCatalogItems(contractorId, catalogItems);
-  await upsertQuotes(contractorId, mergeQuoteHydrateLists(activeQuotes, archivedQuotes));
+  const plan = hydratePullPlan({
+    catalog: catalogResult.status === 'fulfilled' ? 'ok' : 'failed',
+    activeQuotes: activeResult.status === 'fulfilled' ? 'ok' : 'failed',
+    archivedQuotes: archivedResult.status === 'fulfilled' ? 'ok' : 'failed',
+  });
+  if (plan.applyCatalog && catalogResult.status === 'fulfilled') {
+    await upsertCatalogItems(contractorId, catalogResult.value);
+  }
+  if (
+    plan.applyQuotes
+    && activeResult.status === 'fulfilled'
+    && archivedResult.status === 'fulfilled'
+  ) {
+    await upsertQuotes(
+      contractorId,
+      mergeQuoteHydrateLists(activeResult.value, archivedResult.value),
+    );
+  }
+  const failure = [catalogResult, activeResult, archivedResult].find(
+    (result) => result.status === 'rejected',
+  );
+  if (failure && failure.status === 'rejected') {
+    throw failure.reason;
+  }
 }
 
 /**
