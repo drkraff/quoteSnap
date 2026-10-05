@@ -3,6 +3,7 @@ import {
   hasPendingLineEdit,
   resetPendingLineEditsForTests,
 } from '../sync/pending-local-edit';
+import { markDirtyField } from '../sync/local-dirty';
 
 describe('commitDraftLineEdit', () => {
   beforeEach(() => {
@@ -52,5 +53,16 @@ describe('commitDraftLineEdit', () => {
     });
     expect(enqueued).toBe(false);
     expect(hasPendingLineEdit('local-quote-1')).toBe(false);
+  });
+
+  it('does not clear a newer line edit when an older enqueue finishes', async () => {
+    await commitDraftLineEdit({
+      quoteId: 'local-quote-1',
+      writeLocal: async () => undefined,
+      enqueueEdit: async () => {
+        markDirtyField('local-quote-1', 'lines');
+      },
+    });
+    expect(hasPendingLineEdit('local-quote-1')).toBe(true);
   });
 });

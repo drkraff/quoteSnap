@@ -33,6 +33,7 @@ import { colors, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { fetchQuote } from '../../src/api/quotes';
 import { rememberServerRevision } from '../../src/sync/server-revision';
+import { fieldHeld, unsyncedLinesProtected } from '../../src/sync/local-dirty';
 import { quotePressTarget } from '../../src/quotes/status-display';
 import {
   ARCHIVE_QUOTE_CONFIRM_MESSAGE,
@@ -226,10 +227,20 @@ export default function QuotesScreen(): JSX.Element {
                 );
                 const nextLineJson = serializeLineItems(assigned.items);
                 await database.write(async () => {
-                  // Write line items JSON to the draft record BEFORE updating quote status
                   const draftCollection = database.get<Draft>('drafts');
                   const drafts = await draftCollection.query(Q.where('quote_id', q.id)).fetch();
-                  if (drafts.length > 0) {
+                  const holdLines = unsyncedLinesProtected({
+                    quoteId: q.id,
+                    localDirty: q.localDirty,
+                    draftIds: drafts.map((draft) => draft.id),
+                    queue: queueItems.map((item) => ({
+                      entityType: item.entityType,
+                      entityId: item.entityId,
+                      status: item.status,
+                    })),
+                  });
+                  // Write line items JSON to the draft record BEFORE updating quote status
+                  if (!holdLines && drafts.length > 0) {
                     const draft = drafts[0]!;
                     await draft.update((d) => {
                       d.lineItemsJson = nextLineJson;
@@ -237,13 +248,15 @@ export default function QuotesScreen(): JSX.Element {
                   }
                   await q.update((r) => {
                     r.status = ready.status;
-                    r.totalCents = ready.totalCents;
+                    if (!holdLines) {
+                      r.totalCents = ready.totalCents;
+                    }
                     assignStoredAiFailureStage(r, ready.status);
                     r.photosJson = serializePhotos(assigned.photos);
-                    if (clientSentence !== undefined) {
+                    if (clientSentence !== undefined && !fieldHeld(q.id, r.localDirty, 'clientSentence')) {
                       r.clientSentence = clientSentence;
                     }
-                    if (roomsJson) {
+                    if (roomsJson && !fieldHeld(q.id, r.localDirty, 'rooms')) {
                       r.roomsJson = roomsJson;
                     }
                   });
@@ -254,19 +267,31 @@ export default function QuotesScreen(): JSX.Element {
                 await database.write(async () => {
                   const draftCollection = database.get<Draft>('drafts');
                   const drafts = await draftCollection.query(Q.where('quote_id', q.id)).fetch();
-                  if (drafts.length > 0) {
+                  const holdLines = unsyncedLinesProtected({
+                    quoteId: q.id,
+                    localDirty: q.localDirty,
+                    draftIds: drafts.map((draft) => draft.id),
+                    queue: queueItems.map((item) => ({
+                      entityType: item.entityType,
+                      entityId: item.entityId,
+                      status: item.status,
+                    })),
+                  });
+                  if (!holdLines && drafts.length > 0) {
                     await drafts[0]!.update((d) => {
                       d.lineItemsJson = lineItemsJson;
                     });
                   }
                   await q.update((r) => {
                     r.status = failed.status;
-                    r.totalCents = failed.totalCents;
+                    if (!holdLines) {
+                      r.totalCents = failed.totalCents;
+                    }
                     assignStoredAiFailureStage(r, failed.status, failureStage);
-                    if (clientSentence !== undefined) {
+                    if (clientSentence !== undefined && !fieldHeld(q.id, r.localDirty, 'clientSentence')) {
                       r.clientSentence = clientSentence;
                     }
-                    if (roomsJson) {
+                    if (roomsJson && !fieldHeld(q.id, r.localDirty, 'rooms')) {
                       r.roomsJson = roomsJson;
                     }
                   });

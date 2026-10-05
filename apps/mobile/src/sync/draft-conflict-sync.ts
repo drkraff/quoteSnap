@@ -20,6 +20,7 @@ import {
   rememberServerRevision,
   rememberServerRevisionIfAbsent,
 } from './server-revision';
+import { draftForkShouldHoldLocalLines, fieldHeld } from './local-dirty';
 
 export type DraftForkOutcome = 'conflict' | 'clear' | 'skipped' | 'frozen';
 
@@ -56,6 +57,15 @@ export async function fetchAndResolveDraftFork(args: {
     });
     rememberServerRevision(serverId, remote.quote.updatedAt);
     return 'frozen';
+  }
+
+  if (
+    draftForkShouldHoldLocalLines({
+      frozen: false,
+      linesHeld: fieldHeld(args.quote.id, args.quote.localDirty, 'lines'),
+    })
+  ) {
+    return 'skipped';
   }
 
   const serverLines = comparableLineItems(remote.lineItems);

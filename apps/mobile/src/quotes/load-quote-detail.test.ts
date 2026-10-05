@@ -502,4 +502,62 @@ describe('loadQuoteDetail', () => {
     expect(result.source).toBe('network');
     expect(result.lineItems).toEqual(remoteLineItems);
   });
+
+  it('does not replace unsynced local lines or total on a quote-detail pull', async () => {
+    const persistRemoteLineItems = jest.fn(async () => undefined);
+    const localLines = JSON.stringify([
+      { name: 'Valve', quantity: 1, unitPriceCents: 3400 },
+    ]);
+    const result = await loadQuoteDetail({
+      findQuote: async () => localQuote({ totalCents: 3400, localDirty: '{"lines":1}' }),
+      findDrafts: async () => [{ lineItemsJson: localLines }],
+      fetchRemote: async () => ({
+        quote: remoteQuote({ totalCents: 1500, customerPhone: '+1999' }),
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      }),
+      isOnline: () => true,
+      persistRemoteLineItems,
+      preserveLocal: async () => ({
+        phone: false,
+        privateNote: false,
+        clientSentence: false,
+        rooms: false,
+        lines: true,
+      }),
+    });
+
+    expect(persistRemoteLineItems).not.toHaveBeenCalled();
+    expect(result.lineItems[0]?.name).toBe('Valve');
+    expect(result.quote?.totalCents).toBe(3400);
+    expect(result.quote?.customerPhone).toBe('+1999');
+  });
+
+  it.each([
+    ['phone', { customerPhone: '555' }, { customerPhone: '+1999' }, 'customerPhone', '555'],
+    ['privateNote', { privateNote: 'keep note' }, { privateNote: 'server note' }, 'privateNote', 'keep note'],
+    ['clientSentence', { clientSentence: 'keep scope' }, { clientSentence: 'server scope' }, 'clientSentence', 'keep scope'],
+  ] as const)(
+    'keeps a dirty %s on the quote-detail view',
+    async (field, localExtra, remoteExtra, key, expected) => {
+      const result = await loadQuoteDetail({
+        findQuote: async () => localQuote(localExtra),
+        findDrafts: async () => [{ lineItemsJson: hydrateDraftJson }],
+        fetchRemote: async () => ({
+          quote: remoteQuote(remoteExtra),
+          lineItems: remoteLineItems,
+        }),
+        isOnline: () => true,
+        preserveLocal: async () => ({
+          phone: field === 'phone',
+          privateNote: field === 'privateNote',
+          clientSentence: field === 'clientSentence',
+          rooms: false,
+          lines: false,
+        }),
+      });
+      expect(result.quote?.[key]).toBe(expected);
+    },
+  );
 });

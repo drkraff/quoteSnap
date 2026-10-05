@@ -48,7 +48,8 @@ import {
   duplicateQuoteOnDevice,
   runDuplication,
 } from '../../../src/quotes/duplicate-quote';
-import { hasPendingLineEdit } from '../../../src/sync/pending-local-edit';
+import { fieldHeld, quoteDetailPreserve, unsyncedLinesProtected } from '../../../src/sync/local-dirty';
+import { SyncQueueItem } from '../../../src/db/models/sync-queue-item';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
@@ -68,10 +69,31 @@ export default function QuoteDetailScreen(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
 
+    async function linesProtected(): Promise<boolean> {
+      if (typeof id !== 'string') return false;
+      try {
+        const q = await database.get<Quote>('quotes').find(id);
+        const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', id)).fetch();
+        const queue = await database.get<SyncQueueItem>('sync_queue_items').query().fetch();
+        return unsyncedLinesProtected({
+          quoteId: id,
+          localDirty: q.localDirty,
+          draftIds: drafts.map((draft) => draft.id),
+          queue: queue.map((item) => ({
+            entityType: item.entityType,
+            entityId: item.entityId,
+            status: item.status,
+          })),
+        });
+      } catch {
+        return fieldHeld(id, null, 'lines');
+      }
+    }
+
     async function persistRemoteLineItems(
       items: QuoteLineItemResponse[],
     ): Promise<void> {
-      if (typeof id === 'string' && hasPendingLineEdit(id)) return;
+      if (await linesProtected()) return;
       const json = remoteLineItemsToDraftJson(items);
       const draftCollection = database.get<Draft>('drafts');
       const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
@@ -104,14 +126,39 @@ export default function QuoteDetailScreen(): JSX.Element {
           setLoading(false);
         },
         persistRemoteLineItems,
+        preserveLocal: async (local) => {
+          const drafts = await database.get<Draft>('drafts').query(Q.where('quote_id', local.id)).fetch();
+          let queue: SyncQueueItem[] = [];
+          try {
+            queue = await database.get<SyncQueueItem>('sync_queue_items').query().fetch();
+          } catch {
+            queue = [];
+          }
+          return quoteDetailPreserve({
+            quoteId: local.id,
+            localDirty: local.localDirty,
+            draftIds: drafts.map((draft) => draft.id),
+            queue: queue.map((item) => ({
+              entityType: item.entityType,
+              entityId: item.entityId,
+              status: item.status,
+            })),
+          });
+        },
         persistRemoteQuote: async (remoteQuote) => {
           try {
             const q = await database.get<Quote>('quotes').find(id);
             await database.write(async () => {
               await q.update((record) => {
-                record.privateNote = normalizePrivateNote(remoteQuote.privateNote);
-                record.clientSentence = remoteQuote.clientSentence ?? null;
-                record.roomsJson = serializeRooms(remoteQuote.rooms ?? []);
+                if (!fieldHeld(q.id, record.localDirty, 'privateNote')) {
+                  record.privateNote = normalizePrivateNote(remoteQuote.privateNote);
+                }
+                if (!fieldHeld(q.id, record.localDirty, 'clientSentence')) {
+                  record.clientSentence = remoteQuote.clientSentence ?? null;
+                }
+                if (!fieldHeld(q.id, record.localDirty, 'rooms')) {
+                  record.roomsJson = serializeRooms(remoteQuote.rooms ?? []);
+                }
                 record.photosJson = serializePhotos(
                   mergeStoredPhotosWithServer(q.photosJson, remoteQuote.photos ?? []),
                 );

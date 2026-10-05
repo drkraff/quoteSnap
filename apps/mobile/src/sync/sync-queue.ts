@@ -21,7 +21,12 @@ import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sy
 import { createSingleFlight } from './single-flight';
 import { resolveAudioQuoteServerId, quoteServerIdFromUploadError } from './audio-parent';
 import { syncQueuedOnboardingProfile, syncQueuedOnboardingSeed } from './offline-onboarding-seed';
-import { canRetryDeadLetter, deadLetterRetryPatch, queueFailureMessage } from './dead-letter';
+import {
+  canDiscardDeadLetter,
+  canRetryDeadLetter,
+  deadLetterRetryPatch,
+  queueFailureMessage,
+} from './dead-letter';
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
 import { parseRoomsJson } from '../quotes/rooms';
@@ -47,6 +52,11 @@ import {
   shouldParkFrozenMoneyPut,
 } from './frozen-quote';
 import { rememberServerRevision } from './server-revision';
+import {
+  clearDirtyField,
+  durableClearsForSuccessfulPush,
+  localDirtyWithout,
+} from './local-dirty';
 import { ParentNotReadyError } from './parent-not-ready';
 import { classifyQueueFailure } from './queue-failure';
 import {
@@ -441,6 +451,9 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         }[] | undefined,
       });
       await stampQuoteServerRevision(localQuote, serverId, updated.updatedAt);
+      if (localQuote) {
+        await clearPushedDirtyFields(localQuote, payload, null);
+      }
     }
     return;
   }
@@ -493,6 +506,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
         ...(quote.roomsJson != null && quote.roomsJson !== '' ? { rooms } : {}),
       });
       await stampQuoteServerRevision(quote, quote.serverId, updated.updatedAt);
+      await clearPushedDirtyFields(quote, payload, draft.lineItemsJson);
     }
     return;
   }
@@ -669,6 +683,33 @@ async function scheduleRetry(item: SyncQueueItem, error: unknown): Promise<void>
   if (schedule.status === 'dead_letter') {
     await failQuoteForDeadLetterAudio(item);
   }
+}
+
+async function clearPushedDirtyFields(
+  quote: Quote,
+  payload: Record<string, unknown>,
+  lineItemsJson: string | null,
+): Promise<void> {
+  const clears = durableClearsForSuccessfulPush({
+    localDirty: quote.localDirty,
+    customerPhone: quote.customerPhone ?? null,
+    privateNote: quote.privateNote ?? null,
+    clientSentence: quote.clientSentence ?? null,
+    roomsJson: quote.roomsJson ?? null,
+    lineItemsJson,
+    payload,
+  });
+  if (clears.length === 0) return;
+  await database.write(async () => {
+    await quote.update((record) => {
+      let dirty = record.localDirty;
+      for (const clear of clears) {
+        dirty = localDirtyWithout(dirty, clear.field, clear.token);
+        clearDirtyField(record.id, clear.field, clear.token);
+      }
+      record.localDirty = dirty;
+    });
+  });
 }
 
 async function releaseForeignQueueItem(item: SyncQueueItem): Promise<void> {
@@ -877,6 +918,16 @@ export async function retryDeadLetterItem(item: SyncQueueItem): Promise<void> {
   });
   await resumeQuoteForAudioRetry(item);
   await processQueue();
+}
+
+/**
+ * Drop a dead-letter queue row. The local quote (and its lines) stay on the device.
+ */
+export async function discardDeadLetterItem(item: SyncQueueItem): Promise<void> {
+  if (!canDiscardDeadLetter(item.status)) return;
+  await database.write(async () => {
+    await item.destroyPermanently();
+  });
 }
 
 export function resetSyncQueueForTests(): void {

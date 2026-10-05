@@ -9,7 +9,7 @@ import { seedCatalog, saveOnboardingProfile } from '../api/onboarding';
 import { uploadAudio } from '../api/voice';
 import { database } from '../db';
 import { isOnline } from './network-monitor';
-import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, getDeadLetterItems, enqueue, applyAudioDeadLetterQuoteFailures, retainQueuedWorkForContractor } from './sync-queue';
+import { processQueue, resetSyncQueueForTests, retryDeadLetterItem, discardDeadLetterItem, getDeadLetterItems, enqueue, applyAudioDeadLetterQuoteFailures, retainQueuedWorkForContractor } from './sync-queue';
 import { fetchQuote, archiveQuote, unarchiveQuote, updateQuoteOnServer, createQuoteOnServer, uploadQuotePhoto } from '../api/quotes';
 import { upsertRateCardEntry, deleteRateCardEntry } from '../api/rate-card';
 import { NEEDS_REVIEW_STATUS } from './draft-conflict';
@@ -101,6 +101,9 @@ type FakeQuote = {
   roomsJson?: string | null;
   photosJson?: string | null;
   serverRevision?: string | null;
+  localDirty?: string | null;
+  privateNote?: string | null;
+  clientSentence?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -1584,6 +1587,78 @@ describe('processQueue', () => {
 
     expect(mockedUpdateQuoteOnServer).toHaveBeenCalledTimes(1);
     expect(item.status).toBe('destroyed');
+  });
+
+  it('clears a durable line marker after the matching draft push and keeps the quote', async () => {
+    const lines = JSON.stringify([{ name: 'Valve', quantity: 1, unitPriceCents: 3400 }]);
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+      totalCents: 3400,
+      localDirty: JSON.stringify({ lines: 7 }),
+    });
+    const draft = makeDraft({ id: 'd1', quoteId: 'q1', lineItemsJson: lines });
+    quotes = [quote];
+    drafts = [draft];
+    mockedFetchQuote.mockRejectedValue(new Error('network down'));
+    mockedUpdateQuoteOnServer.mockResolvedValue({
+      id: 'srv-q1',
+      status: 'draft_local',
+      updatedAt: '2026-09-01T12:05:00.000Z',
+    });
+    const item = makeQueueItem({
+      entityType: 'draft',
+      entityId: 'd1',
+      action: 'update',
+      payloadJson: JSON.stringify({ lineItemsJson: lines, totalCents: 3400 }),
+    });
+    queueItems = [item];
+
+    await processQueue();
+
+    expect(item.status).toBe('destroyed');
+    expect(quote.localDirty).toBeNull();
+    expect(quote.totalCents).toBe(3400);
+    expect(draft.lineItemsJson).toBe(lines);
+    expect(quotes).toContain(quote);
+  });
+
+  it('discards a permanent 4xx dead-letter item without deleting the quote', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'draft_local',
+      serverId: 'srv-q1',
+      totalCents: 3400,
+      customerPhone: '555',
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      status: 'dead_letter',
+      lastError: 'customerPhone must be at most 20 characters',
+      payloadJson: JSON.stringify({ customerPhone: 'x'.repeat(40) }),
+    });
+    queueItems = [item];
+
+    await discardDeadLetterItem(item as never);
+
+    expect(item.status).toBe('destroyed');
+    expect(quotes).toEqual([quote]);
+    expect(quote.totalCents).toBe(3400);
+    expect(quote.customerPhone).toBe('555');
+    expect(quote.status).toBe('draft_local');
+  });
+
+  it('does not discard a queue item that is still pending', async () => {
+    const item = makeQueueItem({ status: 'pending' });
+    queueItems = [item];
+
+    await discardDeadLetterItem(item as never);
+
+    expect(item.status).toBe('pending');
   });
 
   it('does not PUT a forked draft; applies server lines and parks needs_review', async () => {

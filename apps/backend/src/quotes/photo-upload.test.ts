@@ -252,6 +252,119 @@ describe("attachQuotePhoto", () => {
     }
   });
 
+  it("retries a failed orphan delete once and still returns 200", async () => {
+    const stored = {
+      id: ATTACHMENT_ID,
+      quote_id: QUOTE_ID,
+      contractor_id: CONTRACTOR_ID,
+      client_id: CLIENT_ID,
+      line_client_id: null,
+      room_id: null,
+      r2_key: `photos/${CONTRACTOR_ID}/${ATTACHMENT_ID}.jpg`,
+      mime: PHOTO_MIME_JPEG,
+      created_at: new Date("2026-09-15T00:00:00.000Z"),
+    };
+    let attachmentReads = 0;
+    let deletes = 0;
+    const warnings: { msg: string; r2Key: string }[] = [];
+    const queryFn = mock.fn(async (sql: string) => {
+      if (sql.includes("FROM quotes")) {
+        return { rows: [{ id: QUOTE_ID, status: "draft_local" }] };
+      }
+      if (sql.includes("INSERT INTO quote_attachments")) {
+        const err = new Error("duplicate") as Error & { code: string };
+        err.code = "23505";
+        throw err;
+      }
+      if (sql.includes("FROM quote_attachments")) {
+        attachmentReads += 1;
+        return { rows: attachmentReads === 1 ? [] : [stored] };
+      }
+      return { rows: [] };
+    });
+    const losingId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const outcome = await attachQuotePhoto(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      file: jpegFile,
+      clientId: CLIENT_ID,
+      newAttachmentId: losingId,
+    }, {
+      uploadToR2: async () => {},
+      deleteFromR2: async () => {
+        deletes += 1;
+        if (deletes === 1) throw new Error("r2 blip");
+      },
+      warnOrphan: (fields) => {
+        warnings.push(fields);
+      },
+    });
+    assert.equal(outcome.status, 200);
+    assert.equal(deletes, 2);
+    assert.deepEqual(warnings, []);
+  });
+
+  it("logs the orphan key when the R2 delete keeps failing and still returns 200", async () => {
+    const stored = {
+      id: ATTACHMENT_ID,
+      quote_id: QUOTE_ID,
+      contractor_id: CONTRACTOR_ID,
+      client_id: CLIENT_ID,
+      line_client_id: null,
+      room_id: null,
+      r2_key: `photos/${CONTRACTOR_ID}/${ATTACHMENT_ID}.jpg`,
+      mime: PHOTO_MIME_JPEG,
+      created_at: new Date("2026-09-15T00:00:00.000Z"),
+    };
+    let attachmentReads = 0;
+    let deletes = 0;
+    const warnings: { msg: string; r2Key: string; error: { name: string; message: string } }[] = [];
+    const queryFn = mock.fn(async (sql: string) => {
+      if (sql.includes("FROM quotes")) {
+        return { rows: [{ id: QUOTE_ID, status: "draft_local" }] };
+      }
+      if (sql.includes("INSERT INTO quote_attachments")) {
+        const err = new Error("duplicate") as Error & { code: string };
+        err.code = "23505";
+        throw err;
+      }
+      if (sql.includes("FROM quote_attachments")) {
+        attachmentReads += 1;
+        return { rows: attachmentReads === 1 ? [] : [stored] };
+      }
+      return { rows: [] };
+    });
+    const losingId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const orphanKey = `photos/${CONTRACTOR_ID}/${losingId}.jpg`;
+    const outcome = await attachQuotePhoto(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      file: jpegFile,
+      clientId: CLIENT_ID,
+      newAttachmentId: losingId,
+    }, {
+      uploadToR2: async () => {},
+      deleteFromR2: async () => {
+        deletes += 1;
+        throw new Error("r2 down");
+      },
+      warnOrphan: (fields) => {
+        warnings.push(fields);
+      },
+    });
+    assert.equal(outcome.status, 200);
+    if (outcome.status === 200) {
+      assert.equal(outcome.json.photo.id, ATTACHMENT_ID);
+    }
+    assert.equal(deletes, 2);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0]?.msg, "orphaned_photo_object");
+    assert.equal(warnings[0]?.r2Key, orphanKey);
+    assert.equal(warnings[0]?.r2Key.includes(stored.r2_key) && warnings[0]?.r2Key === stored.r2_key, false);
+    assert.equal(JSON.stringify(warnings[0]).includes("sk-"), false);
+    assert.equal(JSON.stringify(warnings[0]).includes("Bearer"), false);
+  });
+
   it("does not delete the stored object when the race used the same key", async () => {
     const sameId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const stored = {

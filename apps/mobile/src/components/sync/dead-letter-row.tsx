@@ -1,14 +1,19 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { DEAD_LETTER_RETRY_LABEL, type DeadLetterListItem } from '../../sync/dead-letter';
+import {
+  DEAD_LETTER_DISCARD_LABEL,
+  DEAD_LETTER_RETRY_LABEL,
+  type DeadLetterListItem,
+} from '../../sync/dead-letter';
 import { colors, MIN_TOUCH_TARGET, spacing, typography } from '../../theme/tokens';
 
 interface DeadLetterRowProps {
   item: DeadLetterListItem;
   retrying: boolean;
   onRetry: () => void;
+  onDiscard: () => void;
 }
 
-export function DeadLetterRow({ item, retrying, onRetry }: DeadLetterRowProps): JSX.Element {
+export function DeadLetterRow({ item, retrying, onRetry, onDiscard }: DeadLetterRowProps): JSX.Element {
   return (
     <View style={styles.row}>
       <View style={styles.copy}>
@@ -16,23 +21,34 @@ export function DeadLetterRow({ item, retrying, onRetry }: DeadLetterRowProps): 
         <Text style={styles.summary}>{item.summary}</Text>
         <Text style={styles.error}>{item.error}</Text>
       </View>
-      <Pressable
-        style={({ pressed }) => [
-          styles.retry,
-          pressed && !retrying && styles.retryPressed,
-          retrying && styles.retryDisabled,
-        ]}
-        onPress={onRetry}
-        disabled={retrying}
-        accessibilityRole="button"
-        accessibilityLabel={`${DEAD_LETTER_RETRY_LABEL} ${item.title}`}
-      >
-        {retrying ? (
-          <ActivityIndicator size="small" color="#ffffff" />
-        ) : (
-          <Text style={styles.retryLabel}>{DEAD_LETTER_RETRY_LABEL}</Text>
-        )}
-      </Pressable>
+      <View style={styles.actions}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.retry,
+            pressed && !retrying && styles.retryPressed,
+            retrying && styles.retryDisabled,
+          ]}
+          onPress={onRetry}
+          disabled={retrying}
+          accessibilityRole="button"
+          accessibilityLabel={`${DEAD_LETTER_RETRY_LABEL} ${item.title}`}
+        >
+          {retrying ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Text style={styles.retryLabel}>{DEAD_LETTER_RETRY_LABEL}</Text>
+          )}
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.discard, pressed && styles.retryPressed]}
+          onPress={onDiscard}
+          disabled={retrying}
+          accessibilityRole="button"
+          accessibilityLabel={`${DEAD_LETTER_DISCARD_LABEL} ${item.title}`}
+        >
+          <Text style={styles.discardLabel}>{DEAD_LETTER_DISCARD_LABEL}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -90,5 +106,23 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  actions: {
+    gap: spacing.xs,
+  },
+  discard: {
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: 72,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discardLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.destructive,
   },
 });

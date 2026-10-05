@@ -23,7 +23,7 @@ import {
 } from './draft-conflict-queue';
 import { isFrozenQuoteStatus } from './frozen-quote';
 import { toDraftLineItems } from './draft-line-items';
-import { hasPendingLineEdit } from './pending-local-edit';
+import { assignPulledQuoteTextFields, fieldHeld } from './local-dirty';
 import {
   getServerRevision,
   rememberServerRevision,
@@ -225,6 +225,7 @@ export async function upsertQuotes(
   const queueItems = await database.get<SyncQueueItem>('sync_queue_items').query().fetch();
   const blockedQuoteIds = new Set<string>();
   const blockedDraftIds = new Set<string>();
+  const deadLetterDraftIds = new Set<string>();
   const unarchiveHeldIds = new Set<string>();
   for (const item of queueItems) {
     if (isBlockingStatus(item.status)) {
@@ -234,6 +235,9 @@ export async function upsertQuotes(
       if (item.entityType === 'draft') {
         blockedDraftIds.add(item.entityId);
       }
+    }
+    if (item.entityType === 'draft' && item.status === 'dead_letter') {
+      deadLetterDraftIds.add(item.entityId);
     }
     if (isQuoteUnarchiveQueueItem(item)) {
       unarchiveHeldIds.add(item.entityId);
@@ -305,7 +309,8 @@ export async function upsertQuotes(
       const serverLineItems = toDraftLineItems(quote.lineItems ?? [], localCatalogIds);
       const lineItemsJson = serializeLineItems(serverLineItems);
       const draft = draftByQuoteId.get(localQuote.id);
-      const linesHeld = hasPendingLineEdit(localQuote.id);
+      const linesHeld = fieldHeld(localQuote.id, localQuote.localDirty, 'lines');
+      const deadLetterLines = draft != null && deadLetterDraftIds.has(draft.id);
       const holdLocalLines = linesHeld && !isFrozenQuoteStatus(quote.status);
       const dirty =
         blockedQuoteIds.has(localQuote.id)
@@ -313,6 +318,7 @@ export async function upsertQuotes(
         || linesHeld;
       const forked =
         !linesHeld
+        && !deadLetterLines
         && draft != null
         && shouldApplyHydrateDraftConflict({
           dirty,
@@ -339,6 +345,7 @@ export async function upsertQuotes(
       const frozen = isFrozenQuoteStatus(quote.status);
       const draftDirty =
         (draft != null && blockedDraftIds.has(draft.id))
+        || (deadLetterLines && !frozen)
         || holdLocalLines;
 
       if (!blockedQuoteIds.has(localQuote.id) || frozen) {
@@ -346,7 +353,7 @@ export async function upsertQuotes(
           // followed_up_at and follow_up_dismissed are local-only. Do not
           // assign them from the server — login must not clear a snooze.
           record.status = quote.status;
-          record.customerPhone = quote.customerPhone;
+          assignPulledQuoteTextFields(record, quote);
           // Line-item edits queue a draft row, not a quote row. The total
           // lives on the quote and must survive until that draft syncs.
           if (!draftDirty || frozen) {
@@ -354,9 +361,6 @@ export async function upsertQuotes(
           }
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
-          record.privateNote = normalizePrivateNote(quote.privateNote);
-          record.clientSentence = quote.clientSentence ?? null;
-          record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
           record.photosJson = serializePhotos(
             mergeStoredPhotosWithServer(
               record.photosJson,
@@ -388,7 +392,10 @@ export async function upsertQuotes(
         });
       }
       if (draft) {
-        if ((!blockedDraftIds.has(draft.id) && !holdLocalLines) || frozen) {
+        if (
+          (!blockedDraftIds.has(draft.id) && !holdLocalLines && !(deadLetterLines && !frozen))
+          || frozen
+        ) {
           await draft.update((record) => {
             record.lineItemsJson = lineItemsJson;
             record.updatedAt = parseMs(quote.updatedAt);
@@ -465,8 +472,10 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * is a fork only when the remembered server revision moved and the lines
  * disagree; then the server snapshot is applied and the draft is parked as
  * `needs_review` (SYNC-05). The same revision keeps the unpushed local lines
- * and total. Frozen post-send quotes (SYNC-06) always take the server snapshot,
- * even if a draft PUT is queued.
+ * and total. A dead-letter draft update keeps local lines and total until
+ * the contractor retries or discards it, and does not by itself open a fork.
+ * Frozen post-send quotes (SYNC-06) always take the server snapshot,
+ * even if a draft PUT is queued or dead-lettered.
  * Hydrate pulls
  * active GET /quotes and GET /quotes?archived=true so Archived can restore after
  * login. Server-backed quotes missing from both lists are soft-archived locally.

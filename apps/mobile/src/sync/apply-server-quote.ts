@@ -6,9 +6,8 @@ import { Draft } from '../db/models/draft';
 import { Quote } from '../db/models/quote';
 import { serializeLineItems } from '../utils/line-items';
 import { toDraftLineItems } from './draft-line-items';
-import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
-import { normalizePrivateNote } from '../quotes/private-notes';
 import { assignStoredAiFailureStage } from '../quotes/ai-failed-recovery';
+import { assignPulledQuoteTextFields } from './local-dirty';
 import { mergeStoredPhotosWithServer, serializePhotos, type ServerQuotePhoto } from '../quotes/photos';
 import { assignServerRevision } from './server-revision';
 
@@ -44,15 +43,12 @@ export async function applyServerQuoteInWrite(
   await localQuote.update((record) => {
     // followed_up_at and follow_up_dismissed stay as stored locally.
     record.status = serverQuote.status;
-    record.customerPhone = serverQuote.customerPhone;
+    assignPulledQuoteTextFields(record, serverQuote);
     record.totalCents = serverQuote.totalCents;
     record.updatedAt = updatedAt;
     record.sentAt = serverQuote.sentAt ? parseServerDate(serverQuote.sentAt) : null;
     record.voiceJobId = serverQuote.voiceJobId;
     record.isArchived = serverQuote.isArchived === true;
-    record.privateNote = normalizePrivateNote(serverQuote.privateNote);
-    record.clientSentence = serverQuote.clientSentence ?? null;
-    record.roomsJson = serializeRooms((serverQuote.rooms ?? []) as QuoteRoom[]);
     record.photosJson = serializePhotos(
       mergeStoredPhotosWithServer(
         record.photosJson,

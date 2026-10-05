@@ -73,6 +73,7 @@ type FakeQuote = {
   photosJson?: string | null;
   aiFailureStage?: string | null;
   serverRevision?: string | null;
+  localDirty?: string | null;
   update: (fn: (record: FakeQuote) => void) => Promise<void>;
 };
 
@@ -1119,6 +1120,134 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(localQuote.serverRevision).toBe('2026-09-02T01:00:00.000Z');
   });
 
+  it('keeps local lines and total while a draft update is dead-lettered', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Pipe', quantity: 2, unitPriceCents: 1500 },
+        { name: 'Elbow', quantity: 1, unitPriceCents: 400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    const parked: FakeQueueItem = {
+      entityType: 'draft',
+      entityId: 'local-draft-1',
+      action: 'update',
+      status: 'dead_letter',
+      async destroyPermanently() {
+        parked.status = 'destroyed';
+      },
+    };
+    queueItems = [parked];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-03T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          {
+            id: 'li-1',
+            name: 'Pipe',
+            quantity: 1,
+            unitPriceCents: 1500,
+          },
+        ],
+      },
+    ]);
+
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { name: 'Pipe', quantity: 2, unitPriceCents: 1500 },
+      { name: 'Elbow', quantity: 1, unitPriceCents: 400 },
+    ]);
+    expect(localQuote.totalCents).toBe(3400);
+    expect(localQuote.customerPhone).toBe('+15550001111');
+    expect(parked.status).toBe('dead_letter');
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
+  it('still applies a frozen server snapshot while a draft update is dead-lettered', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Valve', quantity: 1, unitPriceCents: 3400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [
+      {
+        entityType: 'draft',
+        entityId: 'local-draft-1',
+        action: 'update',
+        status: 'dead_letter',
+        payloadJson: '{}',
+      },
+    ];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'sent',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: '2026-09-02T01:00:00.000Z',
+        voiceJobId: null,
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      },
+    ]);
+
+    expect(localQuote.status).toBe('sent');
+    expect(localQuote.totalCents).toBe(1500);
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+    ]);
+  });
+
   it('forks from the persisted revision after the in-memory map is cleared', async () => {
     const localQuote = attachUpdate<FakeQuote>({
       id: 'local-quote-1',
@@ -1347,6 +1476,149 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
       { catalogItemId: '', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
     ]);
+  });
+
+  it('keeps durable line edits after the in-memory flag is gone', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: '555',
+      totalCents: 3400,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+      localDirty: JSON.stringify({ lines: 1 }),
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([
+        { name: 'Valve', quantity: 1, unitPriceCents: 3400 },
+      ]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: '+15550001111',
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      },
+    ]);
+
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual([
+      { name: 'Valve', quantity: 1, unitPriceCents: 3400 },
+    ]);
+    expect(localQuote.totalCents).toBe(3400);
+    expect(localQuote.serverRevision).toBe('2026-09-01T00:00:00.000Z');
+    expect(localQuote.customerPhone).toBe('+15550001111');
+  });
+
+  it.each([
+    ['phone', { customerPhone: '555', localDirty: JSON.stringify({ phone: 1 }) }, 'customerPhone', '555', '+15550001111'],
+    ['privateNote', { privateNote: 'keep note', localDirty: JSON.stringify({ privateNote: 1 }) }, 'privateNote', 'keep note', 'server note'],
+    ['clientSentence', { clientSentence: 'keep scope', localDirty: JSON.stringify({ clientSentence: 1 }) }, 'clientSentence', 'keep scope', 'server scope'],
+  ] as const)(
+    'leaves a dirty %s alone until it is enqueued',
+    async (_field, localExtra, key, kept, serverValue) => {
+      const localQuote = attachUpdate<FakeQuote>({
+        id: 'local-quote-1',
+        serverId: 'srv-quote-1',
+        contractorId,
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+        sentAt: null,
+        voiceJobId: null,
+        isArchived: false,
+        ...localExtra,
+      });
+      quotes = [localQuote];
+      drafts = [];
+      queueItems = [];
+
+      await upsertQuotes(contractorId, [
+        {
+          id: 'srv-quote-1',
+          status: 'draft_local',
+          customerPhone: '+15550001111',
+          totalCents: 0,
+          createdAt: '2026-09-02T00:00:00.000Z',
+          updatedAt: '2026-09-02T01:00:00.000Z',
+          sentAt: null,
+          voiceJobId: null,
+          privateNote: 'server note',
+          clientSentence: 'server scope',
+          lineItems: [],
+        },
+      ]);
+
+      expect(localQuote[key]).toBe(kept);
+      expect(serverValue).not.toBe(kept);
+      if (key !== 'customerPhone') {
+        expect(localQuote.customerPhone).toBe('+15550001111');
+      }
+    },
+  );
+
+  it('leaves dirty rooms alone and still applies a clean phone', async () => {
+    const kitchen = JSON.stringify([
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Kitchen', privateNote: null },
+    ]);
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 0,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      roomsJson: kitchen,
+      localDirty: JSON.stringify({ rooms: 1 }),
+    });
+    quotes = [localQuote];
+    drafts = [];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: '+15550001111',
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-02T01:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        rooms: [{ id: '22222222-2222-4222-8222-222222222222', name: 'Bath' }],
+        lineItems: [],
+      },
+    ]);
+
+    expect(localQuote.roomsJson).toBe(kitchen);
+    expect(localQuote.customerPhone).toBe('+15550001111');
   });
 
   it('applies server line items on a dirty draft fork and parks needs_review (SYNC-05)', async () => {
