@@ -134,6 +134,29 @@ describe("resolveVoiceUploadQuote", () => {
     assert.deepEqual(parseVoiceClientKey("local-quote-1"), { ok: true, clientKey: "local-quote-1" });
   });
 
+  it("re-uploads a failed take instead of replaying the old job", async () => {
+    const calls: string[] = [];
+    const runQuery: VoiceUploadQueryFn = async (sql) => {
+      calls.push(sql);
+      if (sql.includes("SELECT")) {
+        return {
+          rows: [{ id: QUOTE_ID, status: "ai_failed", voice_job_id: "job-dead" }],
+        };
+      }
+      return { rows: [] };
+    };
+
+    const result = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, null, "local-quote-1");
+
+    assert.deepEqual(result, { ok: true, quoteId: QUOTE_ID, created: false });
+    assert.equal(result.ok ? result.replayJobId : "not-ok", undefined);
+    assert.equal(calls.some((sql) => sql.includes("INSERT INTO quotes")), false);
+    assert.match(
+      calls.find((sql) => sql.includes("UPDATE")) ?? "",
+      /voice_job_id = NULL/,
+    );
+  });
+
   it("returns 404 when the UUID is missing or belongs to another contractor", async () => {
     const runQuery: VoiceUploadQueryFn = async () => ({ rows: [] });
 

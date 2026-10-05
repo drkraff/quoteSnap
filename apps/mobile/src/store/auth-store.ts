@@ -4,6 +4,7 @@ import * as authApi from '../api/auth';
 import type { ContractorResponse } from '../api/auth';
 import { isUnauthorizedError } from '../api/client';
 import { accessTokenExpired, parseStoredContractor } from '../auth/stored-session';
+import { createSingleFlight } from '../sync/single-flight';
 
 const KEYS = {
   ACCESS_TOKEN: 'quotesnap_access_token',
@@ -11,6 +12,23 @@ const KEYS = {
   CONTRACTOR: 'quotesnap_contractor',
   ONBOARDING_COMPLETE: 'quotesnap_onboarding_complete',
 } as const;
+
+/**
+ * Bumped when login, register, or logout starts. An in-flight restore or
+ * refresh must not write tokens or clear the session after that.
+ */
+let authEpoch = 0;
+const restoreFlight = createSingleFlight();
+
+function bumpAuthEpoch(): number {
+  authEpoch += 1;
+  return authEpoch;
+}
+
+export function resetAuthSessionForTests(): void {
+  authEpoch = 0;
+  restoreFlight.reset();
+}
 
 export type Contractor = ContractorResponse;
 
@@ -67,6 +85,122 @@ async function clearTokens(): Promise<void> {
   ]);
 }
 
+function loggedOutState(): Pick<
+  AuthState,
+  | 'contractor'
+  | 'accessToken'
+  | 'refreshToken'
+  | 'isAuthenticated'
+  | 'onboardingComplete'
+  | 'isLoading'
+> {
+  return {
+    contractor: null,
+    accessToken: null,
+    refreshToken: null,
+    isAuthenticated: false,
+    onboardingComplete: false,
+    isLoading: false,
+  };
+}
+
+async function restoreSessionOnce(
+  get: () => { refreshSession: () => Promise<boolean> },
+  set: (partial: Partial<AuthState>) => void,
+): Promise<void> {
+  const epoch = authEpoch;
+  try {
+    const [storedAccessToken, storedRefreshToken, storedContractor, storedOnboarding] =
+      await Promise.all([
+        SecureStore.getItemAsync(KEYS.ACCESS_TOKEN),
+        SecureStore.getItemAsync(KEYS.REFRESH_TOKEN),
+        SecureStore.getItemAsync(KEYS.CONTRACTOR),
+        SecureStore.getItemAsync(KEYS.ONBOARDING_COMPLETE),
+      ]);
+    if (epoch !== authEpoch) return;
+
+    const contractor = parseStoredContractor(storedContractor) as Contractor | null;
+    const hadStoredSession = Boolean(
+      storedRefreshToken || storedAccessToken || storedContractor,
+    );
+    if (!storedRefreshToken || !contractor) {
+      if (hadStoredSession) {
+        try {
+          if (epoch !== authEpoch) return;
+          await clearTokens();
+        } catch {
+          // Still leave the app logged out.
+        }
+      }
+      if (epoch !== authEpoch) return;
+      set(loggedOutState());
+      return;
+    }
+
+    const onboardingComplete = storedOnboarding === 'true';
+    const accessExpired = accessTokenExpired(storedAccessToken, Date.now());
+
+    if (storedAccessToken && !accessExpired) {
+      if (epoch !== authEpoch) return;
+      set({
+        contractor,
+        accessToken: storedAccessToken,
+        refreshToken: storedRefreshToken,
+        isAuthenticated: true,
+        isLoading: false,
+        onboardingComplete,
+      });
+      await pullLocalState(contractor.id);
+    } else {
+      // Access token missing or already expired. Tokens must persist even
+      // while contractor is still unset on this path.
+      if (epoch !== authEpoch) return;
+      set({ refreshToken: storedRefreshToken });
+      try {
+        const refreshed = await get().refreshSession();
+        if (epoch !== authEpoch) return;
+        if (refreshed) {
+          set({
+            contractor,
+            isAuthenticated: true,
+            isLoading: false,
+            onboardingComplete,
+          });
+          await pullLocalState(contractor.id);
+        } else {
+          if (epoch !== authEpoch) return;
+          await clearTokens();
+          if (epoch !== authEpoch) return;
+          set(loggedOutState());
+        }
+      } catch {
+        // Network / server unavailable — keep the local session; do not revoke.
+        if (epoch !== authEpoch) return;
+        set({
+          contractor,
+          accessToken: storedAccessToken,
+          refreshToken: storedRefreshToken,
+          isAuthenticated: true,
+          isLoading: false,
+          onboardingComplete,
+        });
+        await pullLocalState(contractor.id);
+      }
+    }
+  } catch {
+    // Unreadable SecureStore (corrupt ciphertext). Clear it so the next
+    // launch is not stuck throwing, unless a login already replaced the session.
+    if (epoch !== authEpoch) return;
+    try {
+      await clearTokens();
+    } catch {
+      // Still leave the app logged out.
+    }
+    if (epoch !== authEpoch) return;
+    set(loggedOutState());
+  }
+}
+
 /** Pull catalog/quotes after auth. Failures must not undo a successful login/restore. */
 async function pullLocalState(contractorId: string): Promise<void> {
   try {
@@ -88,36 +222,46 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   onboardingComplete: false,
 
   async login(params) {
+    const epoch = bumpAuthEpoch();
     const response = await authApi.login(params);
+    if (epoch !== authEpoch) return;
     await storeTokens(response.accessToken, response.refreshToken, response.contractor);
+    if (epoch !== authEpoch) return;
     // Returning user who already onboarded has a trade set
     const alreadyOnboarded = response.contractor.trade !== null;
     if (alreadyOnboarded) {
       await SecureStore.setItemAsync(KEYS.ONBOARDING_COMPLETE, 'true');
     }
+    if (epoch !== authEpoch) return;
     set({
       contractor: response.contractor,
       accessToken: response.accessToken,
       refreshToken: response.refreshToken,
       isAuthenticated: true,
+      isLoading: false,
       onboardingComplete: alreadyOnboarded,
     });
     await pullLocalState(response.contractor.id);
   },
 
   async register(params) {
+    const epoch = bumpAuthEpoch();
     const response = await authApi.register(params);
+    if (epoch !== authEpoch) return;
     await storeTokens(response.accessToken, response.refreshToken, response.contractor);
+    if (epoch !== authEpoch) return;
     set({
       contractor: response.contractor,
       accessToken: response.accessToken,
       refreshToken: response.refreshToken,
       isAuthenticated: true,
+      isLoading: false,
       onboardingComplete: false,
     });
   },
 
   async logout() {
+    const epoch = bumpAuthEpoch();
     const { refreshToken, contractor } = get();
     if (contractor?.id) {
       try {
@@ -126,9 +270,12 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         const { retainQueuedWorkForContractor } = require('../sync/sync-queue') as typeof import('../sync/sync-queue');
         await retainQueuedWorkForContractor(contractor.id);
       } catch {
-        // Stamping the queue must not block signing out.
+        // The queue is still unowned. Do not clear the session, or the next
+        // account could upload those rows.
+        return;
       }
     }
+    if (epoch !== authEpoch) return;
     // Best-effort server-side revocation — do not throw on failure
     if (refreshToken) {
       try {
@@ -137,26 +284,36 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         // Ignore logout errors — local session cleared regardless
       }
     }
-    await clearTokens();
+    if (epoch !== authEpoch) return;
+    try {
+      await clearTokens();
+    } catch {
+      // The owner stamp already landed. Still drop the in-memory session.
+    }
+    if (epoch !== authEpoch) return;
     set({
       contractor: null,
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      isLoading: false,
       onboardingComplete: false,
     });
   },
 
   async refreshSession(): Promise<boolean> {
+    const epoch = authEpoch;
     const { refreshToken } = get();
     if (!refreshToken) return false;
     try {
       const response = await authApi.refresh(refreshToken);
+      if (epoch !== authEpoch) return false;
       // Persist even when contractor is still null (restoreSession sets tokens first).
       await Promise.all([
         SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, response.accessToken),
         SecureStore.setItemAsync(KEYS.REFRESH_TOKEN, response.refreshToken),
       ]);
+      if (epoch !== authEpoch) return false;
       set({
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
@@ -172,94 +329,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   },
 
   async restoreSession(): Promise<void> {
-    try {
-      const [storedAccessToken, storedRefreshToken, storedContractor, storedOnboarding] =
-        await Promise.all([
-          SecureStore.getItemAsync(KEYS.ACCESS_TOKEN),
-          SecureStore.getItemAsync(KEYS.REFRESH_TOKEN),
-          SecureStore.getItemAsync(KEYS.CONTRACTOR),
-          SecureStore.getItemAsync(KEYS.ONBOARDING_COMPLETE),
-        ]);
-
-      const contractor = parseStoredContractor(storedContractor) as Contractor | null;
-      const hadStoredSession = Boolean(
-        storedRefreshToken || storedAccessToken || storedContractor,
-      );
-      if (!storedRefreshToken || !contractor) {
-        if (hadStoredSession) {
-          try {
-            await clearTokens();
-          } catch {
-            // Still leave the app logged out.
-          }
-        }
-        set({
-          contractor: null,
-          accessToken: null,
-          refreshToken: null,
-          isAuthenticated: false,
-          onboardingComplete: false,
-          isLoading: false,
-        });
-        return;
-      }
-
-      const onboardingComplete = storedOnboarding === 'true';
-      const accessExpired = accessTokenExpired(storedAccessToken, Date.now());
-
-      if (storedAccessToken && !accessExpired) {
-        // Set tokens immediately; access token may be expired but will auto-refresh on first API call
-        set({
-          contractor,
-          accessToken: storedAccessToken,
-          refreshToken: storedRefreshToken,
-          isAuthenticated: true,
-          isLoading: false,
-          onboardingComplete,
-        });
-        await pullLocalState(contractor.id);
-      } else {
-        // Access token missing — attempt refresh. Tokens must persist even
-        // while contractor is still unset on this path.
-        set({ refreshToken: storedRefreshToken });
-        try {
-          const refreshed = await get().refreshSession();
-          if (refreshed) {
-            set({
-              contractor,
-              isAuthenticated: true,
-              isLoading: false,
-              onboardingComplete,
-            });
-            await pullLocalState(contractor.id);
-          } else {
-            await clearTokens();
-            set({
-              contractor: null,
-              accessToken: null,
-              refreshToken: null,
-              isAuthenticated: false,
-              onboardingComplete: false,
-              isLoading: false,
-            });
-          }
-        } catch {
-          // Network / server unavailable — keep the local session; do not revoke.
-          set({
-            contractor,
-            accessToken: storedAccessToken,
-            refreshToken: storedRefreshToken,
-            isAuthenticated: true,
-            isLoading: false,
-            onboardingComplete,
-          });
-          await pullLocalState(contractor.id);
-        }
-      }
-    } catch {
-      // If SecureStore fails for any reason, treat as unauthenticated
-      set({ isLoading: false });
-    }
+    return restoreFlight.run(() => restoreSessionOnce(get, set));
   },
 
   async updateContractorProfile(profile: {

@@ -106,5 +106,16 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 11,
+      steps: [
+        addColumns({
+          table: 'quotes',
+          columns: [
+            { name: 'server_revision', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });

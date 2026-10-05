@@ -48,6 +48,7 @@ import {
   duplicateQuoteOnDevice,
   runDuplication,
 } from '../../../src/quotes/duplicate-quote';
+import { hasPendingLineEdit } from '../../../src/sync/pending-local-edit';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
 
 export default function QuoteDetailScreen(): JSX.Element {
@@ -70,6 +71,7 @@ export default function QuoteDetailScreen(): JSX.Element {
     async function persistRemoteLineItems(
       items: QuoteLineItemResponse[],
     ): Promise<void> {
+      if (typeof id === 'string' && hasPendingLineEdit(id)) return;
       const json = remoteLineItemsToDraftJson(items);
       const draftCollection = database.get<Draft>('drafts');
       const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();

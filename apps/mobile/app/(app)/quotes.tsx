@@ -289,8 +289,17 @@ export default function QuotesScreen(): JSX.Element {
             const serverId = q.serverId;
             if (serverId) {
               void fetchQuote(serverId)
-                .then((remote) => {
+                .then(async (remote) => {
                   rememberServerRevision(serverId, remote.quote.updatedAt);
+                  try {
+                    await database.write(async () => {
+                      await q.update((record) => {
+                        record.serverRevision = remote.quote.updatedAt;
+                      });
+                    });
+                  } catch {
+                    // The map has this observation. The next hydrate writes the column.
+                  }
                 })
                 .catch(() => {
                   // Offline — next hydrate/GET will stamp the revision.

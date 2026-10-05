@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 10,
+  version: 11,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -37,6 +37,9 @@ export const schema = appSchema({
         // follow_up_dismissed: "Dismiss" hides the reminder. Null = not dismissed.
         { name: 'followed_up_at', type: 'number', isOptional: true },
         { name: 'follow_up_dismissed', type: 'boolean', isOptional: true },
+        // Last server updatedAt (ISO) observed for SYNC-05. Local only.
+        // Null until a pull, GET, or PUT has been remembered. Not enqueued.
+        { name: 'server_revision', type: 'string', isOptional: true },
       ],
     }),
     tableSchema({

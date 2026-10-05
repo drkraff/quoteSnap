@@ -2,8 +2,8 @@ import { schema } from '../db/schema';
 import { migrations } from '../db/migrations';
 
 describe('follow-up schema', () => {
-  it('stores the snooze on quotes at schema version 10', () => {
-    expect(schema.version).toBe(10);
+  it('stores the snooze on quotes at schema version 11', () => {
+    expect(schema.version).toBe(11);
     const columns = schema.tables['quotes']?.columns;
     expect(columns?.['followed_up_at']).toMatchObject({
       name: 'followed_up_at',
@@ -18,7 +18,7 @@ describe('follow-up schema', () => {
   });
 
   it('migrates an existing v9 database forward without a new table', () => {
-    expect(migrations.maxVersion).toBe(10);
+    expect(migrations.maxVersion).toBe(11);
     const step = migrations.sortedMigrations.find((migration) => migration.toVersion === 10);
     expect(step?.steps).toHaveLength(1);
     expect(step?.steps[0]).toMatchObject({

@@ -22,4 +22,6 @@ export class Quote extends Model {
   // Local follow-up reminder. Not a server column. Do not enqueue these.
   @date('followed_up_at') followedUpAt!: Date | null;
   @field('follow_up_dismissed') followUpDismissed!: boolean | null;
+  // Last observed server updatedAt (ISO). Not a server column. Do not enqueue.
+  @text('server_revision') serverRevision!: string | null;
 }

@@ -1,7 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import * as authApi from '../api/auth';
 import { hydrateFromServer } from '../sync/hydrate';
-import { useAuthStore } from './auth-store';
+import { retainQueuedWorkForContractor } from '../sync/sync-queue';
+import { resetAuthSessionForTests, useAuthStore } from './auth-store';
 
 jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(() => Promise.resolve()),
@@ -18,6 +19,10 @@ jest.mock('../api/auth', () => ({
 
 jest.mock('../sync/hydrate', () => ({
   hydrateFromServer: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('../sync/sync-queue', () => ({
+  retainQueuedWorkForContractor: jest.fn(() => Promise.resolve()),
 }));
 
 const contractor = {
@@ -48,6 +53,7 @@ const initialState = {
 
 describe('auth-store refreshSession', () => {
   beforeEach(() => {
+    resetAuthSessionForTests();
     useAuthStore.setState(initialState);
     jest.mocked(authApi.refresh).mockReset();
     jest.mocked(authApi.logout).mockReset();
@@ -166,6 +172,7 @@ describe('auth-store refreshSession', () => {
 
 describe('auth-store login/restore hydrate', () => {
   beforeEach(() => {
+    resetAuthSessionForTests();
     useAuthStore.setState(initialState);
     jest.mocked(authApi.login).mockReset();
     jest.mocked(authApi.register).mockReset();
@@ -343,6 +350,7 @@ function jwtWithExp(expSeconds: number): string {
 
 describe('auth-store restore expired access token', () => {
   beforeEach(() => {
+    resetAuthSessionForTests();
     useAuthStore.setState(initialState);
     jest.mocked(authApi.refresh).mockReset();
     jest.mocked(authApi.logout).mockReset();
@@ -415,5 +423,196 @@ describe('auth-store restore expired access token', () => {
       isLoading: false,
     });
     expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
+  });
+});
+
+describe('auth-store logout and overlapping restore', () => {
+  const contractor2 = { ...contractor, id: 'contractor-2', email: 'bea@example.com' };
+
+  beforeEach(() => {
+    resetAuthSessionForTests();
+    useAuthStore.setState({
+      ...initialState,
+      contractor,
+      accessToken: 'live-access',
+      refreshToken: 'live-refresh',
+      isAuthenticated: true,
+      isLoading: false,
+      onboardingComplete: true,
+    });
+    jest.mocked(authApi.login).mockReset();
+    jest.mocked(authApi.refresh).mockReset();
+    jest.mocked(authApi.logout).mockReset();
+    jest.mocked(hydrateFromServer).mockReset();
+    jest.mocked(hydrateFromServer).mockResolvedValue(undefined);
+    jest.mocked(retainQueuedWorkForContractor).mockReset();
+    jest.mocked(retainQueuedWorkForContractor).mockResolvedValue(undefined);
+    jest.mocked(SecureStore.setItemAsync).mockReset();
+    jest.mocked(SecureStore.setItemAsync).mockResolvedValue(undefined);
+    jest.mocked(SecureStore.getItemAsync).mockReset();
+    jest.mocked(SecureStore.deleteItemAsync).mockReset();
+    jest.mocked(SecureStore.deleteItemAsync).mockResolvedValue(undefined);
+  });
+
+  it('stays signed in when the queue owner stamp fails', async () => {
+    jest.mocked(retainQueuedWorkForContractor).mockRejectedValue(new Error('stamp failed'));
+
+    await useAuthStore.getState().logout();
+
+    expect(retainQueuedWorkForContractor).toHaveBeenCalledWith(contractor.id);
+    expect(authApi.logout).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor,
+      accessToken: 'live-access',
+      refreshToken: 'live-refresh',
+      isAuthenticated: true,
+    });
+  });
+
+  it('stamps the queue before revoke and still signs out when later logout steps fail', async () => {
+    const order: string[] = [];
+    jest.mocked(retainQueuedWorkForContractor).mockImplementation(async () => {
+      order.push('stamp');
+    });
+    jest.mocked(authApi.logout).mockImplementation(async () => {
+      order.push('revoke');
+      throw new Error('revoke failed');
+    });
+    jest.mocked(SecureStore.deleteItemAsync).mockImplementation(async () => {
+      order.push('clear');
+      throw new Error('clear failed');
+    });
+
+    await useAuthStore.getState().logout();
+
+    expect(order[0]).toBe('stamp');
+    expect(order).toContain('revoke');
+    expect(order).toContain('clear');
+    expect(retainQueuedWorkForContractor).toHaveBeenCalledWith(contractor.id);
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor: null,
+      accessToken: null,
+      refreshToken: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+  });
+
+  it('does not let an in-flight restore replace a login that won', async () => {
+    let releaseReads: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      await gate;
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return 'old-access';
+        case KEYS.REFRESH_TOKEN:
+          return 'old-refresh';
+        case KEYS.CONTRACTOR:
+          return JSON.stringify(contractor);
+        case KEYS.ONBOARDING_COMPLETE:
+          return 'true';
+        default:
+          return null;
+      }
+    });
+    jest.mocked(authApi.login).mockResolvedValue({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      contractor: contractor2,
+    });
+
+    const restore = useAuthStore.getState().restoreSession();
+    await new Promise((resolve) => setImmediate(resolve));
+    await useAuthStore.getState().login({ email: contractor2.email, password: 'secret' });
+    releaseReads();
+    await restore;
+
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor: contractor2,
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      isAuthenticated: true,
+    });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('clears an unreadable SecureStore and logs out', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockRejectedValue(new Error('Could not decrypt'));
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor: null,
+      accessToken: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(KEYS.ACCESS_TOKEN);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(KEYS.CONTRACTOR);
+  });
+
+  it('does not clear tokens when login wins while SecureStore read fails', async () => {
+    let rejectReads: (err: Error) => void = () => {};
+    const gate = new Promise<string>((_resolve, reject) => {
+      rejectReads = reject;
+    });
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(() => gate);
+    jest.mocked(authApi.login).mockResolvedValue({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      contractor: contractor2,
+    });
+
+    const restore = useAuthStore.getState().restoreSession();
+    await new Promise((resolve) => setImmediate(resolve));
+    await useAuthStore.getState().login({ email: contractor2.email, password: 'secret' });
+    rejectReads(new Error('Could not decrypt'));
+    await restore;
+
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor: contractor2,
+      accessToken: 'new-access',
+      isAuthenticated: true,
+    });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('refreshes once when two restores overlap on an expired access token', async () => {
+    const store = new Map<string, string>([
+      [KEYS.ACCESS_TOKEN, jwtWithExp(1_000)],
+      [KEYS.REFRESH_TOKEN, 'old-refresh'],
+      [KEYS.CONTRACTOR, JSON.stringify(contractor)],
+      [KEYS.ONBOARDING_COMPLETE, 'true'],
+    ]);
+    const refreshedAccess = jwtWithExp(4_000_000_000);
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      return store.get(key) ?? null;
+    });
+    jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key: string, value: string) => {
+      store.set(key, value);
+    });
+    jest.mocked(authApi.refresh).mockResolvedValue({
+      accessToken: refreshedAccess,
+      refreshToken: 'new-refresh',
+    });
+
+    await Promise.all([
+      useAuthStore.getState().restoreSession(),
+      useAuthStore.getState().restoreSession(),
+    ]);
+
+    expect(authApi.refresh).toHaveBeenCalledTimes(1);
+    expect(authApi.refresh).toHaveBeenCalledWith('old-refresh');
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor,
+      accessToken: refreshedAccess,
+      refreshToken: 'new-refresh',
+      isAuthenticated: true,
+      isLoading: false,
+    });
   });
 });

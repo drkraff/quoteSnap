@@ -23,7 +23,12 @@ import {
 } from './draft-conflict-queue';
 import { isFrozenQuoteStatus } from './frozen-quote';
 import { toDraftLineItems } from './draft-line-items';
-import { getServerRevision, rememberServerRevision } from './server-revision';
+import { hasPendingLineEdit } from './pending-local-edit';
+import {
+  getServerRevision,
+  rememberServerRevision,
+  rememberServerRevisionIfAbsent,
+} from './server-revision';
 import { createSingleFlight } from './single-flight';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 import { normalizePrivateNote } from '../quotes/private-notes';
@@ -264,6 +269,10 @@ export async function upsertQuotes(
 
     const pulledServerIds = new Set(quotes.map((quote) => quote.id));
 
+    for (const row of existingQuotes) {
+      rememberServerRevisionIfAbsent(row.serverId, row.serverRevision);
+    }
+
     for (const quote of quotes) {
       const lastKnownUpdatedAt = getServerRevision(quote.id);
 
@@ -277,6 +286,7 @@ export async function upsertQuotes(
           record.totalCents = quote.totalCents;
           record.createdAt = parseMs(quote.createdAt);
           record.updatedAt = parseMs(quote.updatedAt);
+          record.serverRevision = quote.updatedAt;
           record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
           record.isArchived = quote.isArchived === true;
@@ -295,11 +305,15 @@ export async function upsertQuotes(
       const serverLineItems = toDraftLineItems(quote.lineItems ?? [], localCatalogIds);
       const lineItemsJson = serializeLineItems(serverLineItems);
       const draft = draftByQuoteId.get(localQuote.id);
+      const linesHeld = hasPendingLineEdit(localQuote.id);
+      const holdLocalLines = linesHeld && !isFrozenQuoteStatus(quote.status);
       const dirty =
         blockedQuoteIds.has(localQuote.id)
-        || (draft != null && blockedDraftIds.has(draft.id));
+        || (draft != null && blockedDraftIds.has(draft.id))
+        || linesHeld;
       const forked =
-        draft != null
+        !linesHeld
+        && draft != null
         && shouldApplyHydrateDraftConflict({
           dirty,
           serverStatus: quote.status,
@@ -308,7 +322,11 @@ export async function upsertQuotes(
           lastKnownUpdatedAt,
           serverUpdatedAt: quote.updatedAt,
         });
-      rememberServerRevision(quote.id, quote.updatedAt);
+      // A pending line edit must keep the previous baseline. Advancing it to
+      // this pull would let the later enqueue treat a remote change as unchanged.
+      if (!holdLocalLines) {
+        rememberServerRevision(quote.id, quote.updatedAt);
+      }
 
       if (forked && draft) {
         // SYNC-05: server-as-truth, then park Review-before-sending (do not leave the PUT in the queue).
@@ -319,7 +337,9 @@ export async function upsertQuotes(
       }
 
       const frozen = isFrozenQuoteStatus(quote.status);
-      const draftDirty = draft != null && blockedDraftIds.has(draft.id);
+      const draftDirty =
+        (draft != null && blockedDraftIds.has(draft.id))
+        || holdLocalLines;
 
       if (!blockedQuoteIds.has(localQuote.id) || frozen) {
         await localQuote.update((record) => {
@@ -358,10 +378,17 @@ export async function upsertQuotes(
           if (nextArchived === serverArchived) {
             record.updatedAt = parseMs(quote.updatedAt);
           }
+          if (!holdLocalLines) {
+            record.serverRevision = quote.updatedAt;
+          }
+        });
+      } else if (!holdLocalLines) {
+        await localQuote.update((record) => {
+          record.serverRevision = quote.updatedAt;
         });
       }
       if (draft) {
-        if (!blockedDraftIds.has(draft.id) || frozen) {
+        if ((!blockedDraftIds.has(draft.id) && !holdLocalLines) || frozen) {
           await draft.update((record) => {
             record.lineItemsJson = lineItemsJson;
             record.updatedAt = parseMs(quote.updatedAt);
