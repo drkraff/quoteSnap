@@ -13,9 +13,16 @@ export const DEAD_LETTER_EMPTY_BODY =
   'Nothing is stuck. Your changes sync in the background when you have a signal.';
 
 export const DEAD_LETTER_LIST_INTRO =
-  "These changes didn't go through after several tries. Retry when you have a signal.";
+  "These changes didn't go through after several tries. Retry when you have a signal, or discard a change that cannot be sent. Discarding does not delete the quote on this device.";
 
 export const DEAD_LETTER_RETRY_LABEL = 'Retry';
+
+export const DEAD_LETTER_DISCARD_LABEL = 'Discard';
+
+export const DEAD_LETTER_DISCARD_TITLE = 'Discard this change?';
+
+export const DEAD_LETTER_DISCARD_MESSAGE =
+  'This removes the stuck sync. The quote stays on this device.';
 
 export const SYNC_ISSUES_TITLE = 'Sync issues';
 
@@ -97,6 +104,10 @@ const SUMMARY_BY_KIND: Record<string, string> = {
 };
 
 export function canRetryDeadLetter(status: string): boolean {
+  return status === 'dead_letter';
+}
+
+export function canDiscardDeadLetter(status: string): boolean {
   return status === 'dead_letter';
 }
 

@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { FlatList, SafeAreaView, StyleSheet, Text } from 'react-native';
+import { Alert, FlatList, SafeAreaView, StyleSheet, Text } from 'react-native';
 import { DeadLetterEmptyState } from '../../src/components/sync/dead-letter-empty-state';
 import { DeadLetterRow } from '../../src/components/sync/dead-letter-row';
 import {
+  DEAD_LETTER_DISCARD_LABEL,
+  DEAD_LETTER_DISCARD_MESSAGE,
+  DEAD_LETTER_DISCARD_TITLE,
   DEAD_LETTER_LIST_INTRO,
   toDeadLetterListItem,
 } from '../../src/sync/dead-letter';
-import { retryDeadLetterItem } from '../../src/sync/sync-queue';
+import { discardDeadLetterItem, retryDeadLetterItem } from '../../src/sync/sync-queue';
 import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
 import { colors, spacing, typography } from '../../src/theme/tokens';
 import type { SyncQueueItem } from '../../src/db/models/sync-queue-item';
@@ -14,6 +17,21 @@ import type { SyncQueueItem } from '../../src/db/models/sync-queue-item';
 export default function SyncIssuesScreen(): JSX.Element {
   const items = useDeadLetterItems();
   const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  function handleDiscard(item: SyncQueueItem): void {
+    Alert.alert(DEAD_LETTER_DISCARD_TITLE, DEAD_LETTER_DISCARD_MESSAGE, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: DEAD_LETTER_DISCARD_LABEL,
+        style: 'destructive',
+        onPress: () => {
+          void discardDeadLetterItem(item).catch(() => {
+            // The row stays if the local delete fails.
+          });
+        },
+      },
+    ]);
+  }
 
   async function handleRetry(item: SyncQueueItem): Promise<void> {
     if (retryingId) return;
@@ -38,6 +56,9 @@ export default function SyncIssuesScreen(): JSX.Element {
             retrying={retryingId === item.id}
             onRetry={() => {
               void handleRetry(item);
+            }}
+            onDiscard={() => {
+              handleDiscard(item);
             }}
           />
         )}

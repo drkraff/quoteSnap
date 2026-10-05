@@ -5,6 +5,7 @@ import { parsePriceSource } from '../utils/price-source';
 import { normalizePrivateNote, assignNormalizedPrivateNote } from './private-notes';
 import { parseRoomId, parseRoomsJson, type QuoteRoom } from './rooms';
 import { mergeStoredPhotosWithServer, parsePhotosJson, type QuotePhoto, type ServerQuotePhoto } from './photos';
+import type { QuoteDetailPreserve } from '../sync/local-dirty';
 
 export const QUOTE_DETAIL_OFFLINE_ERROR =
   'Connect to the internet to view full details';
@@ -24,6 +25,7 @@ export type LocalQuoteRecord = {
   clientSentence?: string | null;
   roomsJson?: string | null;
   photosJson?: string | null;
+  localDirty?: string | null;
 };
 
 export type QuoteDetailSnapshot = {
@@ -178,6 +180,7 @@ export function resolveQuoteDetailView(input: {
   localQuote: LocalQuoteRecord | null;
   localDraftJson: string | null;
   remote: RemoteOk | RemoteMiss;
+  preserve?: QuoteDetailPreserve;
 }): LoadQuoteDetailResult {
   if (!input.localQuote) {
     return {
@@ -196,10 +199,20 @@ export function resolveQuoteDetailView(input: {
   const hasLocalSnapshot = input.localDraftJson != null;
 
   if ('ok' in input.remote && input.remote.ok) {
+    const remoteSnap = snapshotFromRemote(input.remote.quote, input.localQuote.photosJson);
+    const localSnap = snapshotFromLocal(input.localQuote);
+    const preserve = input.preserve;
     return {
       found: true,
-      quote: snapshotFromRemote(input.remote.quote, input.localQuote.photosJson),
-      lineItems: input.remote.lineItems,
+      quote: {
+        ...remoteSnap,
+        customerPhone: preserve?.phone ? localSnap.customerPhone : remoteSnap.customerPhone,
+        totalCents: preserve?.lines ? localSnap.totalCents : remoteSnap.totalCents,
+        privateNote: preserve?.privateNote ? localSnap.privateNote : remoteSnap.privateNote,
+        clientSentence: preserve?.clientSentence ? localSnap.clientSentence : remoteSnap.clientSentence,
+        rooms: preserve?.rooms ? localSnap.rooms : remoteSnap.rooms,
+      },
+      lineItems: preserve?.lines ? localItems : input.remote.lineItems,
       source: 'network',
       error: null,
     };
@@ -246,6 +259,7 @@ export type LoadQuoteDetailDeps = {
     lineItems: QuoteLineItemResponse[],
   ) => Promise<void>;
   persistRemoteQuote?: (quote: QuoteResponse) => Promise<void>;
+  preserveLocal?: (local: LocalQuoteRecord) => Promise<QuoteDetailPreserve> | QuoteDetailPreserve;
 };
 
 /**
@@ -293,14 +307,18 @@ export async function loadQuoteDetail(
 
   try {
     const remote = await deps.fetchRemote!(serverId);
+    const preserve = await deps.preserveLocal?.(localQuote);
     const refreshed = resolveQuoteDetailView({
       localQuote,
       localDraftJson,
       remote: { ok: true, quote: remote.quote, lineItems: remote.lineItems },
+      preserve,
     });
     try {
       await deps.persistRemoteQuote?.(remote.quote);
-      await deps.persistRemoteLineItems?.(remote.lineItems);
+      if (!preserve?.lines) {
+        await deps.persistRemoteLineItems?.(remote.lineItems);
+      }
     } catch {
       // In-memory refresh still wins; next offline open keeps the prior draft.
     }

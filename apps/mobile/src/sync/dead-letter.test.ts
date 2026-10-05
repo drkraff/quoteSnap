@@ -1,5 +1,6 @@
 import { FROZEN_QUOTE_WRITE_MESSAGE, QUOTE_MONEY_FROZEN_ERROR } from './frozen-quote';
 import {
+  canDiscardDeadLetter,
   canRetryDeadLetter,
   deadLetterBannerMessage,
   deadLetterErrorMessage,
@@ -10,6 +11,8 @@ import {
   DEAD_LETTER_EMPTY_HEADING,
   DEAD_LETTER_GENERIC_REASON,
   DEAD_LETTER_LIST_INTRO,
+  DEAD_LETTER_DISCARD_LABEL,
+  DEAD_LETTER_DISCARD_MESSAGE,
   DEAD_LETTER_RETRY_LABEL,
   listDeadLetterViews,
   queueFailureMessage,
@@ -203,6 +206,8 @@ describe('dead-letter listing helpers (SYNC-04)', () => {
     expect(DEAD_LETTER_EMPTY_BODY).not.toMatch(/Add Item/i);
     expect(DEAD_LETTER_LIST_INTRO).toMatch(/Retry/i);
     expect(DEAD_LETTER_RETRY_LABEL).toBe('Retry');
+    expect(DEAD_LETTER_DISCARD_LABEL).toBe('Discard');
+    expect(DEAD_LETTER_DISCARD_MESSAGE).toMatch(/quote stays/i);
     expect(SYNC_ISSUES_TITLE).toBe('Sync issues');
   });
 
@@ -222,6 +227,13 @@ describe('dead-letter retry helpers (SYNC-04)', () => {
     expect(canRetryDeadLetter('pending')).toBe(false);
     expect(canRetryDeadLetter('failed')).toBe(false);
     expect(canRetryDeadLetter('in_progress')).toBe(false);
+  });
+
+  it('only discards items that reached dead_letter', () => {
+    expect(canDiscardDeadLetter('dead_letter')).toBe(true);
+    expect(canDiscardDeadLetter('pending')).toBe(false);
+    expect(canDiscardDeadLetter('failed')).toBe(false);
+    expect(canDiscardDeadLetter('needs_review')).toBe(false);
   });
 
   it('resets status to pending with a fresh retry count so processQueue will run', () => {

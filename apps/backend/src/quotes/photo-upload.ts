@@ -1,4 +1,5 @@
 import { deleteFromR2 as deleteFromR2Default, uploadToR2 as uploadToR2Default } from "../services/r2.js";
+import { errorSummary, log } from "../log/logger.js";
 import { isQuoteEditable } from "./quote-write.js";
 import {
   ATTACHMENT_COLUMNS,
@@ -48,6 +49,11 @@ export async function attachQuotePhoto(
   deps: {
     uploadToR2?: typeof uploadToR2Default;
     deleteFromR2?: (key: string) => Promise<void>;
+    warnOrphan?: (fields: {
+      msg: string;
+      r2Key: string;
+      error: { name: string; message: string };
+    }) => void;
   } = {},
 ): Promise<AttachQuotePhotoOutcome> {
   const uploadToR2 = deps.uploadToR2 ?? uploadToR2Default;
@@ -142,11 +148,7 @@ export async function attachQuotePhoto(
     // failure must not turn this idempotent 200 into a 500 (the client would
     // upload yet another object). The stored row's key is left in place.
     if (insertedRow.r2_key !== r2Key) {
-      try {
-        await deleteFromR2(r2Key);
-      } catch {
-        // Residual orphan if R2 delete fails. The database row is not duplicated.
-      }
+      await deleteOrphanedPhotoObject(r2Key, deleteFromR2, deps.warnOrphan);
     }
     return {
       status: 200,
@@ -158,4 +160,37 @@ export async function attachQuotePhoto(
     status: 201,
     json: { photo: attachmentRowToResponse(insertedRow) },
   };
+}
+
+const ORPHAN_DELETE_ATTEMPTS = 2;
+
+/**
+ * Best-effort delete of the losing object. One retry, then a warning that
+ * names the orphan key. Never throws and never includes file bytes or secrets.
+ */
+export async function deleteOrphanedPhotoObject(
+  r2Key: string,
+  deleteFromR2: (key: string) => Promise<void>,
+  warn: (fields: {
+    msg: string;
+    r2Key: string;
+    error: { name: string; message: string };
+  }) => void = (fields) => {
+    log("warn", fields);
+  },
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < ORPHAN_DELETE_ATTEMPTS; attempt += 1) {
+    try {
+      await deleteFromR2(r2Key);
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  warn({
+    msg: "orphaned_photo_object",
+    r2Key,
+    error: errorSummary(lastError),
+  });
 }

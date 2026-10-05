@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
 } from 'react-native';
 import { confidenceTier } from '../../../src/utils/confidence';
@@ -40,6 +41,9 @@ import {
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
 import { commitDraftLineEdit } from '../../../src/quotes/commit-draft-lines';
+import { isDirtyField, localDirtyWith, markDirtyField, type DirtyField } from '../../../src/sync/local-dirty';
+import { clearDurableDirtyField, resumeDurableDirtyEdits } from '../../../src/sync/local-dirty-store';
+import { flushDraftFieldSyncs, shouldFlushDraftFieldsOnAppState } from '../../../src/sync/draft-field-flush';
 import { buildRateCardLearnPayload, rateCardQueueEntityId } from '../../../src/rate-card/learn';
 import { isOnline } from '../../../src/sync/network-monitor';
 import {
@@ -201,45 +205,61 @@ export default function DraftScreen(): JSX.Element {
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const quoteRef = useRef<Quote | null>(null);
-  const phoneWriteGen = useRef(0);
+  const fieldWriteGen = useRef<Partial<Record<DirtyField, number>>>({});
   const phoneSync = useRef(
-    createDraftPhoneSync(async ({ quoteId, customerPhone }) => {
-      await enqueue({
-        entityType: 'quote',
-        entityId: quoteId,
-        action: 'update',
-        payload: { customerPhone },
-      });
-    }),
+    createDraftPhoneSync(
+      async ({ quoteId, customerPhone }) => {
+        await enqueue({
+          entityType: 'quote',
+          entityId: quoteId,
+          action: 'update',
+          payload: { customerPhone },
+        });
+      },
+      PHONE_SYNC_DEBOUNCE_MS,
+      async ({ quoteId, dirtyToken }) => {
+        if (dirtyToken == null) return;
+        await clearDurableDirtyField(quoteId, 'phone', dirtyToken);
+      },
+    ),
   ).current;
   const noteSync = useRef(
-    createLatestDebouncer(async (value: { quoteId: string; privateNote: string | null }) => {
+    createLatestDebouncer(async (value: { quoteId: string; privateNote: string | null; dirtyToken?: number }) => {
       await enqueue({
         entityType: 'quote',
         entityId: value.quoteId,
         action: 'update',
         payload: { privateNote: value.privateNote },
       });
+      if (value.dirtyToken != null) {
+        await clearDurableDirtyField(value.quoteId, 'privateNote', value.dirtyToken);
+      }
     }, PHONE_SYNC_DEBOUNCE_MS),
   ).current;
   const sentenceSync = useRef(
-    createLatestDebouncer(async (value: { quoteId: string; clientSentence: string | null }) => {
+    createLatestDebouncer(async (value: { quoteId: string; clientSentence: string | null; dirtyToken?: number }) => {
       await enqueue({
         entityType: 'quote',
         entityId: value.quoteId,
         action: 'update',
         payload: { clientSentence: value.clientSentence },
       });
+      if (value.dirtyToken != null) {
+        await clearDurableDirtyField(value.quoteId, 'clientSentence', value.dirtyToken);
+      }
     }, PHONE_SYNC_DEBOUNCE_MS),
   ).current;
   const roomsSync = useRef(
-    createLatestDebouncer(async (value: { quoteId: string; rooms: QuoteRoom[] }) => {
+    createLatestDebouncer(async (value: { quoteId: string; rooms: QuoteRoom[]; dirtyToken?: number }) => {
       await enqueue({
         entityType: 'quote',
         entityId: value.quoteId,
         action: 'update',
         payload: { rooms: value.rooms },
       });
+      if (value.dirtyToken != null) {
+        await clearDurableDirtyField(value.quoteId, 'rooms', value.dirtyToken);
+      }
     }, PHONE_SYNC_DEBOUNCE_MS),
   ).current;
 
@@ -277,9 +297,11 @@ export default function DraftScreen(): JSX.Element {
         const draftCollection = database.get<Draft>('drafts');
         const drafts = await draftCollection.query(Q.where('quote_id', id)).fetch();
         if (cancelled) return;
+        let loadedDraft: Draft;
         if (drafts[0]) {
-          setDraft(drafts[0]);
-          setLineItems(parseLineItems(drafts[0].lineItemsJson));
+          loadedDraft = drafts[0];
+          setDraft(loadedDraft);
+          setLineItems(parseLineItems(loadedDraft.lineItemsJson));
         } else {
           let createdId = '';
           await database.write(async () => {
@@ -289,11 +311,25 @@ export default function DraftScreen(): JSX.Element {
             });
             createdId = created.id;
           });
-          const created = await draftCollection.find(createdId);
+          loadedDraft = await draftCollection.find(createdId);
           if (cancelled) return;
-          setDraft(created);
+          setDraft(loadedDraft);
           setLineItems([]);
         }
+        void resumeDurableDirtyEdits({
+          quoteId: q.id,
+          localDirty: q.localDirty,
+          customerPhone: q.customerPhone,
+          privateNote: q.privateNote,
+          clientSentence: q.clientSentence,
+          roomsJson: q.roomsJson,
+          draftId: loadedDraft.id,
+          lineItemsJson: loadedDraft.lineItemsJson,
+          totalCents: q.totalCents,
+          frozen: isFrozenQuoteStatus(q.status),
+        }).catch(() => {
+          // A failed resume leaves the durable marker in place.
+        });
         setLoading(false);
       } catch {
         if (cancelled) return;
@@ -323,11 +359,12 @@ export default function DraftScreen(): JSX.Element {
         // FAIL-07 must not block editing.
       });
       return () => {
+        void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
         void clearResumeCheckpoints(contractorId, RESUME_KIND_DRAFT).catch(() => {
           // Leaving the editor must not throw.
         });
       };
-    }, [loading, loadError, quote]),
+    }, [loading, loadError, quote, phoneSync, noteSync, sentenceSync, roomsSync]),
   );
 
   useEffect(() => {
@@ -415,15 +452,18 @@ export default function DraftScreen(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineItems.length]); // Only on initial load, not every edit
 
-  // Clean up undo timer and flush a pending phone enqueue on unmount
+  // Flush debounced phone, note, sentence, and rooms on leave and background.
   useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (!shouldFlushDraftFieldsOnAppState(next)) return;
+      void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
+    });
     return () => {
+      subscription.remove();
       if (undoTimerRef.current) {
         clearTimeout(undoTimerRef.current);
       }
-      void phoneSync.flush();
-      void sentenceSync.flush();
-      void roomsSync.flush();
+      void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
     };
   }, [phoneSync, noteSync, sentenceSync, roomsSync]);
 
@@ -498,16 +538,18 @@ export default function DraftScreen(): JSX.Element {
     const quoteRow = quote;
     await commitDraftLineEdit({
       quoteId,
-      writeLocal: async () => {
+      writeLocal: async (token) => {
         await database.write(async () => {
+          if (!isDirtyField(quoteId, 'lines')) return;
           await draftRow.update((r) => {
             r.lineItemsJson = lineItemsJson;
           });
-          if (includeTotal) {
-            await quoteRow.update((r) => {
+          await quoteRow.update((r) => {
+            if (includeTotal) {
               r.totalCents = newTotal;
-            });
-          }
+            }
+            r.localDirty = localDirtyWith(r.localDirty, 'lines', token);
+          });
         });
       },
       enqueueEdit: async () => {
@@ -520,6 +562,7 @@ export default function DraftScreen(): JSX.Element {
             : { lineItemsJson },
         });
       },
+      clearDurable: (token) => clearDurableDirtyField(quoteId, 'lines', token),
     });
   }
 
@@ -611,12 +654,33 @@ export default function DraftScreen(): JSX.Element {
     setAddToRoomId(null);
   }
 
+  async function stampQuoteField(
+    q: Quote,
+    field: DirtyField,
+    token: number,
+    apply: (record: Quote) => void,
+  ): Promise<void> {
+    const gen = (fieldWriteGen.current[field] ?? 0) + 1;
+    fieldWriteGen.current[field] = gen;
+    await database.write(async () => {
+      if (fieldWriteGen.current[field] !== gen) return;
+      if (!isDirtyField(q.id, field)) return;
+      await q.update((record) => {
+        apply(record);
+        record.localDirty = localDirtyWith(record.localDirty, field, token);
+      });
+    });
+  }
+
   function handlePrivateNoteChange(text: string): void {
     setPrivateNote(text);
     const q = quoteRef.current;
     if (!q) return;
-    void persistPrivateNoteLocal(q, text);
-    noteSync.schedule({ quoteId: q.id, privateNote: normalizePrivateNote(text) });
+    const token = markDirtyField(q.id, 'privateNote');
+    void stampQuoteField(q, 'privateNote', token, (record) => {
+      record.privateNote = normalizePrivateNote(text);
+    });
+    noteSync.schedule({ quoteId: q.id, privateNote: normalizePrivateNote(text), dirtyToken: token });
   }
 
   function handlePrivateNoteBlur(): void {
@@ -624,39 +688,26 @@ export default function DraftScreen(): JSX.Element {
     void noteSync.flush();
   }
 
-  async function persistPrivateNoteLocal(q: Quote, text: string): Promise<void> {
-    await database.write(async () => {
-      await q.update((r) => {
-        r.privateNote = normalizePrivateNote(text);
-      });
-    });
-  }
-
   function handleClientSentenceChange(text: string): void {
     setClientSentence(text);
     const q = quoteRef.current;
     if (!q) return;
-    void persistClientSentenceLocal(q, text);
-    sentenceSync.schedule({ quoteId: q.id, clientSentence: normalizeClientSentence(text) });
-  }
-
-  async function persistClientSentenceLocal(q: Quote, text: string): Promise<void> {
-    await database.write(async () => {
-      await q.update((r) => {
-        r.clientSentence = normalizeClientSentence(text);
-      });
+    const normalized = normalizeClientSentence(text);
+    const token = markDirtyField(q.id, 'clientSentence');
+    void stampQuoteField(q, 'clientSentence', token, (record) => {
+      record.clientSentence = normalized;
     });
+    sentenceSync.schedule({ quoteId: q.id, clientSentence: normalized, dirtyToken: token });
   }
 
   async function persistRooms(next: QuoteRoom[]): Promise<void> {
     if (!quote) return;
+    const token = markDirtyField(quote.id, 'rooms');
     setRooms(next);
-    await database.write(async () => {
-      await quote.update((r) => {
-        r.roomsJson = serializeRooms(next);
-      });
+    roomsSync.schedule({ quoteId: quote.id, rooms: next, dirtyToken: token });
+    await stampQuoteField(quote, 'rooms', token, (record) => {
+      record.roomsJson = serializeRooms(next);
     });
-    roomsSync.schedule({ quoteId: quote.id, rooms: next });
   }
 
   async function persistPhotos(next: QuotePhoto[]): Promise<void> {
@@ -970,23 +1021,16 @@ export default function DraftScreen(): JSX.Element {
     await persistLineItems(newItems);
   }
 
-  async function persistPhoneLocal(q: Quote, text: string): Promise<void> {
-    const gen = ++phoneWriteGen.current;
-    await database.write(async () => {
-      if (gen !== phoneWriteGen.current) return;
-      await q.update((r) => {
-        r.customerPhone = text;
-      });
-    });
-  }
-
   function handlePhoneChange(text: string): void {
     setPhone(text);
     setValidationError('');
     const q = quoteRef.current;
     if (!q) return;
-    void persistPhoneLocal(q, text);
-    phoneSync.schedule({ quoteId: q.id, customerPhone: text });
+    const token = markDirtyField(q.id, 'phone');
+    void stampQuoteField(q, 'phone', token, (record) => {
+      record.customerPhone = text;
+    });
+    phoneSync.schedule({ quoteId: q.id, customerPhone: text, dirtyToken: token });
   }
 
   async function handleSharePress(): Promise<void> {
@@ -1034,9 +1078,7 @@ export default function DraftScreen(): JSX.Element {
   }
 
   async function handleSendPress(): Promise<void> {
-    await phoneSync.flush();
-    await noteSync.flush();
-    await sentenceSync.flush();
+    await flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
     if (!quote || !draft) {
       setValidationError('Draft not loaded — please go back and try again');
       return;

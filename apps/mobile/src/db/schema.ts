@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 11,
+  version: 12,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -40,6 +40,9 @@ export const schema = appSchema({
         // Last server updatedAt (ISO) observed for SYNC-05. Local only.
         // Null until a pull, GET, or PUT has been remembered. Not enqueued.
         { name: 'server_revision', type: 'string', isOptional: true },
+        // Unsynced local edits: JSON token map {lines, phone, privateNote, clientSentence, rooms}.
+        // Hydrate leaves those fields alone until enqueue or discard clears the token.
+        { name: 'local_dirty', type: 'string', isOptional: true },
       ],
     }),
     tableSchema({

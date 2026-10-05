@@ -3,6 +3,7 @@ export const PHONE_SYNC_DEBOUNCE_MS = 400;
 export type DraftPhoneSyncPayload = {
   quoteId: string;
   customerPhone: string;
+  dirtyToken?: number;
 };
 
 type DebouncedLatest<T> = {
@@ -85,6 +86,7 @@ function samePhoneSync(
 export function createDraftPhoneSync(
   enqueuePhone: (payload: DraftPhoneSyncPayload) => Promise<void>,
   delayMs: number = PHONE_SYNC_DEBOUNCE_MS,
+  settle?: (payload: DraftPhoneSyncPayload) => Promise<void>,
 ): DebouncedLatest<DraftPhoneSyncPayload> & {
   markSynced: (payload: DraftPhoneSyncPayload) => void;
 } {
@@ -93,10 +95,12 @@ export function createDraftPhoneSync(
   const debouncer = createLatestDebouncer(
     async (payload: DraftPhoneSyncPayload) => {
       if (samePhoneSync(lastEnqueued, payload)) {
+        await settle?.(payload);
         return;
       }
       await enqueuePhone(payload);
       lastEnqueued = payload;
+      await settle?.(payload);
     },
     delayMs,
   );

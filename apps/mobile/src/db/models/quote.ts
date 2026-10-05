@@ -24,4 +24,6 @@ export class Quote extends Model {
   @field('follow_up_dismissed') followUpDismissed!: boolean | null;
   // Last observed server updatedAt (ISO). Not a server column. Do not enqueue.
   @text('server_revision') serverRevision!: string | null;
+  // Token map of unsynced local edits. Not a server column. Do not enqueue.
+  @text('local_dirty') localDirty!: string | null;
 }
