@@ -40,6 +40,10 @@ import {
   type QuoteRoom,
 } from "./rooms.js";
 import { isUuid } from "./photos.js";
+import {
+  isStorableNonNegativeCents,
+  POSTGRES_INTEGER_MAX,
+} from "./integer-money.js";
 
 export {
   CLIENT_QUOTE_STATUSES,
@@ -205,6 +209,12 @@ export function parseNonNegativeCents(
   if (!Number.isInteger(value) || (value as number) < 0) {
     return { ok: false, error: `${fieldName} must be an integer >= 0` };
   }
+  if ((value as number) > POSTGRES_INTEGER_MAX) {
+    return {
+      ok: false,
+      error: `${fieldName} must be an integer from 0 to ${POSTGRES_INTEGER_MAX}`,
+    };
+  }
   return { ok: true, cents: value as number };
 }
 
@@ -214,7 +224,31 @@ export function parseQuantity(
   if (!Number.isInteger(value) || (value as number) < 1) {
     return { ok: false, error: "quantity must be an integer >= 1" };
   }
+  if ((value as number) > POSTGRES_INTEGER_MAX) {
+    return {
+      ok: false,
+      error: `quantity must be an integer from 1 to ${POSTGRES_INTEGER_MAX}`,
+    };
+  }
   return { ok: true, quantity: value as number };
+}
+
+const CUSTOMER_PHONE_MAX_LENGTH = 20;
+
+/** Draft phones stay free-form. Only the column width and a string type are enforced. */
+function parseOptionalCustomerPhone(
+  value: unknown,
+): { ok: true; phone: string | null } | { ok: false; error: string } {
+  if (value === null) {
+    return { ok: true, phone: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, error: "customerPhone must be a string or null" };
+  }
+  if (value.length > CUSTOMER_PHONE_MAX_LENGTH) {
+    return { ok: false, error: "customerPhone must be at most 20 characters" };
+  }
+  return { ok: true, phone: value };
 }
 
 function hasOwn(obj: object, key: string): boolean {
@@ -556,8 +590,14 @@ export function parseQuoteCreateBody(body: unknown): ParsedQuoteCreateBody {
     totalCents = parsed.cents;
   }
 
-  const customerPhone =
-    raw.customerPhone === undefined ? null : (raw.customerPhone as string | null);
+  let customerPhone: string | null = null;
+  if (raw.customerPhone !== undefined) {
+    const parsedPhone = parseOptionalCustomerPhone(raw.customerPhone);
+    if (!parsedPhone.ok) {
+      return parsedPhone;
+    }
+    customerPhone = parsedPhone.phone;
+  }
 
   let privateNote: string | null = null;
   if (hasOwn(raw, "privateNote")) {
@@ -592,8 +632,12 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
     parsed.status = status.status;
   }
 
-  if (hasOwn(raw, "customerPhone")) {
-    parsed.customerPhone = raw.customerPhone as string | null;
+  if (hasOwn(raw, "customerPhone") && raw.customerPhone !== undefined) {
+    const phone = parseOptionalCustomerPhone(raw.customerPhone);
+    if (!phone.ok) {
+      return phone;
+    }
+    parsed.customerPhone = phone.phone;
   }
 
   if (hasOwn(raw, "privateNote")) {
@@ -727,6 +771,13 @@ export async function applyQuotePut(
       existingResult.rows as QuoteLineItemRow[],
     );
     totalCents = totalCentsFromLineItems(resolvedLines);
+  }
+
+  if (totalCents !== undefined && !isStorableNonNegativeCents(totalCents)) {
+    return {
+      status: 400,
+      json: { error: `totalCents must be an integer from 0 to ${POSTGRES_INTEGER_MAX}` },
+    };
   }
 
   const setClauses: string[] = [];

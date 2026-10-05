@@ -191,9 +191,29 @@ describe("parseNonNegativeCents / parseQuantity", () => {
 
   it("requires quantity to be an integer >= 1", () => {
     assert.deepEqual(parseQuantity(1), { ok: true, quantity: 1 });
-    assert.equal(parseQuantity(0).ok, false);
+    const zero = parseQuantity(0);
+    assert.equal(zero.ok, false);
+    if (!zero.ok) {
+      assert.equal(zero.error, "quantity must be an integer >= 1");
+    }
     assert.equal(parseQuantity(1.5).ok, false);
     assert.equal(parseQuantity(-2).ok, false);
+  });
+
+  it("rejects cents and quantities above a signed Postgres integer", () => {
+    const cents = parseNonNegativeCents(2_147_483_648, "totalCents");
+    assert.equal(cents.ok, false);
+    if (!cents.ok) {
+      assert.equal(cents.error, "totalCents must be an integer from 0 to 2147483647");
+    }
+    assert.equal(parseNonNegativeCents(2_147_483_647, "totalCents").ok, true);
+
+    const quantity = parseQuantity(3_000_000_000);
+    assert.equal(quantity.ok, false);
+    if (!quantity.ok) {
+      assert.equal(quantity.error, "quantity must be an integer from 1 to 2147483647");
+    }
+    assert.equal(parseQuantity(2_147_483_647).ok, true);
   });
 });
 
@@ -211,6 +231,23 @@ describe("parseQuotePutBody", () => {
       ok: false,
       error: "status must be draft_local, draft_queued, or sent",
     });
+  });
+
+  it("rejects a customer phone that is not a string or longer than VARCHAR(20)", () => {
+    const tooLong = parseQuotePutBody({ customerPhone: "1".repeat(21) });
+    assert.equal(tooLong.ok, false);
+    const numeric = parseQuotePutBody({ customerPhone: 15555550100 });
+    assert.equal(numeric.ok, false);
+    const cleared = parseQuotePutBody({ customerPhone: null });
+    assert.equal(cleared.ok, true);
+    if (cleared.ok) {
+      assert.equal(cleared.customerPhone, null);
+    }
+    const draft = parseQuotePutBody({ customerPhone: "555-0100" });
+    assert.equal(draft.ok, true);
+    if (draft.ok) {
+      assert.equal(draft.customerPhone, "555-0100");
+    }
   });
 
   it("parses status sent on PUT without requiring customerPhone", () => {
@@ -315,6 +352,23 @@ describe("parseQuoteCreateBody", () => {
   it("rejects negative totalCents on create", () => {
     const parsed = parseQuoteCreateBody({ totalCents: -5 });
     assert.equal(parsed.ok, false);
+  });
+
+  it("rejects a customer phone that is not a string or longer than VARCHAR(20)", () => {
+    const tooLong = parseQuoteCreateBody({ customerPhone: "1".repeat(21) });
+    assert.equal(tooLong.ok, false);
+    const numeric = parseQuoteCreateBody({ customerPhone: 15555550100 });
+    assert.equal(numeric.ok, false);
+    const empty = parseQuoteCreateBody({ customerPhone: "" });
+    assert.equal(empty.ok, true);
+    if (empty.ok) {
+      assert.equal(empty.customerPhone, "");
+    }
+    const draft = parseQuoteCreateBody({ customerPhone: "555-0100" });
+    assert.equal(draft.ok, true);
+    if (draft.ok) {
+      assert.equal(draft.customerPhone, "555-0100");
+    }
   });
 
   it("does not require catalog items or line items after skippable seed", () => {
@@ -793,6 +847,54 @@ describe("applyQuotePut", () => {
     };
     return { calls, queryFn };
   }
+
+  it("returns 400 and does not write when a line extension cannot fit in total_cents", async () => {
+    const { calls, queryFn } = mockDb();
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [{ name: "Pipe", quantity: 100_000, unitPriceCents: 100_000 }],
+      },
+    });
+    assert.equal(outcome.status, 400);
+    assert.equal(
+      calls.some(
+        (call) =>
+          call.sql.startsWith("UPDATE quotes") ||
+          call.sql === DELETE_LINE_ITEMS_SQL ||
+          call.sql === INSERT_LINE_ITEM_SQL,
+      ),
+      false,
+    );
+  });
+
+  it("returns 400 and does not write when two in-range lines sum past a Postgres integer", async () => {
+    const { calls, queryFn } = mockDb();
+    const outcome = await applyQuotePut(queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {
+        lineItems: [
+          { name: "Panel A", quantity: 1, unitPriceCents: 2_000_000_000 },
+          { name: "Panel B", quantity: 1, unitPriceCents: 2_000_000_000 },
+        ],
+      },
+    });
+    assert.equal(outcome.status, 400);
+    if (outcome.status === 400) {
+      assert.equal(outcome.json.error, "totalCents must be an integer from 0 to 2147483647");
+    }
+    assert.equal(
+      calls.some(
+        (call) =>
+          call.sql.startsWith("UPDATE quotes") ||
+          call.sql === DELETE_LINE_ITEMS_SQL ||
+          call.sql === INSERT_LINE_ITEM_SQL,
+      ),
+      false,
+    );
+  });
 
   it("returns 400 without querying when the body is illegal", async () => {
     let queried = false;

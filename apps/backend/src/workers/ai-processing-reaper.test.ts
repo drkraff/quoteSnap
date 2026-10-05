@@ -48,9 +48,27 @@ describe('reapStaleAiProcessingQuotes', () => {
     assert.equal(calls.length, 1);
     assert.match(calls[0]!.text, /SET status = 'ai_failed', ai_failure_stage = 'timeout'/);
     assert.match(calls[0]!.text, /WHERE status = 'ai_processing'/);
-    assert.match(calls[0]!.text, /created_at < \$1/);
+    assert.match(calls[0]!.text, /updated_at < \$1/);
+    assert.doesNotMatch(calls[0]!.text, /created_at < \$1/);
     assert.equal(calls[0]!.text.includes('${'), false);
     assert.deepEqual(calls[0]!.params, [new Date('2026-09-07T21:45:00.000Z')]);
+  });
+
+  it('compares updated_at so a FAIL-04 retry of an old quote is not selected by created_at', async () => {
+    const calls: Array<{ text: string; params: unknown[] }> = [];
+    const runQuery: QueryFn = async (text, params) => {
+      calls.push({ text, params: params ?? [] });
+      return { rows: [] };
+    };
+
+    await reapStaleAiProcessingQuotes(
+      runQuery,
+      15 * 60 * 1000,
+      new Date('2026-09-07T22:00:00.000Z'),
+    );
+
+    assert.match(calls[0]!.text, /updated_at < \$1/);
+    assert.equal(/created_at\s*</.test(calls[0]!.text), false);
   });
 
   it('returns an empty list when nothing is stale', async () => {

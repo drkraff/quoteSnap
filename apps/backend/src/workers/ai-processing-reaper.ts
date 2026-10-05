@@ -44,7 +44,7 @@ export async function reapStaleAiProcessingQuotes(
     `UPDATE quotes
      SET status = 'ai_failed', ai_failure_stage = 'timeout'
      WHERE status = 'ai_processing'
-       AND created_at < $1
+       AND updated_at < $1
      RETURNING id`,
     [cutoff]
   );

@@ -134,8 +134,14 @@ export function parseQuoteStatsInstant(value: QuoteStatsInstant): number | null 
 
 /** Stored cents only. Anything else is 0 — never rounded and never guessed. */
 export function quoteStatsCents(value: number | null | undefined): number {
-  if (typeof value !== 'number' || !Number.isInteger(value)) return 0;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return 0;
   return value;
+}
+
+function addStatsCents(sum: number, cents: number): number {
+  const next = sum + cents;
+  if (!Number.isSafeInteger(next)) return sum;
+  return next;
 }
 
 export function normalizeQuoteStatsWindow(windowId: string): QuoteStatsWindowId {
@@ -214,11 +220,11 @@ export function computeQuoteStats(
 
     quotesSent += 1;
     const cents = quoteStatsCents(quote.totalCents);
-    totalValueSentCents += cents;
+    totalValueSentCents = addStatsCents(totalValueSentCents, cents);
 
     if (quote.status === 'approved') {
       approvedCount += 1;
-      approvedValueCents += cents;
+      approvedValueCents = addStatsCents(approvedValueCents, cents);
     } else if (quote.status === 'declined') {
       declinedCount += 1;
     } else if (quote.status === 'sent') {

@@ -443,6 +443,58 @@ describe('parseSpokenUnitPriceCents', () => {
     assert.equal(parseSpokenUnitPriceCents(8.5), null);
     assert.equal(parseSpokenUnitPriceCents(0), null);
     assert.equal(parseSpokenUnitPriceCents(-1), null);
+    assert.equal(parseSpokenUnitPriceCents(2_147_483_648), null);
+    assert.equal(parseSpokenUnitPriceCents(2_147_483_647), 2_147_483_647);
+  });
+});
+
+describe('voice lines that must fit a Postgres integer', () => {
+  it('treats an unstorable spoken quantity as garbage and keeps a storable price', () => {
+    const { lineItems, totalCents } = validateAndBuildLineItems(
+      [{ name: 'Switch', quantity: 3_000_000_000, spokenUnitPriceCents: 4500, confidence: 0.9 }],
+      [],
+    );
+    assert.equal(lineItems.length, 1);
+    assert.equal(lineItems[0]!.quantity, 1);
+    assert.equal(lineItems[0]!.unitPriceCents, 4500);
+    assert.equal(lineItems[0]!.priceSource, 'spoken');
+    assert.equal(totalCents, 4500);
+  });
+
+  it('blanks a spoken price whose extension cannot be stored and does not invent a smaller price', () => {
+    const { lineItems, totalCents } = validateAndBuildLineItems(
+      [{ name: 'Pipe', quantity: 100_000, unit: 'foot', spokenUnitPriceCents: 100_000, confidence: 0.8 }],
+      [],
+    );
+    assert.equal(lineItems.length, 1);
+    assert.equal(lineItems[0]!.quantity, 100_000);
+    assert.equal(lineItems[0]!.unitPriceCents, null);
+    assert.equal(lineItems[0]!.priceSource, 'unknown');
+    assert.equal(totalCents, 0);
+  });
+
+  it('keeps earlier lines when a later extension would overflow the quote total', () => {
+    const { lineItems, totalCents } = validateAndBuildLineItems(
+      [
+        { name: 'Panel A', quantity: 1, spokenUnitPriceCents: 1_500_000_000, confidence: 0.9 },
+        { name: 'Panel B', quantity: 1, spokenUnitPriceCents: 1_500_000_000, confidence: 0.9 },
+      ],
+      [],
+    );
+    assert.equal(lineItems[0]!.unitPriceCents, 1_500_000_000);
+    assert.equal(lineItems[0]!.priceSource, 'spoken');
+    assert.equal(lineItems[1]!.unitPriceCents, null);
+    assert.equal(lineItems[1]!.priceSource, 'unknown');
+    assert.equal(totalCents, 1_500_000_000);
+  });
+
+  it('does not synthesize a labor line from hours that cannot be stored as a quantity', () => {
+    const { lineItems, totalCents } = validateAndBuildLineItems([], [], {
+      spokenHours: 3_000_000_000,
+      hourlyRateCents: 8500,
+    });
+    assert.equal(lineItems.length, 0);
+    assert.equal(totalCents, 0);
   });
 });
 

@@ -279,6 +279,8 @@ describe('null totals', () => {
     expect(quoteStatsCents(Number.NaN)).toBe(0);
     expect(quoteStatsCents(10.5)).toBe(0);
     expect(quoteStatsCents(0)).toBe(0);
+    expect(quoteStatsCents(-1)).toBe(0);
+    expect(quoteStatsCents(2 ** 53)).toBe(0);
 
     const result = stats([blank, missing, notANumber, fractional, numericString, stored]);
     expect(result.quotesSent).toBe(6);
@@ -297,6 +299,32 @@ describe('null totals', () => {
     expect(result.totalValueSentCents).toBe(3);
     expect(result.approvedValueCents).toBe(0);
     expect(result.approvedCount).toBe(1);
+  });
+
+  it('does not subtract negative totals or add non-safe integers', () => {
+    const result = stats([
+      quote({ status: 'sent', sentAt: NOW, totalCents: -500 }),
+      quote({ status: 'sent', sentAt: NOW, totalCents: 2 ** 53 }),
+      quote({ status: 'approved', sentAt: NOW, totalCents: 1500 }),
+    ]);
+    expect(result.quotesSent).toBe(3);
+    expect(result.approvedCount).toBe(1);
+    expect(result.totalValueSentCents).toBe(1500);
+    expect(result.approvedValueCents).toBe(1500);
+    expect(Number.isSafeInteger(result.totalValueSentCents)).toBe(true);
+  });
+
+  it('skips an add that would leave the safe-integer range and still counts the quote', () => {
+    const result = stats([
+      quote({ status: 'sent', sentAt: NOW, totalCents: Number.MAX_SAFE_INTEGER }),
+      quote({ status: 'approved', sentAt: NOW, totalCents: Number.MAX_SAFE_INTEGER }),
+    ]);
+    expect(result.quotesSent).toBe(2);
+    expect(result.approvedCount).toBe(1);
+    expect(result.totalValueSentCents).toBe(Number.MAX_SAFE_INTEGER);
+    expect(result.approvedValueCents).toBe(Number.MAX_SAFE_INTEGER);
+    expect(Number.isSafeInteger(result.totalValueSentCents)).toBe(true);
+    expect(Number.isSafeInteger(result.approvedValueCents)).toBe(true);
   });
 
   it('a sent quote stored at 0 cents is a real send, not a guessed price', () => {

@@ -1,4 +1,5 @@
 import { parseCatalogUnit } from "../catalog/units.js";
+import { isStorableNonNegativeCents, isStorableQuantity } from "../quotes/integer-money.js";
 import { lookupRateCardEntry, type RateCardQueryFn } from "../rate-card/upsert.js";
 import type { BuiltVoiceLine, PriceSource, ValidatedLineItem } from "./voice-validation.js";
 
@@ -36,12 +37,21 @@ export function computeMaterialSellCents(
   if (!Number.isInteger(markupPercent) || markupPercent < 0 || markupPercent > 100) {
     return null;
   }
-  const sell = Math.round(costCents * (1 + markupPercent / 100));
-  return sell > 0 ? sell : null;
+  // Half-up integer cents. Float Math.round(cost * (1 + markup/100)) under-rounds
+  // 50 × 15% to 57; floor((cost * (100 + markup) + 50) / 100) is 58.
+  const numerator = costCents * (100 + markupPercent) + 50;
+  if (!Number.isSafeInteger(numerator)) {
+    return null;
+  }
+  const sell = Math.floor(numerator / 100);
+  if (!isStorableNonNegativeCents(sell) || sell <= 0) {
+    return null;
+  }
+  return sell;
 }
 
 export function parseSpokenHours(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+  if (!isStorableQuantity(value)) {
     return null;
   }
   return value;

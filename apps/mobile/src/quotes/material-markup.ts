@@ -1,6 +1,9 @@
 import { parseCatalogUnit } from '../catalog/units';
 import { typedPriceSource, type PriceSource } from '../utils/price-source';
 
+/** Signed Postgres INTEGER upper bound. Sell prices above this stay blank. */
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+
 function isPositiveCents(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
@@ -28,8 +31,16 @@ export function computeMaterialSellCents(
   if (markup == null) {
     return null;
   }
-  const sell = Math.round(costCents * (1 + markup / 100));
-  return sell > 0 ? sell : null;
+  // Same half-up formula as the voice worker. Float Math.round under-rounds 50 × 15%.
+  const numerator = costCents * (100 + markup) + 50;
+  if (!Number.isSafeInteger(numerator)) {
+    return null;
+  }
+  const sell = Math.floor(numerator / 100);
+  if (!Number.isInteger(sell) || sell <= 0 || sell > POSTGRES_INTEGER_MAX) {
+    return null;
+  }
+  return sell;
 }
 
 /** Hour-unit labor never takes material cost × markup. */
