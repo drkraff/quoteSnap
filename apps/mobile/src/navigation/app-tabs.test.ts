@@ -48,5 +48,6 @@ describe('tabBarHref', () => {
     expect(tabBarHref('sync-issues')).toBeNull();
     expect(tabBarHref('import-quotes')).toBeNull();
     expect(tabBarHref('my-rates')).toBeNull();
+    expect(tabBarHref('stats')).toBeNull();
   });
 });

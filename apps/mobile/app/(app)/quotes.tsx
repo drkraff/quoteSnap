@@ -571,6 +571,17 @@ export default function QuotesScreen(): JSX.Element {
                 router.push('/sync-issues' as any);
               }}
             />
+            <Pressable
+              onPress={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                router.push('/stats' as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Stats"
+              style={styles.statsLink}
+            >
+              <Text style={styles.statsLinkText}>Stats</Text>
+            </Pressable>
             <QuotesListModeToggle
               mode={listMode}
               onChange={(mode) => {
@@ -699,5 +710,17 @@ const styles = StyleSheet.create({
   },
   fabDisabled: {
     opacity: 0.6,
+  },
+  statsLink: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
+  statsLinkText: {
+    color: colors.accent,
+    fontSize: typography.body.fontSize,
+    fontWeight: '600',
   },
 });
