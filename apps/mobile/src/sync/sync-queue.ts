@@ -263,6 +263,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           payload.clientSentence === undefined
             ? undefined
             : (payload.clientSentence as string | null),
+        clientKey: localQuote.id,
       });
       await database.write(async () => {
         await localQuote.update((r) => {

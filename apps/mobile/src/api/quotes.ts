@@ -92,6 +92,8 @@ export async function createQuoteOnServer(body: {
   totalCents?: number;
   privateNote?: string | null;
   clientSentence?: string | null;
+  /** Stable local quote id. The server returns the same quote on a retry. */
+  clientKey?: string;
 }): Promise<QuoteResponse> {
   const data = await apiClient.post<QuoteSingleResponse>('/quotes', body);
   return data.quote;

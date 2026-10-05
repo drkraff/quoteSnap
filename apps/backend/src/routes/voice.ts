@@ -7,13 +7,9 @@ import { uploadToR2, deleteFromR2 } from '../services/r2.js';
 import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
-import { snapshotPriceSourceFromRow } from '../quotes/price-source.js';
-import { roomsFromDb } from '../quotes/rooms.js';
 import { parseQuoteServerId, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
-import {
-  failedVoiceStatusPayload,
-  isVoiceDraftReadable,
-} from '../voice/ai-failure.js';
+import { failedVoiceStatusPayload } from '../voice/ai-failure.js';
+import { createVoiceDraftHandler } from './voice-draft.js';
 
 export const router = Router();
 
@@ -171,82 +167,4 @@ router.get('/status/:jobId', authenticateToken, async (req: Request, res: Respon
 });
 
 // GET /draft/:quoteId — return AI-generated line items with confidence scores
-router.get('/draft/:quoteId', authenticateToken, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const contractorId = req.contractor!.contractorId;
-    const { quoteId } = req.params as { quoteId: string };
-
-    // Verify quote exists and belongs to contractor
-    const quoteResult = await query(
-      `SELECT id, status, total_cents, client_sentence, rooms FROM quotes WHERE id = $1 AND contractor_id = $2`,
-      [quoteId, contractorId]
-    );
-
-    if (quoteResult.rows.length === 0) {
-      res.status(404).json({ error: 'Draft not found' });
-      return;
-    }
-
-    const quoteRow = quoteResult.rows[0] as {
-      id: string;
-      status: string;
-      total_cents: number;
-      client_sentence: string | null;
-      rooms: unknown;
-    };
-
-    if (!isVoiceDraftReadable(quoteRow.status)) {
-      res.status(404).json({ error: 'Draft not ready' });
-      return;
-    }
-
-    // Fetch line items with confidence scores
-    const lineItemsResult = await query(
-      `SELECT qli.catalog_item_id AS "catalogItemId",
-              qli.name,
-              qli.quantity,
-              qli.unit_price_cents AS "unitPriceCents",
-              qli.unit,
-              qli.confidence,
-              qli.price_source AS "priceSource",
-              qli.room_id AS "roomId"
-       FROM quote_line_items qli
-       WHERE qli.quote_id = $1
-       ORDER BY qli.created_at ASC`,
-      [quoteId]
-    );
-
-    type LineItemRow = {
-      catalogItemId: string | null;
-      name: string;
-      quantity: number;
-      unitPriceCents: number;
-      unit: string | null;
-      confidence: number | null;
-      priceSource: string | null;
-      roomId: string | null;
-    };
-
-    const lineItems = (lineItemsResult.rows as LineItemRow[]).map((row) => ({
-      catalogItemId: row.catalogItemId,
-      name: row.name,
-      quantity: row.quantity,
-      unitPriceCents: row.unitPriceCents > 0 ? row.unitPriceCents : null,
-      unit: row.unit,
-      confidence: row.confidence ?? undefined,
-      priceSource: snapshotPriceSourceFromRow(row.priceSource, row.unitPriceCents),
-      roomId: row.roomId,
-    }));
-
-    res.json({
-      quoteId,
-      totalCents: quoteRow.total_cents,
-      clientSentence: quoteRow.client_sentence ?? null,
-      rooms: roomsFromDb(quoteRow.rooms),
-      lineItems,
-    });
-  } catch (err) {
-    logRequestFailure(req, err, 'GET /voice/draft/:quoteId error');
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+router.get('/draft/:quoteId', authenticateToken, createVoiceDraftHandler(query));
