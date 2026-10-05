@@ -22,6 +22,7 @@ export const PHOTO_FILE_REQUIRED = "Photo file required";
 export const PHOTO_MIME_ERROR = "photo must be a JPEG, PNG, or WebP still";
 export const PHOTO_CLIENT_ID_ERROR = "clientId must be a UUID";
 export const PHOTO_TOO_LARGE = "photo must be at most 8 MB";
+export const PHOTO_BYTES_ERROR = "photo contents do not match a JPEG, PNG, or WebP still";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -61,11 +62,37 @@ export function extensionForPhotoMime(mime: AllowedPhotoMime): "jpg" | "png" | "
   return "jpg";
 }
 
+export function photoBytesMatchMime(buffer: Buffer, mime: AllowedPhotoMime): boolean {
+  if (mime === PHOTO_MIME_JPEG) {
+    return buffer.length >= 3
+      && buffer[0] === 0xff
+      && buffer[1] === 0xd8
+      && buffer[2] === 0xff;
+  }
+  if (mime === PHOTO_MIME_PNG) {
+    return buffer.length >= 8
+      && buffer[0] === 0x89
+      && buffer[1] === 0x50
+      && buffer[2] === 0x4e
+      && buffer[3] === 0x47
+      && buffer[4] === 0x0d
+      && buffer[5] === 0x0a
+      && buffer[6] === 0x1a
+      && buffer[7] === 0x0a;
+  }
+  return buffer.length >= 12
+    && buffer.subarray(0, 4).toString("ascii") === "RIFF"
+    && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+}
+
 export function photoR2Key(
   contractorId: string,
   attachmentId: string,
   mime: AllowedPhotoMime,
 ): string {
+  if (!isUuid(contractorId) || !isUuid(attachmentId)) {
+    throw new Error("invalid photo key");
+  }
   return `photos/${contractorId}/${attachmentId}.${extensionForPhotoMime(mime)}`;
 }
 

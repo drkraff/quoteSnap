@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { ContractorPayload } from "../types/auth.js";
+import { isUuid } from "../uuid.js";
 
 declare global {
   namespace Express {
@@ -32,7 +33,11 @@ export function authenticateToken(
   }
 
   try {
-    const payload = jwt.verify(token, secret) as ContractorPayload;
+    const payload = jwt.verify(token, secret, { algorithms: ["HS256"] }) as ContractorPayload;
+    if (!isUuid(payload.contractorId)) {
+      res.status(401).json({ error: "Invalid or expired token" });
+      return;
+    }
     req.contractor = {
       contractorId: payload.contractorId,
       email: payload.email,

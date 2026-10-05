@@ -174,7 +174,7 @@ cd apps/backend && npm run dev    # tsx watch, default PORT=3000
 
 `app.listen(PORT)` (no explicit host). For a physical phone, Windows/macOS firewall must allow inbound TCP 3000. Required env: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `OPENAI_API_KEY`, `R2_*` (see `apps/backend/.env.example`). Optional: `WHISPER_LANGUAGE` — default **`en`**; set `he` for Hebrew; empty string opts into Whisper auto-detect. Optional: `AI_PROCESSING_TIMEOUT_MS` — default **900000** (15 minutes); commented in `.env.example`. Optional: `QUOTE_APPROVAL_TTL_MS` — default **259200000** (72 hours). Optional: `PUBLIC_BASE_URL` — default `http://localhost:3000`, used only to build the dry-run approval URL. Optional: `SMS_SENDER` — unset, `dry-run`, or `log` (the only transports). Anything else refuses the send. `JWT_REFRESH_SECRET` is unused (refresh tokens are opaque SHA-256 hashes, not JWTs).
 
-Auth: 15-minute JWT access tokens; 30-day refresh tokens stored as SHA-256 hashes; rotation on refresh. Login uses **one** identifier (email wins if both present) — never `WHERE email = $1 OR phone = $2 LIMIT 1`.
+Auth: 15-minute JWT access tokens (HS256 only); 30-day refresh tokens stored as SHA-256 hashes; rotation on refresh. Reuse of a revoked refresh token after a 30-second overlap window revokes that contractor's other live refresh rows. Boot refuses a missing, short, or example `JWT_ACCESS_SECRET` (including `change-me-use-a-long-random-string-in-production`) before listen. Login uses **one** identifier (email wins if both present) — never `WHERE email = $1 OR phone = $2 LIMIT 1`.
 
 ### Mobile API URL (physical device)
 

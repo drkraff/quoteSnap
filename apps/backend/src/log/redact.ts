@@ -41,6 +41,7 @@ const PHONE_ASSIGN =
   /((?:customer[_-]?phone|phone)\s*["']?\s*[:=]\s*["']?)(\+?\d[\d\s().-]{6,20})/gi;
 const TOKEN_ASSIGN =
   /((?:approval_token|access_token|refresh_token|token)\s*[:=]\s*["']?)([A-Za-z0-9_-]{8,})/gi;
+const DB_URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^/\s@:]+:[^/\s@]+@/gi;
 const E164 = /\+\d{10,15}\b/g;
 const NANP = /(^|[^\d])((?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})\b/g;
 
@@ -82,7 +83,8 @@ function isSignedUrl(url: string): boolean {
 
 /** Replace secret-shaped substrings. Safe to run more than once. */
 export function redactString(input: string): string {
-  let out = input.replace(SIGNED_URL, (url) => (isSignedUrl(url) ? "[redacted-url]" : url));
+  let out = input.replace(DB_URL_USERINFO, "$1[redacted]@");
+  out = out.replace(SIGNED_URL, (url) => (isSignedUrl(url) ? "[redacted-url]" : url));
   out = out.replace(BEARER, "$1 [redacted]");
   out = out.replace(OPENAI_KEY, REDACTED);
   out = out.replace(JWT, REDACTED);

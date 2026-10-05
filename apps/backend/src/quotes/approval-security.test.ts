@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { generateApprovalToken, hashApprovalToken } from "./approval-token.js";
 import { renderNotFoundPage } from "./approval-page.js";
+import { MARK_QUOTE_APPROVED_SQL } from "./approval-page.js";
 import {
   APPROVAL_RATE_LIMIT_MAX,
   APPROVAL_RATE_LIMIT_MESSAGE,
@@ -129,6 +130,57 @@ describe("approval security headers and rate limit", () => {
       assert.deepEqual(await blocked.json(), APPROVAL_RATE_LIMIT_MESSAGE);
       assert.equal(blocked.headers.get("x-content-type-options"), "nosniff");
       assert.equal(blocked.headers.get("cache-control"), "no-store");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("puts a no-referrer meta on the public HTML so the token is not leaked by the page", () => {
+    assert.match(renderNotFoundPage(), /<meta name="referrer" content="no-referrer">/);
+  });
+
+  it("rejects a cross-site approve POST before the decision query", async () => {
+    const token = generateApprovalToken();
+    const calls: string[] = [];
+    const queryFn: SnapshotQueryFn = async (sql) => {
+      calls.push(sql);
+      return { rows: [] };
+    };
+    const app = express();
+    app.use("/q", createApprovalRouter({
+      queryFn,
+      now: () => new Date("2026-10-04T00:00:00.000Z"),
+      limiter: createApprovalLimiter({ max: 20, validate: false }),
+    }));
+    const server = await listen(app);
+    try {
+      const cross = await fetch(`${server.url}/q/${token}/approve`, {
+        method: "POST",
+        headers: { origin: "https://evil.example" },
+      });
+      const html = await cross.text();
+      assert.equal(cross.status, 403);
+      assert.equal(html, renderNotFoundPage());
+      assert.equal(calls.includes(MARK_QUOTE_APPROVED_SQL), false);
+      assert.equal(calls.length, 0);
+
+      const fetchSite = await fetch(`${server.url}/q/${token}/approve`, {
+        method: "POST",
+        headers: { "sec-fetch-site": "cross-site" },
+      });
+      assert.equal(fetchSite.status, 403);
+      assert.equal(calls.length, 0);
+
+      const same = await fetch(`${server.url}/q/${token}/approve`, { method: "POST" });
+      assert.notEqual(same.status, 403);
+      assert.ok(calls.length > 0);
+
+      const origin = new URL(server.url).origin;
+      const browser = await fetch(`${server.url}/q/${token}/decline`, {
+        method: "POST",
+        headers: { origin },
+      });
+      assert.notEqual(browser.status, 403);
     } finally {
       await server.close();
     }
