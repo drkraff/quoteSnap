@@ -1,3 +1,4 @@
+import { coerceStoredQuantity } from "../quotes/integer-money.js";
 import { snapshotPriceSourceFromRow } from "../quotes/price-source.js";
 import { normalizePrivateNote } from "../quotes/private-note.js";
 import { roomsFromDb } from "../quotes/rooms.js";
@@ -86,7 +87,7 @@ export function lineItemRowToResponse(row: QuoteLineItemRow): QuoteLineItemRespo
   return {
     id: row.id,
     name: row.name,
-    quantity: row.quantity,
+    quantity: coerceStoredQuantity(row.quantity),
     unitPriceCents: row.unit_price_cents,
     unit: row.unit,
     confidence: row.confidence,

@@ -627,4 +627,144 @@ describe("postgres integration", { concurrency: false }, () => {
     }
     assert.ok(row.unit_price_cents === 4500 || row.unit_price_cents === 8800);
   });
+
+  it("accepts repaired voice lines and leaves a sent quote locked", async () => {
+    const contractorId = await insertContractor();
+    const app = quotesApp();
+    const server = await listen(app);
+    const headers = {
+      authorization: bearer(contractorId),
+      "content-type": "application/json",
+    };
+    try {
+      const created = await fetch(`${server.url}/quotes`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          clientKey: `draft-${randomUUID()}`,
+          status: "draft_local",
+          totalCents: 0,
+        }),
+      });
+      assert.equal(created.status, 201);
+      const createdJson = await created.json() as { quote: { id: string; status: string } };
+      const draftId = createdJson.quote.id;
+
+      const rejected = await fetch(`${server.url}/quotes/${draftId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          lineItems: [{
+            name: "Double socket",
+            quantity: 2,
+            unitPriceCents: 8000,
+            catalogItemId: "line-0",
+            clientId: "line-0",
+            priceSource: "computed",
+            unit: "each",
+          }],
+        }),
+      });
+      assert.equal(rejected.status, 400);
+      assert.deepEqual(await rejected.json(), {
+        error: "catalogItemId must be a UUID or null",
+      });
+
+      const repaired = await fetch(`${server.url}/quotes/${draftId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          lineItems: [
+            {
+              name: "Double socket",
+              quantity: 2,
+              unitPriceCents: 8000,
+              catalogItemId: null,
+              clientId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              priceSource: "spoken",
+              unit: "each",
+            },
+            {
+              name: "Labor",
+              quantity: 0.5,
+              unitPriceCents: 1500,
+              catalogItemId: null,
+              priceSource: "computed",
+              unit: "hour",
+            },
+          ],
+        }),
+      });
+      const repairedBody: unknown = await repaired.json();
+      assert.equal(repaired.status, 200, JSON.stringify(repairedBody));
+
+      const saved = await fetch(`${server.url}/quotes/${draftId}`, { headers });
+      assert.equal(saved.status, 200);
+      const savedJson = await saved.json() as {
+        quote: { status: string; totalCents: number; sentAt: string | null };
+        lineItems: {
+          name: string;
+          quantity: number;
+          catalogItemId: string | null;
+          unitPriceCents: number;
+          priceSource: string;
+          clientId: string | null;
+        }[];
+      };
+      assert.equal(savedJson.quote.status, "draft_local");
+      assert.equal(savedJson.quote.sentAt, null);
+      assert.equal(savedJson.lineItems.length, 2);
+      assert.equal(savedJson.lineItems[0]?.name, "Double socket");
+      assert.equal(savedJson.lineItems[0]?.quantity, 2);
+      assert.equal(savedJson.lineItems[0]?.unitPriceCents, 8000);
+      assert.equal(savedJson.lineItems[0]?.catalogItemId, null);
+      assert.equal(savedJson.lineItems[0]?.priceSource, "spoken");
+      assert.equal(savedJson.lineItems[0]?.clientId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+      const labor = savedJson.lineItems.find((line) => line.name === "Labor");
+      assert.equal(labor?.quantity, 0.5);
+      assert.equal(labor?.catalogItemId, null);
+      assert.equal(labor?.priceSource, "computed");
+      assert.equal(savedJson.quote.totalCents, 16750);
+
+      const { quoteId: sentId } = await insertSnapshot(contractorId);
+      const locked = await fetch(`${server.url}/quotes/${sentId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          lineItems: [{
+            name: "Changed",
+            quantity: 1,
+            unitPriceCents: 100,
+            catalogItemId: null,
+          }],
+        }),
+      });
+      assert.equal(locked.status, 409);
+      const stillSent = await query(`SELECT status, sent_at FROM quotes WHERE id = $1`, [sentId]);
+      const sentRow = stillSent.rows[0] as { status: string; sent_at: Date | null };
+      assert.equal(sentRow.status, "sent");
+      assert.ok(sentRow.sent_at);
+
+      const copy = await fetch(`${server.url}/quotes`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          clientKey: `copy-${randomUUID()}`,
+          status: "draft_local",
+          totalCents: 25000,
+        }),
+      });
+      assert.equal(copy.status, 201);
+      const copyJson = await copy.json() as {
+        quote: { id: string; status: string; sentAt: string | null };
+      };
+      assert.notEqual(copyJson.quote.id, sentId);
+      assert.equal(copyJson.quote.status, "draft_local");
+      assert.equal(copyJson.quote.sentAt, null);
+      const original = await query(`SELECT status FROM quotes WHERE id = $1`, [sentId]);
+      assert.equal((original.rows[0] as { status: string }).status, "sent");
+    } finally {
+      await server.close();
+    }
+  });
 });

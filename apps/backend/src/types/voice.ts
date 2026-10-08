@@ -24,10 +24,18 @@ export interface AILineItem {
 
 export interface VoiceExtractResult {
   items: AILineItem[];
-  /** Integer hours spoken for the job. Omit/null if they did not say hours. */
+  /**
+   * Hours spoken for the job, including a half hour (0.5).
+   * Omit/null if they did not say hours. There is no one-hour minimum.
+   */
   spokenHours?: number | null;
   /** Client-facing scope / exclusions. Joined into quotes.client_sentence. */
   assumptions?: string[] | string | null;
+  /**
+   * One short customer-facing job description. No prices and no transcript
+   * quote. Null when that would only repeat speech or a price.
+   */
+  clientSentence?: string | null;
 }
 
 export interface VoiceStatusResponse {

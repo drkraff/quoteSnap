@@ -62,6 +62,16 @@ export function formatQuantityLabel(quantity: number, unit?: string | null): str
   return `${quantity} ${UNIT_SHORT[parsed]}`;
 }
 
+/** Half an hour is 0.5. There is no one-hour minimum. Missing or invalid stays 1. */
+function coerceQuantity(value: unknown): number {
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) {
+    return 1;
+  }
+  const scaled = Math.round(n * 100) / 100;
+  return scaled > 0 ? scaled : 1;
+}
+
 function coerceLineItem(value: unknown): LineItem {
   const raw =
     value !== null && typeof value === 'object'
@@ -71,9 +81,7 @@ function coerceLineItem(value: unknown): LineItem {
   const line: LineItem = {
     catalogItemId: typeof raw.catalogItemId === 'string' ? raw.catalogItemId : '',
     name: typeof raw.name === 'string' ? raw.name : '',
-    quantity: Number.isInteger(raw.quantity) && (raw.quantity as number) >= 1
-      ? (raw.quantity as number)
-      : 1,
+    quantity: coerceQuantity(raw.quantity),
     unitPriceCents:
       unitPrice === null
         ? null
@@ -226,6 +234,16 @@ export function selectOptionForTotal(items: LineItem[], index: number): LineItem
   return selectOptionRoleForTotal(items, index);
 }
 
+/**
+ * Whole quantities do not step below 1. A spoken fraction already under 1
+ * (half an hour) stays put instead of being rounded up.
+ */
+export function nextLineQuantity(current: number, delta: number): number {
+  const min = current > 0 && current < 1 ? current : 1;
+  const next = current + delta;
+  return next < min ? min : next;
+}
+
 export function updateQuantity(
   items: LineItem[],
   index: number,
@@ -233,7 +251,11 @@ export function updateQuantity(
 ): LineItem[] {
   return items.map((item, i) =>
     i === index
-      ? { ...item, quantity: Math.max(1, item.quantity + delta), confidence: undefined }
+      ? {
+          ...item,
+          quantity: nextLineQuantity(item.quantity, delta),
+          confidence: undefined,
+        }
       : item,
   );
 }

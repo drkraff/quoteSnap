@@ -275,6 +275,16 @@ describe('recalculateTotal', () => {
 });
 
 describe('adhoc / unknown prices', () => {
+  it('keeps a spoken half hour instead of rounding it up to 1', () => {
+    const [labor] = parseLineItems(JSON.stringify([
+      { catalogItemId: '', name: 'Labor', quantity: 0.5, unitPriceCents: 1500, unit: 'hour' },
+    ]));
+    expect(labor?.quantity).toBe(0.5);
+    expect(formatQuantityLabel(labor?.quantity ?? 0, 'hour')).toBe('0.5 h');
+    const stepped = updateQuantity([labor!], 0, -1);
+    expect(stepped[0]?.quantity).toBe(0.5);
+  });
+
   it('parses a null catalogItemId and null price without crashing', () => {
     const result = parseLineItems(
       JSON.stringify([

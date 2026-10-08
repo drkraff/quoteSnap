@@ -41,6 +41,8 @@ import {
 } from "./rooms.js";
 import { isUuid } from "./photos.js";
 import {
+  coerceStoredQuantity,
+  isStorableHours,
   isStorableNonNegativeCents,
   POSTGRES_INTEGER_MAX,
 } from "./integer-money.js";
@@ -220,19 +222,27 @@ export function parseNonNegativeCents(
   return { ok: true, cents: value as number };
 }
 
+/**
+ * Positive quantity, at most 2 decimal places. Half an hour is 0.5.
+ * There is no one-hour minimum (migration 007's integer `>= 1` check
+ * rounded 0.5 up to 1; migration 025 stores numeric).
+ */
 export function parseQuantity(
   value: unknown,
 ): { ok: true; quantity: number } | { ok: false; error: string } {
-  if (!Number.isInteger(value) || (value as number) < 1) {
-    return { ok: false, error: "quantity must be an integer >= 1" };
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return { ok: false, error: "quantity must be greater than 0" };
   }
-  if ((value as number) > POSTGRES_INTEGER_MAX) {
+  if (value > POSTGRES_INTEGER_MAX) {
     return {
       ok: false,
-      error: `quantity must be an integer from 1 to ${POSTGRES_INTEGER_MAX}`,
+      error: `quantity must be a number from just above 0 to ${POSTGRES_INTEGER_MAX}`,
     };
   }
-  return { ok: true, quantity: value as number };
+  if (!isStorableHours(value)) {
+    return { ok: false, error: "quantity must have at most 2 decimal places" };
+  }
+  return { ok: true, quantity: Math.round(value * 100) / 100 };
 }
 
 const CUSTOMER_PHONE_MAX_LENGTH = 20;
@@ -816,7 +826,7 @@ export async function applyQuotePut(
     const existingResult = await queryFn(SELECT_LINE_ITEMS_SQL, [args.quoteId]);
     const fromLines = totalCentsFromLineItems(
       (existingResult.rows as QuoteLineItemRow[]).map((row) => ({
-        quantity: row.quantity,
+        quantity: coerceStoredQuantity(row.quantity),
         unitPriceCents: row.unit_price_cents,
         optionRole: row.option_role,
         optionGroupId: row.option_group_id,

@@ -110,7 +110,7 @@ export function lineAmountCents(item: {
   if (cents == null || !Number.isFinite(cents) || cents <= 0) {
     return 0;
   }
-  return qty * cents;
+  return Math.round(qty * cents);
 }
 
 export function optionGroupMembers<T extends OptionLineFields>(

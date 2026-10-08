@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import { logRequestFailure } from "../log/logger.js";
+import { coerceStoredQuantity } from "../quotes/integer-money.js";
 import { snapshotPriceSourceFromRow } from "../quotes/price-source.js";
 import { roomsFromDb } from "../quotes/rooms.js";
 import { isVoiceDraftReadable } from "../voice/ai-failure.js";
@@ -72,7 +73,7 @@ export function createVoiceDraftHandler(runQuery: QuotesRouteQuery): RequestHand
       const lineItems = (lineItemsResult.rows as LineItemRow[]).map((row) => ({
         catalogItemId: row.catalogItemId,
         name: row.name,
-        quantity: row.quantity,
+        quantity: coerceStoredQuantity(row.quantity),
         unitPriceCents: row.unitPriceCents > 0 ? row.unitPriceCents : null,
         unit: row.unit,
         confidence: row.confidence ?? undefined,

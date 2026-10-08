@@ -9,6 +9,7 @@ import {
   UNGROUPED_ROOM_LABEL,
   addRoom,
   assignLineRoom,
+  draftListRowKey,
   draftListRows,
   normalizeRoomName,
   parseRoomId,
@@ -99,6 +100,17 @@ describe('draftListRows', () => {
     { id: KITCHEN, name: 'Kitchen' },
     { id: BATH, name: 'Bath' },
   ];
+
+  it('does not repeat a line when the same room id is stored twice', () => {
+    const rows = draftListRows(
+      [{ id: KITCHEN, name: 'Kitchen' }, { id: KITCHEN, name: 'Kitchen' }],
+      [cabinets],
+    );
+    const lineRows = rows.filter((row) => row.kind === 'line');
+    expect(lineRows).toHaveLength(1);
+    expect(draftListRowKey(lineRows[0]!, 0)).not.toBe('line-0');
+    expect(new Set(rows.map((row, index) => draftListRowKey(row, index))).size).toBe(rows.length);
+  });
 
   it('is a flat line list when there are no rooms (single-memo)', () => {
     const rows = draftListRows([], [labor, cabinets]);

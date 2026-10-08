@@ -189,14 +189,16 @@ describe("parseNonNegativeCents / parseQuantity", () => {
     assert.equal(parseNonNegativeCents(NaN, "totalCents").ok, false);
   });
 
-  it("requires quantity to be an integer >= 1", () => {
+  it("accepts a half hour and rejects zero", () => {
     assert.deepEqual(parseQuantity(1), { ok: true, quantity: 1 });
+    assert.deepEqual(parseQuantity(0.5), { ok: true, quantity: 0.5 });
+    assert.deepEqual(parseQuantity(1.5), { ok: true, quantity: 1.5 });
     const zero = parseQuantity(0);
     assert.equal(zero.ok, false);
     if (!zero.ok) {
-      assert.equal(zero.error, "quantity must be an integer >= 1");
+      assert.equal(zero.error, "quantity must be greater than 0");
     }
-    assert.equal(parseQuantity(1.5).ok, false);
+    assert.equal(parseQuantity(1.234).ok, false);
     assert.equal(parseQuantity(-2).ok, false);
   });
 
@@ -211,7 +213,10 @@ describe("parseNonNegativeCents / parseQuantity", () => {
     const quantity = parseQuantity(3_000_000_000);
     assert.equal(quantity.ok, false);
     if (!quantity.ok) {
-      assert.equal(quantity.error, "quantity must be an integer from 1 to 2147483647");
+      assert.equal(
+        quantity.error,
+        "quantity must be a number from just above 0 to 2147483647",
+      );
     }
     assert.equal(parseQuantity(2_147_483_647).ok, true);
   });

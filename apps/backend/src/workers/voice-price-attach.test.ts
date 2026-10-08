@@ -493,11 +493,12 @@ describe("snapshotUnitPriceCents", () => {
 });
 
 describe("ensureLaborLineFromSpokenHours / parseSpokenHours", () => {
-  it("accepts integer hours >= 1", () => {
+  it("keeps a spoken half hour and does not invent one", () => {
     assert.equal(parseSpokenHours(2), 2);
     assert.equal(parseSpokenHours(1), 1);
+    assert.equal(parseSpokenHours(0.5), 0.5);
+    assert.equal(parseSpokenHours(1.5), 1.5);
     assert.equal(parseSpokenHours(0), null);
-    assert.equal(parseSpokenHours(1.5), null);
     assert.equal(parseSpokenHours(null), null);
   });
 
@@ -533,6 +534,7 @@ describe("voice-processor material markup wiring", () => {
 
   it("attaches prices through the async exact-lookup path before commit", () => {
     const src = readFileSync(path.join(here, "voice-processor.ts"), "utf8");
+    assert.match(src, /supplementSpokenExtract/);
     assert.match(src, /validateAndBuildLineItemsAsync/);
     assert.match(src, /lookupExactRateCardCents/);
     assert.match(src, /replaceVoiceQuoteLines/);

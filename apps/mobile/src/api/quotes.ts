@@ -116,6 +116,7 @@ export async function updateQuoteOnServer(
       name: string;
       quantity: number;
       unitPriceCents: number | null;
+      catalogItemId?: string | null;
       unit?: string | null;
       privateNote?: string | null;
       priceSource?: string | null;

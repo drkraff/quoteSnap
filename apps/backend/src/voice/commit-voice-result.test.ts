@@ -7,6 +7,15 @@ import {
   UPDATE_VOICE_QUOTE_RESULT_SQL,
 } from "./commit-voice-result.js";
 
+const CLIENT_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertInsertParams(actual: unknown[] | undefined, expectedPrefix: unknown[]): void {
+  assert.ok(actual);
+  assert.deepEqual(actual.slice(0, -1), expectedPrefix);
+  assert.match(String(actual.at(-1)), CLIENT_UUID_RE);
+}
+
 describe("replaceVoiceQuoteLines", () => {
   it("deletes existing lines then inserts and sets draft_local without a failure stage", async () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
@@ -38,7 +47,7 @@ describe("replaceVoiceQuoteLines", () => {
     assert.equal(calls[0]!.sql, DELETE_VOICE_LINE_ITEMS_SQL);
     assert.deepEqual(calls[0]!.params, ["quote-1"]);
     assert.equal(calls[1]!.sql, INSERT_VOICE_LINE_ITEM_SQL);
-    assert.deepEqual(calls[1]!.params, [
+    assertInsertParams(calls[1]!.params, [
       "quote-1",
       "cat-1",
       "Pipe",
@@ -80,7 +89,7 @@ describe("replaceVoiceQuoteLines", () => {
       },
     );
 
-    assert.deepEqual(calls[1]!.params, [
+    assertInsertParams(calls[1]!.params, [
       "quote-2",
       null,
       "Mystery work",
@@ -153,7 +162,7 @@ describe("replaceVoiceQuoteLines", () => {
         ],
       },
     );
-    assert.deepEqual(calls[1]!.params, [
+    assertInsertParams(calls[1]!.params, [
       "quote-4",
       null,
       "Cabinets",

@@ -1290,6 +1290,10 @@ describe('processQueue', () => {
           quantity: 2,
           unitPriceCents: 1500,
           privateNote: 'moisture from neighbor',
+          catalogItemId: null,
+          clientId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          ),
         },
       ],
       totalCents: 3000,
@@ -1357,6 +1361,10 @@ describe('processQueue', () => {
           quantity: 2,
           unitPriceCents: 1500,
           privateNote: null,
+          catalogItemId: null,
+          clientId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          ),
         },
       ],
       totalCents: undefined,
@@ -1472,6 +1480,10 @@ describe('processQueue', () => {
           unitPriceCents: 180000,
           optionGroupId: groupId,
           optionRole: 'base',
+          catalogItemId: null,
+          clientId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          ),
         },
         {
           name: 'Keep the tub',
@@ -1479,6 +1491,10 @@ describe('processQueue', () => {
           unitPriceCents: 45000,
           optionGroupId: groupId,
           optionRole: 'alt',
+          catalogItemId: null,
+          clientId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          ),
         },
       ],
       totalCents: 180000,
@@ -1551,6 +1567,10 @@ describe('processQueue', () => {
           quantity: 14,
           unitPriceCents: null,
           roomId: kitchenId,
+          catalogItemId: null,
+          clientId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+          ),
         },
       ],
       totalCents: 0,
@@ -1620,7 +1640,20 @@ describe('processQueue', () => {
     expect(item.status).toBe('destroyed');
     expect(quote.localDirty).toBeNull();
     expect(quote.totalCents).toBe(3400);
-    expect(draft.lineItemsJson).toBe(lines);
+    const storedLines = JSON.parse(draft.lineItemsJson) as {
+      name: string;
+      quantity: number;
+      unitPriceCents: number;
+      clientId: string;
+    }[];
+    expect(storedLines[0]).toMatchObject({
+      name: 'Valve',
+      quantity: 1,
+      unitPriceCents: 3400,
+    });
+    expect(storedLines[0]?.clientId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
     expect(quotes).toContain(quote);
   });
 
