@@ -30,7 +30,10 @@ import {
 import { lineItemsFromQueuePayload } from './draft-conflict';
 import { fetchAndResolveDraftFork } from './draft-conflict-sync';
 import { parseRoomsJson } from '../quotes/rooms';
-import { normalizePrivateNote } from '../quotes/private-notes';
+import {
+  lineItemsForQuotePut,
+  repairDraftLineItemsJson,
+} from '../quotes/repair-draft-ids';
 import { assignStoredAiFailureStage } from '../quotes/ai-failed-recovery';
 import {
   failQuoteAfterAudioDeadLetterPlan,
@@ -49,6 +52,7 @@ import {
   isFrozenQuoteWriteError,
   isShareSentSnapshotPayload,
   payloadMutatesQuoteMoney,
+  shouldAdoptCreatedServerQuote,
   shouldParkFrozenMoneyPut,
 } from './frozen-quote';
 import { rememberServerRevision } from './server-revision';
@@ -356,7 +360,7 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       if (localQuote.serverId) {
         return;
       }
-      const response = await createQuoteOnServer({
+      const createBody = {
         status: payload.status as string | undefined,
         customerPhone: payload.customerPhone as string | undefined,
         totalCents: payload.totalCents as number | undefined,
@@ -368,8 +372,24 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           payload.clientSentence === undefined
             ? undefined
             : (payload.clientSentence as string | null),
+      };
+      let response = await createQuoteOnServer({
+        ...createBody,
         clientKey: localQuote.id,
       });
+      const shared = await quoteCollection.query(Q.where('server_id', response.id)).fetch();
+      if (!shouldAdoptCreatedServerQuote({
+        responseStatus: response.status,
+        localStatus: localQuote.status,
+        otherLocalIdsWithSameServerId: shared
+          .filter((row) => row.id !== localQuote.id)
+          .map((row) => row.id),
+      })) {
+        response = await createQuoteOnServer({
+          ...createBody,
+          clientKey: `${localQuote.id}:draft`,
+        });
+      }
       await database.write(async () => {
         await localQuote.update((r) => {
           r.serverId = response.id;
@@ -472,19 +492,28 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
     }
     const lineItemsRaw = payload.lineItemsJson as string | undefined;
     if (lineItemsRaw) {
-      const items = JSON.parse(lineItemsRaw) as {
-        name: string;
-        quantity: number;
-        unitPriceCents: number;
-        unit?: string | null;
-        privateNote?: string | null;
-        priceSource?: string | null;
-        optionGroupId?: string | null;
-        optionRole?: string | null;
-        roomId?: string | null;
-        clientId?: string | null;
-      }[];
-      const payloadLines = lineItemsFromQueuePayload(payload) ?? [];
+      if (shouldParkFrozenMoneyPut(quote.status, payload)) {
+        throw new FrozenQuoteWriteError();
+      }
+      const repaired = repairDraftLineItemsJson(lineItemsRaw);
+      if (repaired.changed) {
+        payload.lineItemsJson = repaired.json;
+        await database.write(async () => {
+          await draft.update((record) => {
+            record.lineItemsJson = repaired.json;
+          });
+          const stored = JSON.parse(item.payloadJson) as Record<string, unknown>;
+          stored.lineItemsJson = repaired.json;
+          await item.update((record) => {
+            record.payloadJson = JSON.stringify(stored);
+          });
+        });
+      }
+      const items = lineItemsForQuotePut(repaired.items);
+      const payloadLines = lineItemsFromQueuePayload({
+        ...payload,
+        lineItemsJson: repaired.json,
+      }) ?? [];
       const outcome = await fetchAndResolveDraftFork({
         quote,
         draft,
@@ -492,21 +521,14 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       });
       if (outcome === 'conflict') return;
       if (outcome === 'frozen') throw new FrozenQuoteWriteError();
-      if (shouldParkFrozenMoneyPut(quote.status, payload)) {
-        throw new FrozenQuoteWriteError();
-      }
       const rooms = parseRoomsJson(quote.roomsJson);
       const updated = await updateQuoteOnServer(quote.serverId, {
-        lineItems: items.map((line) =>
-          Object.prototype.hasOwnProperty.call(line, 'privateNote')
-            ? { ...line, privateNote: normalizePrivateNote(line.privateNote) }
-            : line,
-        ),
+        lineItems: items,
         totalCents: payload.totalCents as number | undefined,
         ...(quote.roomsJson != null && quote.roomsJson !== '' ? { rooms } : {}),
       });
       await stampQuoteServerRevision(quote, quote.serverId, updated.updatedAt);
-      await clearPushedDirtyFields(quote, payload, draft.lineItemsJson);
+      await clearPushedDirtyFields(quote, payload, repaired.json);
     }
     return;
   }

@@ -3,11 +3,14 @@ import {
   FROZEN_QUOTE_STATUSES,
   FROZEN_QUOTE_WRITE_MESSAGE,
   QUOTE_MONEY_FROZEN_ERROR,
+  draftEditorKey,
   isFrozenQuoteStatus,
   isFrozenQuoteWriteError,
   isFrozenQuoteWriteMessage,
   isShareSentSnapshotPayload,
   payloadMutatesQuoteMoney,
+  quoteIdsToDetachFromSharedServer,
+  shouldAdoptCreatedServerQuote,
   shouldParkFrozenMoneyPut,
 } from './frozen-quote';
 
@@ -100,5 +103,36 @@ describe('frozen quote statuses (SYNC-06)', () => {
         error: 'Quote cannot be updated in its current status',
       }),
     ).toBe(false);
+  });
+
+  it('does not attach a new draft to a sent quote another local row already owns', () => {
+    expect(shouldAdoptCreatedServerQuote({
+      responseStatus: 'sent',
+      localStatus: 'draft_local',
+      otherLocalIdsWithSameServerId: ['original'],
+    })).toBe(false);
+    expect(shouldAdoptCreatedServerQuote({
+      responseStatus: 'draft_local',
+      localStatus: 'draft_local',
+      otherLocalIdsWithSameServerId: [],
+    })).toBe(true);
+    expect(shouldAdoptCreatedServerQuote({
+      responseStatus: 'sent',
+      localStatus: 'sent',
+      otherLocalIdsWithSameServerId: [],
+    })).toBe(true);
+  });
+
+  it('detaches the later copy when two local quotes share a server id', () => {
+    expect(quoteIdsToDetachFromSharedServer([
+      { id: 'copy', serverId: 'srv-1', createdAt: 200 },
+      { id: 'original', serverId: 'srv-1', createdAt: 100 },
+      { id: 'other', serverId: 'srv-2', createdAt: 50 },
+    ])).toEqual(['copy']);
+  });
+
+  it('gives each draft route its own editor key', () => {
+    expect(draftEditorKey('quote-a')).toBe('quote-a');
+    expect(draftEditorKey('quote-a')).not.toBe(draftEditorKey('quote-b'));
   });
 });

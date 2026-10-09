@@ -1,5 +1,9 @@
 import { parseCatalogUnit } from "../catalog/units.js";
-import { isStorableNonNegativeCents, isStorableQuantity } from "../quotes/integer-money.js";
+import {
+  isStorableHours,
+  isStorableNonNegativeCents,
+  isStorableQuantity,
+} from "../quotes/integer-money.js";
 import { lookupRateCardEntry, type RateCardQueryFn } from "../rate-card/upsert.js";
 import type { BuiltVoiceLine, PriceSource, ValidatedLineItem } from "./voice-validation.js";
 
@@ -51,10 +55,10 @@ export function computeMaterialSellCents(
 }
 
 export function parseSpokenHours(value: unknown): number | null {
-  if (!isStorableQuantity(value)) {
-    return null;
+  if (isStorableQuantity(value) || isStorableHours(value)) {
+    return value;
   }
-  return value;
+  return null;
 }
 
 /** Labor is an hour-unit line. Material cost × markup is never applied to hour lines. */
@@ -87,7 +91,7 @@ export function ensureLaborLineFromSpokenHours(
       spokenUnitPriceCents: null,
       spokenMaterialCostCents: null,
       catalogUnitPriceCents: null,
-      confidence: 0.8,
+      confidence: Number.isInteger(hours) ? 0.8 : 0.9,
       roomName: null,
     },
   ];
@@ -217,7 +221,8 @@ export function totalCentsFromPricedLines(
   lines: Array<{ quantity: number; unitPriceCents: number | null }>,
 ): number {
   return lines.reduce(
-    (sum, item) => sum + item.quantity * snapshotUnitPriceCents(item.unitPriceCents),
+    (sum, item) =>
+      sum + Math.round(item.quantity * snapshotUnitPriceCents(item.unitPriceCents)),
     0,
   );
 }

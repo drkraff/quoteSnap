@@ -229,7 +229,7 @@ function copyLines(
     }
     const mappedRoom = item.roomId ? roomIds.get(item.roomId) : undefined;
     if (mappedRoom) next.roomId = mappedRoom;
-    if (item.clientId) next.clientId = freshId(newId, used);
+    next.clientId = freshId(newId, used);
     return next;
   });
   return sanitizeOptionGroups(copied);

@@ -1,6 +1,7 @@
 import { parseCatalogUnit } from "../catalog/units.js";
 import { displayRateCardName } from "../rate-card/normalize.js";
 import {
+  isStorableHours,
   isStorableNonNegativeCents,
   isStorableQuantity,
   POSTGRES_INTEGER_MAX,
@@ -69,7 +70,10 @@ export function parseSpokenUnitPriceCents(value: unknown): number | null {
   return value as number;
 }
 
-function parseVoiceQuantity(value: unknown): number {
+function parseVoiceQuantity(value: unknown, unit: string | null): number {
+  if (parseCatalogUnit(unit) === "hour" && isStorableHours(value)) {
+    return value;
+  }
   if (isStorableQuantity(value)) {
     return value;
   }
@@ -97,7 +101,7 @@ function fitVoiceLinesToIntegerColumns(lineItems: ValidatedLineItem[]): {
     if (price == null) {
       return line;
     }
-    const extension = line.quantity * price;
+    const extension = Math.round(line.quantity * price);
     const next = total + extension;
     if (
       !isStorableNonNegativeCents(price) ||
@@ -163,7 +167,7 @@ export function buildVoiceLineItems(
     lines.push({
       catalogItemId: catalogId,
       name,
-      quantity: parseVoiceQuantity(item.quantity),
+      quantity: parseVoiceQuantity(item.quantity, catalogUnit ?? spokenUnit),
       unit: catalogUnit ?? spokenUnit,
       spokenUnitPriceCents: parseSpokenUnitPriceCents(item.spokenUnitPriceCents),
       spokenMaterialCostCents: parseSpokenUnitPriceCents(item.spokenMaterialCostCents),

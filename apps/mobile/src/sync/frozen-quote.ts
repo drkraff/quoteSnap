@@ -35,6 +35,55 @@ export function isFrozenQuoteStatus(status: string): boolean {
   return FROZEN_QUOTE_STATUS_SET.has(status);
 }
 
+/**
+ * A new local draft must not take the server id of a quote that is already
+ * sent. That link makes the copy inherit the lock on the next hydrate.
+ */
+export function shouldAdoptCreatedServerQuote(args: {
+  responseStatus: string;
+  localStatus: string;
+  otherLocalIdsWithSameServerId: readonly string[];
+}): boolean {
+  return !(
+    args.localStatus === 'draft_local'
+    && isFrozenQuoteStatus(args.responseStatus)
+    && args.otherLocalIdsWithSameServerId.length > 0
+  );
+}
+
+/**
+ * Two local quotes must not share one server id. The oldest row keeps it
+ * (the quote that was actually sent). Later rows are duplicates and go
+ * back to an editable draft so they can sync as their own quote.
+ */
+export function quoteIdsToDetachFromSharedServer(
+  quotes: readonly { id: string; serverId: string | null; createdAt: number }[],
+): string[] {
+  const groups = new Map<string, { id: string; createdAt: number }[]>();
+  for (const quote of quotes) {
+    if (!quote.serverId) continue;
+    const list = groups.get(quote.serverId) ?? [];
+    list.push({ id: quote.id, createdAt: quote.createdAt });
+    groups.set(quote.serverId, list);
+  }
+  const detach: string[] = [];
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const ranked = [...group].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+    for (const quote of ranked.slice(1)) {
+      detach.push(quote.id);
+    }
+  }
+  return detach;
+}
+
+/** Remount the draft editor when the route id changes so a sent quote's lock cannot stick. */
+export function draftEditorKey(id: string | string[] | undefined): string {
+  if (typeof id === 'string') return id;
+  if (Array.isArray(id) && typeof id[0] === 'string') return id[0];
+  return '';
+}
+
 /** Archive PATCH is not a money write. Line replacements and totals are. */
 export function payloadMutatesQuoteMoney(payload: Record<string, unknown>): boolean {
   if (payload.isArchived === true || payload.isArchived === false) {

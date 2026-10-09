@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import {
   inferSnapshotPriceSource,
   isSnapshotPriceSource,
   type SnapshotPriceSource,
 } from "../quotes/price-source.js";
+import { isUuid } from "../uuid.js";
 import { snapshotUnitPriceCents } from "../workers/voice-price-attach.js";
 import type { AiFailureStage } from "./ai-failure.js";
 
@@ -19,11 +21,12 @@ export type VoiceCommitLine = {
   confidence: number;
   priceSource?: SnapshotPriceSource | string | null;
   roomId?: string | null;
+  clientId?: string | null;
 };
 
 export const DELETE_VOICE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE quote_id = $1`;
 
-export const INSERT_VOICE_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence, unit, price_source, room_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`;
+export const INSERT_VOICE_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence, unit, price_source, room_id, client_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
 
 function commitPriceSource(item: VoiceCommitLine): SnapshotPriceSource {
   const cents = snapshotUnitPriceCents(item.unitPriceCents);
@@ -65,6 +68,7 @@ export async function replaceVoiceQuoteLines(
       item.unit,
       commitPriceSource(item),
       item.roomId ?? null,
+      item.clientId && isUuid(item.clientId) ? item.clientId : randomUUID(),
     ]);
   }
   await client.query(UPDATE_VOICE_QUOTE_RESULT_SQL, [

@@ -38,6 +38,7 @@ import {
   isUnknownUnitPrice,
   selectOptionForTotal,
 } from '../../../src/utils/line-items';
+import { repairDraftLineItems } from '../../../src/quotes/repair-draft-ids';
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
 import { commitDraftLineEdit } from '../../../src/quotes/commit-draft-lines';
@@ -52,7 +53,11 @@ import {
   sendBlockedByReview,
 } from '../../../src/sync/draft-conflict';
 import { fetchAndResolveDraftFork } from '../../../src/sync/draft-conflict-sync';
-import { FROZEN_QUOTE_WRITE_MESSAGE, isFrozenQuoteStatus } from '../../../src/sync/frozen-quote';
+import {
+  FROZEN_QUOTE_WRITE_MESSAGE,
+  draftEditorKey,
+  isFrozenQuoteStatus,
+} from '../../../src/sync/frozen-quote';
 import {
   acknowledgeDraftReview,
   isNeedsReviewForDraft,
@@ -119,6 +124,7 @@ import {
   UNGROUPED_ROOM_LABEL,
   addRoom,
   assignLineRoom,
+  draftListRowKey,
   draftListRows,
   parseRoomsJson,
   removeRoom,
@@ -165,7 +171,7 @@ import {
   upsertResumeCheckpoint,
 } from '../../../src/quotes/resume-checkpoint-store';
 
-export default function DraftScreen(): JSX.Element {
+function DraftScreen(): JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -300,8 +306,18 @@ export default function DraftScreen(): JSX.Element {
         let loadedDraft: Draft;
         if (drafts[0]) {
           loadedDraft = drafts[0];
+          const repaired = repairDraftLineItems(parseLineItems(loadedDraft.lineItemsJson));
+          if (repaired.changed) {
+            const lineItemsJson = serializeLineItems(repaired.items);
+            await database.write(async () => {
+              await loadedDraft.update((record) => {
+                record.lineItemsJson = lineItemsJson;
+              });
+            });
+          }
+          if (cancelled) return;
           setDraft(loadedDraft);
-          setLineItems(parseLineItems(loadedDraft.lineItemsJson));
+          setLineItems(repaired.items);
         } else {
           let createdId = '';
           await database.write(async () => {
@@ -381,6 +397,12 @@ export default function DraftScreen(): JSX.Element {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!isFrozenQuoteStatus(quoteStatus) && validationError === FROZEN_QUOTE_WRITE_MESSAGE) {
+      setValidationError('');
+    }
+  }, [quoteStatus, validationError]);
 
   // Subscribe to quote status (ai_failed → draft_local recovery)
   useEffect(() => {
@@ -1165,9 +1187,7 @@ export default function DraftScreen(): JSX.Element {
       <FlatList
         ref={flatListRef}
         data={listRows}
-        keyExtractor={(row, index) =>
-          row.kind === 'line' ? `line-${row.index}` : `${row.kind}-${index}`
-        }
+        keyExtractor={(row, index) => draftListRowKey(row, index)}
         renderItem={({ item: row }) => {
           if (row.kind === 'room') {
             const renaming = roomRenameId === row.room.id;
@@ -1862,3 +1882,8 @@ const styles = StyleSheet.create({
     color: colors.accent,
   },
 });
+
+export default function DraftScreenRoute(): JSX.Element {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return <DraftScreen key={draftEditorKey(id)} />;
+}

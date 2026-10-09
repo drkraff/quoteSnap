@@ -51,7 +51,7 @@ export function LineItemRow({
     );
   }
 
-  const minusDisabled = quantity === 1;
+  const minusDisabled = quantity <= 1;
 
   const tierBorderStyle =
     confidence === 'needs_input' || unknownFlag

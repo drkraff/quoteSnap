@@ -21,7 +21,7 @@ import {
   dropPendingQuoteDraftUpdatesInWrite,
   ensureNeedsReviewInWrite,
 } from './draft-conflict-queue';
-import { isFrozenQuoteStatus } from './frozen-quote';
+import { isFrozenQuoteStatus, quoteIdsToDetachFromSharedServer } from './frozen-quote';
 import { toDraftLineItems } from './draft-line-items';
 import { assignPulledQuoteTextFields, fieldHeld } from './local-dirty';
 import {
@@ -251,6 +251,22 @@ export async function upsertQuotes(
     const existingQuotes = await quoteCollection
       .query(Q.where('contractor_id', contractorId))
       .fetch();
+    const detachIds = new Set(quoteIdsToDetachFromSharedServer(
+      existingQuotes.map((row) => ({
+        id: row.id,
+        serverId: row.serverId,
+        createdAt: row.createdAt instanceof Date ? row.createdAt.getTime() : 0,
+      })),
+    ));
+    for (const row of existingQuotes) {
+      if (!detachIds.has(row.id)) continue;
+      await row.update((record) => {
+        record.serverId = null;
+        record.status = 'draft_local';
+        record.sentAt = null;
+      });
+    }
+
     const quoteByServerId = new Map<string, Quote>();
     for (const row of existingQuotes) {
       if (row.serverId) {

@@ -21,7 +21,11 @@ import {
   type AiFailureStage,
 } from '../voice/ai-failure.js';
 import { replaceVoiceQuoteLines } from '../voice/commit-voice-result.js';
-import { joinAssumptionsToClientSentence } from '../voice/assumptions.js';
+import {
+  joinAssumptionsToClientSentence,
+  sanitizeClientFacingSentence,
+} from '../voice/assumptions.js';
+import { supplementSpokenExtract } from '../voice/spoken-extract.js';
 import { attachVoiceRooms } from '../quotes/rooms.js';
 import { randomUUID } from 'node:crypto';
 import { errorSummary, log } from '../log/logger.js';
@@ -151,12 +155,14 @@ Rules:
 - Return every distinct work item mentioned, even if it is not in the catalog.
 - When it matches a catalog item, set catalogItemId to that exact UUID.
 - When it does not match, omit catalogItemId. Still return name, quantity, and unit from speech.
-- quantity is an integer >= 1. "14 linear feet" → quantity 14, unit foot.
+- quantity is a number > 0. "14 linear feet" → quantity 14, unit foot. "half an hour" of labor → quantity 0.5, unit hour. Do not round a half hour up to 1.
 - unit must be one of: each, hour, foot, sqft, job.
-- spokenUnitPriceCents is integer cents ONLY if the contractor stated a sell/charge price (example: "eight fifty a foot" → 850, "I'll charge 250 each" → 25000). If they did not say a sell price, omit it or null. Do not put a supplier cost here.
+- A spoken lump such as "plus 150 for cable and materials" is its own line: name from the words after the amount, quantity 1, unit job, spokenUnitPriceCents 15000. Do not drop it and do not fold it into another line.
+- spokenUnitPriceCents is integer cents ONLY if the contractor stated a sell/charge price (example: "eight fifty a foot" → 850, "I'll charge 250 each" → 25000, "80 shekels each" → 8000). A spoken price overrides any saved rate. If they did not say a sell price, omit it or null. Do not put a supplier cost here.
 - spokenMaterialCostCents is integer cents ONLY if the contractor stated (or typed in notes) a supplier/material cost, not the sell price (example: "pipe cost me forty bucks" → 4000, "fittings were 85 at the supplier" → 8500). Omit or null if they did not name a cost. NEVER guess. NEVER copy catalog. NEVER treat a sell/charge price as cost.
-- spokenHours is integer hours for the job ONLY if they stated labor time (example: "call it two hours" → 2). Omit or null if they did not say hours. Do not guess duration.
-- assumptions: client-facing scope sentences they said (what is not included). Example: "appliances not included". Empty array if they said none. Do not invent exclusions, private notes, or prices.
+- spokenHours is the labor time they stated, and it may be fractional (example: "call it two hours" → 2, "half an hour" → 0.5). Omit or null if they did not say hours. Do not guess duration. Do not round 0.5 up to 1.
+- assumptions: client-facing scope sentences they said (what is not included). Example: "appliances not included". Empty array if they said none. Do not invent exclusions, private notes, or prices. Never put the transcript or a price in assumptions.
+- clientSentence: one short customer-facing description of the job, with no prices, currency, or quote of their speech. Null if you cannot say it without copying the transcript or a price. Empty is better than a fragment.
 - room: the room or zone they named for that line (kitchen, bath, living room). Omit or null if they did not name a room. Never invent a room.
 - NEVER invent a price, SKU, catalog ID, typical trade rate, or room. Never copy a price from the catalog; prices are attached later.
 - Do not add catalog items they did not mention.`,
@@ -188,7 +194,12 @@ Rules:
                         type: 'string',
                         description: 'Spoken line name. Required when catalogItemId is omitted.',
                       },
-                      quantity: { type: 'integer', minimum: 1 },
+                      quantity: {
+                        type: 'number',
+                        exclusiveMinimum: 0,
+                        description:
+                          'Spoken quantity. Labor hours may be fractional (half an hour is 0.5). Do not round 0.5 up to 1.',
+                      },
                       unit: {
                         type: 'string',
                         enum: ['each', 'hour', 'foot', 'sqft', 'job'],
@@ -222,16 +233,21 @@ Rules:
                   },
                 },
                 spokenHours: {
-                  type: ['integer', 'null'],
-                  minimum: 1,
+                  type: ['number', 'null'],
+                  exclusiveMinimum: 0,
                   description:
-                    'Integer hours the contractor said for the job. Null/omit if they did not say hours. NEVER guess.',
+                    'Hours the contractor said for the job. Half an hour is 0.5. Null/omit if they did not say hours. NEVER guess. Do not round 0.5 up to 1.',
                 },
                 assumptions: {
                   type: 'array',
                   items: { type: 'string' },
                   description:
-                    'Client-facing exclusions or assumptions the contractor said. Empty if none. Never invent. Never private notes or prices.',
+                    'Client-facing exclusions or assumptions the contractor said. Empty if none. Never invent. Never private notes, prices, or the raw transcript.',
+                },
+                clientSentence: {
+                  type: ['string', 'null'],
+                  description:
+                    'One short customer-facing job description. No prices, no currency, no transcript quote. Null if you cannot say it without those.',
                 },
               },
               required: ['items'],
@@ -252,9 +268,14 @@ Rules:
     // We always use function tool_choice so this will be a function tool call
     const toolCall = rawToolCall as ChatCompletionMessageFunctionToolCall;
     const parsed = JSON.parse(toolCall.function.arguments) as VoiceExtractResult;
-    const aiItems: AILineItem[] = Array.isArray(parsed.items) ? parsed.items : [];
-    const spokenHours = parseSpokenHours(parsed.spokenHours);
-    clientSentence = joinAssumptionsToClientSentence(parsed.assumptions);
+    const extractedItems: AILineItem[] = Array.isArray(parsed.items) ? parsed.items : [];
+    const parsedHours = parseSpokenHours(parsed.spokenHours);
+    const supplemented = supplementSpokenExtract(transcript, extractedItems, parsedHours);
+    const aiItems = supplemented.items;
+    const spokenHours = supplemented.spokenHours;
+    clientSentence =
+      sanitizeClientFacingSentence(parsed.clientSentence)
+      ?? joinAssumptionsToClientSentence(parsed.assumptions);
 
     // g) Validate catalog IDs — only UUID-shaped values may hit the uuid column.
     const aiItemIds = filterUuidCatalogIds(

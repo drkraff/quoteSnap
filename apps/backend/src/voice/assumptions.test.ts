@@ -31,6 +31,19 @@ describe("joinAssumptionsToClientSentence", () => {
     assert.equal(joinAssumptionsToClientSentence([]), null);
     assert.equal(joinAssumptionsToClientSentence(["  ", ""]), null);
     assert.equal(joinAssumptionsToClientSentence(12), null);
+    assert.equal(
+      joinAssumptionsToClientSentence([
+        "Sockets are 80 shekels each, plus 150 for cable and materials.",
+      ]),
+      null,
+    );
+    assert.equal(
+      joinAssumptionsToClientSentence([
+        "Sockets are 80 shekels each, plus 150 for cable and materials.",
+        "Appliances not included.",
+      ]),
+      "Appliances not included.",
+    );
     assert.equal(joinAssumptionsToClientSentence([{ text: "nope" }]), null);
   });
 

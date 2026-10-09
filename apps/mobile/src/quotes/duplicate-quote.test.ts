@@ -242,6 +242,10 @@ describe('buildDuplicateDraft', () => {
 
     expect(draft.lineItems[0]?.unitPriceCents).toBeNull();
     expect(draft.lineItems[1]?.unitPriceCents).toBe(0);
+    expect(draft.lineItems[0]?.clientId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(draft.lineItems[0]?.clientId).not.toBe(draft.lineItems[1]?.clientId);
     expect(draft.lineItems[0]?.priceSource).toBeUndefined();
     expect(draft.totalCents).toBe(0);
     expect(JSON.stringify(draft)).not.toMatch(/"unitPriceCents":\s*[1-9]/);

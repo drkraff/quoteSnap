@@ -89,6 +89,9 @@ export function parseRoomsJson(json: string | null | undefined): QuoteRoom[] {
       if (!id || !name) {
         continue;
       }
+      if (rooms.some((room) => room.id === id)) {
+        continue;
+      }
       const room: QuoteRoom = { id, name };
       if (typeof raw.privateNote === 'string' || raw.privateNote === null) {
         const note = normalizePrivateNote(raw.privateNote);
@@ -266,10 +269,11 @@ export function draftListRows(rooms: QuoteRoom[], items: LineItem[]): DraftListR
   for (const room of rooms) {
     rows.push({ kind: 'room', room });
     items.forEach((item, index) => {
-      if (item.roomId === room.id) {
-        claimed.add(index);
-        rows.push({ kind: 'line', index, item });
+      if (claimed.has(index) || item.roomId !== room.id) {
+        return;
       }
+      claimed.add(index);
+      rows.push({ kind: 'line', index, item });
     });
   }
   const ungrouped = items
@@ -286,6 +290,18 @@ export function draftListRows(rooms: QuoteRoom[], items: LineItem[]): DraftListR
     }
   }
   return rows;
+}
+
+/** FlatList key. Includes the row position so two lines cannot share `line-0`. */
+export function draftListRowKey(row: DraftListRow, index: number): string {
+  if (row.kind === 'line') {
+    const id = row.item.clientId;
+    return id ? `line-${id}-${index}` : `line-pos-${row.index}-${index}`;
+  }
+  if (row.kind === 'room') {
+    return `room-${row.room.id}-${index}`;
+  }
+  return `${row.kind}-${index}`;
 }
 
 export function rowIndexForLineIndex(rows: DraftListRow[], lineIndex: number): number {
