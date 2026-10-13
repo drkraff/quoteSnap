@@ -11,6 +11,7 @@ export interface ContractorResponse {
   currencyCode?: string | null;
   unitSystem?: string | null;
   vatPercent?: number | null;
+  countryCode?: string | null;
 }
 
 export interface AuthResponse {

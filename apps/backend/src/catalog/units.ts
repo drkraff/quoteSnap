@@ -32,3 +32,20 @@ export function parseCatalogUnit(value: unknown): CatalogUnit | null {
 export function catalogUnitErrorMessage(): string {
   return `unit must be one of: ${VALID_UNITS.join(", ")}`;
 }
+
+/** Customer page labels. Cable length is ft. Labor is hours. */
+const CUSTOMER_UNIT_LABELS: Record<CatalogUnit, string> = {
+  each: "ea",
+  hour: "hours",
+  meter: "m",
+  sqm: "m²",
+  foot: "ft",
+  sqft: "sq ft",
+  job: "job",
+};
+
+export function customerUnitLabel(unit: string | null | undefined): string {
+  const parsed = parseCatalogUnit(unit);
+  if (!parsed) return "";
+  return CUSTOMER_UNIT_LABELS[parsed];
+}

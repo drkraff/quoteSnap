@@ -305,6 +305,59 @@ describe('professional customer page', () => {
   });
 });
 
+describe('US customer page', () => {
+  it('uses dollars, feet for cable, hours for labor, and sales tax', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: '+15555550100',
+      customerName: 'Jordan Lee',
+      totalCents: 19500,
+      currencyCode: 'USD',
+      vatPercent: 8,
+      countryCode: 'US',
+      lineItems: [
+        { name: 'cable', quantity: 10, unitPriceCents: 450, unit: 'foot' },
+        { name: 'labor', quantity: 2, unitPriceCents: 7500, unit: 'hour' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload, {
+      displayName: 'Ada Electric',
+      trade: 'electrical',
+    });
+    expect(doc.html).toContain('Cable');
+    expect(doc.html).toContain('Labor');
+    expect(doc.html).toContain('ft');
+    expect(doc.html).toContain('hours');
+    expect(doc.html).toContain('$4.50');
+    expect(doc.html).toContain('$45.00');
+    expect(doc.html).toContain('$75.00');
+    expect(doc.html).toContain('$150.00');
+    expect(doc.html).toContain('Sales tax 8%');
+    expect(doc.html).toContain('$15.60');
+    expect(doc.totalLabel).toBe('$210.60');
+    expect(doc.html).not.toContain('VAT');
+    expect(doc.html).not.toContain('₪');
+    expect(doc.text).toContain('Sales tax 8%  $15.60');
+    expect(payload.countryCode).toBe('US');
+  });
+
+  it('prints a zero sales-tax line instead of inventing a rate', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 4500,
+      currencyCode: 'USD',
+      vatPercent: 0,
+      countryCode: 'US',
+      lineItems: [
+        { name: 'cable', quantity: 10, unitPriceCents: 450, unit: 'foot' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload);
+    expect(doc.html).toContain('Sales tax 0%');
+    expect(doc.html).toContain('$0.00');
+    expect(doc.totalLabel).toBe('$45.00');
+  });
+});
+
 describe('format helpers', () => {
   it('maps known trades and trims blank brand fields', () => {
     expect(formatCustomerTrade('hvac')).toBe('HVAC');

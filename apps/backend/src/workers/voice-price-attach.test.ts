@@ -545,7 +545,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 describe("voice-processor material markup wiring", () => {
   it("loads signup markup_percent and extracts cost separately from sell price", () => {
     const src = readFileSync(path.join(here, "voice-processor.ts"), "utf8");
-    assert.match(src, /SELECT trade, hourly_rate_cents, markup_percent FROM contractors/);
+    assert.match(src, /SELECT trade, hourly_rate_cents, markup_percent, unit_system FROM contractors/);
+    assert.match(src, /voiceUnitRule\(/);
     assert.match(src, /parseSignupMarkupPercent\(contractorRow\?\.markup_percent\)/);
     assert.match(src, /markupPercent,/);
     assert.match(src, /spokenMaterialCostCents/);

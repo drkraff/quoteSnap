@@ -3,9 +3,10 @@ import { SafeAreaView, ScrollView, StyleSheet, Text } from 'react-native';
 import { LocaleStep } from '../../src/components/onboarding/locale-step';
 import { saveOnboardingProfile, type Trade } from '../../src/api/onboarding';
 import {
+  COUNTRY_PRESETS,
+  countryChoiceForStoredLocale,
   parseVatPercent,
-  type CurrencyCode,
-  type UnitSystem,
+  type CountryCode,
 } from '../../src/money/currency';
 import { useContractorLocale } from '../../src/money/use-contractor-locale';
 import { useAuthStore } from '../../src/store/auth-store';
@@ -17,18 +18,28 @@ const TRADES = new Set<string>(['plumbing', 'electrical', 'hvac']);
 
 export default function SettingsScreen(): JSX.Element {
   const locale = useContractorLocale();
-  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(locale.currencyCode);
-  const [unitSystem, setUnitSystem] = useState<UnitSystem>(locale.unitSystem);
+  const [countryCode, setCountryCode] = useState<CountryCode>(countryChoiceForStoredLocale(locale));
   const [vatText, setVatText] = useState(String(locale.vatPercent));
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const vatPercent = parseVatPercent(Number(vatText));
 
+  function selectCountry(next: CountryCode): void {
+    setCountryCode(next);
+    setVatText(String(COUNTRY_PRESETS[next].vatPercent));
+  }
+
   async function handleSave(): Promise<void> {
     if (vatPercent == null || saving) return;
     setSaving(true);
     setMessage(null);
-    const next = { currencyCode, unitSystem, vatPercent };
+    const preset = COUNTRY_PRESETS[countryCode];
+    const next = {
+      countryCode,
+      currencyCode: preset.currencyCode,
+      unitSystem: preset.unitSystem,
+      vatPercent,
+    };
     try {
       await useAuthStore.getState().updateContractorProfile(next);
       const contractor = useAuthStore.getState().contractor;
@@ -59,11 +70,9 @@ export default function SettingsScreen(): JSX.Element {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <LocaleStep
-          currencyCode={currencyCode}
-          unitSystem={unitSystem}
+          countryCode={countryCode}
           vatText={vatText}
-          onChangeCurrency={setCurrencyCode}
-          onChangeUnitSystem={setUnitSystem}
+          onChangeCountry={selectCountry}
           onChangeVat={setVatText}
           onContinue={() => {
             void handleSave();

@@ -11,8 +11,10 @@
 import {
   DEFAULT_CURRENCY,
   DEFAULT_VAT_PERCENT,
+  parseCountryCode,
   parseCurrencyCode,
   parseVatPercent,
+  type CountryCode,
   type CurrencyCode,
 } from '../money/currency';
 import { normalizeClientSentence } from './client-sentence';
@@ -35,6 +37,8 @@ export type CustomerQuotePayload = {
   exclusions: string | null;
   currencyCode: CurrencyCode;
   vatPercent: number;
+  /** Null until the contractor has chosen a country. Do not invent US. */
+  countryCode: CountryCode | null;
   lineItems: CustomerLineItemPayload[];
 };
 
@@ -46,6 +50,7 @@ const CUSTOMER_QUOTE_KEYS = [
   'exclusions',
   'currencyCode',
   'vatPercent',
+  'countryCode',
   'lineItems',
 ] as const;
 const CUSTOMER_LINE_KEYS = ['name', 'quantity', 'unitPriceCents', 'unit', 'roomName'] as const;
@@ -58,6 +63,7 @@ export type CustomerQuoteSource = {
   exclusions?: string | null;
   currencyCode?: string | null;
   vatPercent?: number | null;
+  countryCode?: string | null;
   privateNote?: string | null;
   notes?: string | null;
   lineItems: {
@@ -87,6 +93,7 @@ export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuo
     exclusions: normalizeExclusions(source.exclusions),
     currencyCode: parseCurrencyCode(source.currencyCode) ?? DEFAULT_CURRENCY,
     vatPercent: parseVatPercent(source.vatPercent) ?? DEFAULT_VAT_PERCENT,
+    countryCode: parseCountryCode(source.countryCode),
     lineItems: source.lineItems
       .filter((item) => item.optionRole !== 'alt')
       .map((item) => ({

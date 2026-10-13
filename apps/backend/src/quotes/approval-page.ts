@@ -4,7 +4,13 @@
  * A second tap, or the opposite tap, does not flip approved/declined.
  */
 
-import { formatMoneyCents, type CurrencyCode } from "../money/currency.js";
+import { customerUnitLabel } from "../catalog/units.js";
+import {
+  formatMoneyCents,
+  parseCountryCode,
+  taxLabelForCountry,
+  type CurrencyCode,
+} from "../money/currency.js";
 import { quoteVatTotals } from "../money/vat.js";
 import { capitalizeItemName } from "./customer-fields.js";
 import type { CustomerLineItemPayload, CustomerQuotePayload } from "./customer-payload.js";
@@ -67,6 +73,7 @@ export type ApprovalPageModel = {
   subtotalLabel: string;
   vatLabel: string | null;
   vatPercent: number | null;
+  taxLabel: string;
   totalLabel: string;
   token: string;
 };
@@ -160,7 +167,9 @@ export function formatDecisionTimestamp(value: Date): string {
 }
 
 function quantityLabel(quantity: number, unit: string | null): string {
-  return unit ? `${quantity} ${unit}` : String(quantity);
+  if (!unit) return String(quantity);
+  const label = customerUnitLabel(unit);
+  return label ? `${quantity} ${label}` : `${quantity} ${unit}`;
 }
 
 export function parseSnapshotPayload(value: unknown): CustomerQuotePayload | null {
@@ -230,6 +239,7 @@ export function parseSnapshotPayload(value: unknown): CustomerQuotePayload | nul
       : null,
     currencyCode,
     vatPercent,
+    countryCode: parseCountryCode(obj.countryCode),
     lineItems,
   };
 }
@@ -265,6 +275,7 @@ export function approvalPageModel(args: {
     subtotalLabel: formatMoneyCents(args.payload.totalCents, currency),
     vatPercent: totals ? totals.vatPercent : null,
     vatLabel: totals ? formatMoneyCents(totals.vatCents, currency) : null,
+    taxLabel: taxLabelForCountry(args.payload.countryCode),
     totalLabel: formatMoneyCents(totals ? totals.totalCents : args.payload.totalCents, currency),
     token: args.token,
   };
@@ -424,7 +435,7 @@ function renderQuoteBody(page: ApprovalPageModel, decisionHtml: string, actionsH
     ? `<section class="assumptions"><h2>Not included</h2><p class="sentence">${escapeHtml(page.exclusions)}</p></section>`
     : "";
   const vat = page.vatLabel != null && page.vatPercent != null
-    ? `<p class="total"><span>VAT ${page.vatPercent}%</span><span>${escapeHtml(page.vatLabel)}</span></p>`
+    ? `<p class="total"><span>${escapeHtml(page.taxLabel)} ${page.vatPercent}%</span><span>${escapeHtml(page.vatLabel)}</span></p>`
     : "";
   const rows = groupApprovalLines(page.lines).map((section) => {
     const heading = section.heading

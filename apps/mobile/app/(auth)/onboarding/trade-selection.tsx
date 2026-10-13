@@ -92,6 +92,7 @@ export default function TradeSelectionScreen(): JSX.Element {
         currencyCode: locale.currencyCode,
         unitSystem: locale.unitSystem,
         vatPercent: locale.vatPercent,
+        ...(locale.countryCode ? { countryCode: locale.countryCode } : {}),
       });
       await useAuthStore.getState().updateContractorProfile({
         trade: response.contractor.trade,
@@ -100,6 +101,7 @@ export default function TradeSelectionScreen(): JSX.Element {
         currencyCode: locale.currencyCode,
         unitSystem: locale.unitSystem,
         vatPercent: locale.vatPercent,
+        countryCode: locale.countryCode,
       });
     } catch {
       if (contractorId) {
@@ -111,6 +113,7 @@ export default function TradeSelectionScreen(): JSX.Element {
             currencyCode: locale.currencyCode,
             unitSystem: locale.unitSystem,
             vatPercent: locale.vatPercent,
+            ...(locale.countryCode ? { countryCode: locale.countryCode } : {}),
           }),
         );
       }
@@ -121,6 +124,7 @@ export default function TradeSelectionScreen(): JSX.Element {
         currencyCode: locale.currencyCode,
         unitSystem: locale.unitSystem,
         vatPercent: locale.vatPercent,
+        countryCode: locale.countryCode,
       });
     }
   }

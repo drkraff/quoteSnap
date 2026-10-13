@@ -7,11 +7,11 @@
  * and the customer payload does not carry bytes or a public URL.
  */
 
-import { UNIT_LABELS } from '../catalog/units';
-import { parseCatalogUnit } from '../catalog/units';
+import { customerUnitLabel } from '../catalog/units';
 import {
   DEFAULT_CURRENCY,
   formatMoneyCents,
+  taxLabelForCountry,
   type CurrencyCode,
 } from '../money/currency';
 import { quoteVatTotals } from '../money/vat';
@@ -131,9 +131,7 @@ function quantityNumber(quantity: number): string {
 }
 
 function unitLabel(unit: string | null | undefined): string {
-  const parsed = unit ? parseCatalogUnit(unit) : null;
-  if (!parsed) return '';
-  return UNIT_LABELS[parsed];
+  return customerUnitLabel(unit);
 }
 
 export function groupCustomerLines(
@@ -211,6 +209,7 @@ export function customerQuoteToDocument(
   const exclusions = normalizeExclusions(payload.exclusions);
   const currency = payload.currencyCode ?? DEFAULT_CURRENCY;
   const vatPercent = payload.vatPercent ?? 18;
+  const taxLabel = taxLabelForCountry(payload.countryCode);
   const sections = groupCustomerLines(payload.lineItems, currency);
   const totals = quoteVatTotals(payload.totalCents, vatPercent);
   const subtotalLabel = formatMoneyCents(payload.totalCents, currency);
@@ -240,6 +239,7 @@ export function customerQuoteToDocument(
     sections,
     subtotalLabel,
     vatPercent,
+    taxLabel,
     vatLabel,
     totalLabel,
     approvalUrl: formatCustomerDisplayName(brand.approvalUrl),
@@ -275,6 +275,7 @@ type DocumentView = {
   sections: CustomerDocumentSection[];
   subtotalLabel: string;
   vatPercent: number;
+  taxLabel: string;
   vatLabel: string;
   totalLabel: string;
   approvalUrl: string | null;
@@ -313,7 +314,7 @@ function renderCustomerQuoteText(doc: DocumentView): string {
   }
   lines.push(`Subtotal  ${doc.subtotalLabel}`);
   if (doc.vatLabel !== '') {
-    lines.push(`VAT ${doc.vatPercent}%  ${doc.vatLabel}`);
+    lines.push(`${doc.taxLabel} ${doc.vatPercent}%  ${doc.vatLabel}`);
   }
   lines.push(`Total  ${doc.totalLabel}`);
   if (doc.exclusions) {
@@ -377,7 +378,7 @@ function renderCustomerQuoteHtml(doc: DocumentView): string {
     })
     .join('\n');
   const vatRow = doc.vatLabel !== ''
-    ? `<div class="money"><span>VAT ${doc.vatPercent}%</span><span>${escapeHtml(doc.vatLabel)}</span></div>`
+    ? `<div class="money"><span>${escapeHtml(doc.taxLabel)} ${doc.vatPercent}%</span><span>${escapeHtml(doc.vatLabel)}</span></div>`
     : '';
 
   return `<!DOCTYPE html>

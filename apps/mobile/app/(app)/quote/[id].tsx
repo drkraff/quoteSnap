@@ -230,6 +230,7 @@ export default function QuoteDetailScreen(): JSX.Element {
           exclusions: quote.exclusions,
           currencyCode: locale.currencyCode,
           vatPercent: locale.vatPercent,
+          countryCode: locale.countryCode,
           privateNote: quote.privateNote,
           rooms: quote.rooms,
           photos: quote.photos,

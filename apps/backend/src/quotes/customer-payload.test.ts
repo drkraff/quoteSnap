@@ -39,6 +39,7 @@ describe("toCustomerQuotePayload", () => {
       exclusions: null,
       currencyCode: "ILS",
       vatPercent: 18,
+      countryCode: null,
       lineItems: [
         {
           name: "Replace outlet",

@@ -16,6 +16,23 @@ export const UNIT_LABELS: Record<CatalogUnit, string> = {
   job: 'job',
 };
 
+/** Customer document and line quantity. Cable length is ft. Labor is hours. */
+const CUSTOMER_UNIT_LABELS: Record<CatalogUnit, string> = {
+  each: 'ea',
+  hour: 'hours',
+  meter: 'm',
+  sqm: 'm²',
+  foot: 'ft',
+  sqft: 'sq ft',
+  job: 'job',
+};
+
+export function customerUnitLabel(unit: string | null | undefined): string {
+  const parsed = parseCatalogUnit(unit);
+  if (!parsed) return '';
+  return CUSTOMER_UNIT_LABELS[parsed];
+}
+
 export function unitsForSystem(system: 'metric' | 'imperial'): readonly CatalogUnit[] {
   return system === 'imperial' ? IMPERIAL_UNITS : METRIC_UNITS;
 }

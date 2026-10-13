@@ -286,6 +286,10 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
       hourlyRateCents: payload.hourlyRateCents as number,
       markupPercent:
         typeof payload.markupPercent === 'number' ? payload.markupPercent : null,
+      ...(typeof payload.currencyCode === 'string' ? { currencyCode: payload.currencyCode } : {}),
+      ...(typeof payload.unitSystem === 'string' ? { unitSystem: payload.unitSystem } : {}),
+      ...(typeof payload.vatPercent === 'number' ? { vatPercent: payload.vatPercent } : {}),
+      ...(typeof payload.countryCode === 'string' ? { countryCode: payload.countryCode } : {}),
     });
     return;
   }

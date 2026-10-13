@@ -4,6 +4,8 @@ Install QuoteSnap on a physical Android phone **without USB debugging or Metro**
 
 This is config and docs only. Nobody in CI logs into Expo or submits a store build. There is still **no live demo claim** — you create the Expo project and run the build on your PC.
 
+US testers install an APK someone already built. Steps are in the repo [README](../README.md). Testers do not need an Expo account or a paid plan.
+
 Related: Railway start command is [DEPLOY-RAILWAY.md](DEPLOY-RAILWAY.md). USB + Metro remains valid for local debugging in [`.planning/PHYSICAL-DEVICE-TESTING.md`](../.planning/PHYSICAL-DEVICE-TESTING.md).
 
 Do **not** flip `newArchEnabled` (must stay `false` in `apps/mobile/app.config.ts`) or WatermelonDB `jsi` (must stay `false` in `apps/mobile/src/db/index.ts`). Do not use this path to add Phase 6 SMS.

@@ -2,6 +2,7 @@ import {
   DEFAULT_CURRENCY,
   DEFAULT_UNIT_SYSTEM,
   DEFAULT_VAT_PERCENT,
+  parseCountryCode,
   parseCurrencyCode,
   parseUnitSystem,
   parseVatPercent,
@@ -19,6 +20,7 @@ export type ContractorRow = {
   currency_code?: string | null;
   unit_system?: string | null;
   vat_percent?: number | null;
+  country_code?: string | null;
 };
 
 function integerOrNull(value: unknown): number | null {
@@ -37,5 +39,6 @@ export function contractorPublicFromRow(row: ContractorRow): ContractorPublic {
     currencyCode: parseCurrencyCode(row.currency_code) ?? DEFAULT_CURRENCY,
     unitSystem: parseUnitSystem(row.unit_system) ?? DEFAULT_UNIT_SYSTEM,
     vatPercent: parseVatPercent(row.vat_percent) ?? DEFAULT_VAT_PERCENT,
+    countryCode: parseCountryCode(row.country_code),
   };
 }

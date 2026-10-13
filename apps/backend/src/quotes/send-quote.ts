@@ -23,6 +23,7 @@ import {
   type SnapshotQueryFn,
 } from "./quote-snapshot.js";
 import type { SmsSender } from "./sms-sender.js";
+import { parseCountryCode } from "../money/currency.js";
 
 export const SEND_PHONE_REQUIRED_ERROR = "A customer phone number is required to send";
 export const SEND_PHONE_INVALID_ERROR =
@@ -58,7 +59,7 @@ export const SELECT_SEND_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
   WHERE quote_id = $1
   ORDER BY created_at ASC`;
 
-export const SELECT_CONTRACTOR_BRAND_SQL = `SELECT display_name, trade, currency_code, vat_percent
+export const SELECT_CONTRACTOR_BRAND_SQL = `SELECT display_name, trade, currency_code, vat_percent, country_code
   FROM contractors
   WHERE id = $1`;
 
@@ -200,6 +201,7 @@ export async function sendQuoteForApproval(
     trade: string | null;
     currency_code?: string | null;
     vat_percent?: number | null;
+    country_code?: string | null;
   };
   const brand = normalizeSnapshotBrand(brandRow.display_name, brandRow.trade);
   const payload = buildQuoteSnapshotPayload({
@@ -207,6 +209,7 @@ export async function sendQuoteForApproval(
     lineItems: lineResult.rows as QuoteLineItemRow[],
     currencyCode: brandRow.currency_code === "USD" ? "USD" : brandRow.currency_code === "ILS" ? "ILS" : undefined,
     vatPercent: typeof brandRow.vat_percent === "number" ? brandRow.vat_percent : undefined,
+    countryCode: parseCountryCode(brandRow.country_code),
   });
   if (payload.lineItems.length === 0) {
     return { status: 400, json: { error: SEND_EMPTY_QUOTE_ERROR } };
