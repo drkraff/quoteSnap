@@ -5,6 +5,7 @@ import type { ContractorResponse } from '../api/auth';
 import { isUnauthorizedError } from '../api/client';
 import { accessTokenExpired, parseStoredContractor } from '../auth/stored-session';
 import { localeFromUnknown, type ContractorLocale } from '../money/currency';
+import { noteStartup } from '../startup/trace';
 import { createSingleFlight } from '../sync/single-flight';
 
 const KEYS = {
@@ -143,14 +144,20 @@ async function restoreSessionOnce(
       }
       if (epoch !== authEpoch) return;
       set(loggedOutState());
+      noteStartup('session_ready', { kind: 'logged_out' });
       return;
     }
 
     const onboardingComplete = storedOnboarding === 'true';
-    const accessExpired = accessTokenExpired(storedAccessToken, Date.now());
+    const hasAccessToken = typeof storedAccessToken === 'string' && storedAccessToken.length > 0;
+    const accessExpired = !hasAccessToken || accessTokenExpired(storedAccessToken, Date.now());
 
-    if (storedAccessToken && !accessExpired) {
-      if (epoch !== authEpoch) return;
+    // A stored access token (even an expired one) plus the cached contractor
+    // is enough to paint Quotes from WatermelonDB. Refresh and hydrate follow.
+    // With no access token at all, keep the splash until refresh settles so
+    // the root gate (it requires an access token) does not bounce through login.
+    if (epoch !== authEpoch) return;
+    if (hasAccessToken) {
       set({
         contractor,
         accessToken: storedAccessToken,
@@ -159,43 +166,53 @@ async function restoreSessionOnce(
         isLoading: false,
         onboardingComplete,
       });
-      await pullLocalState(contractor.id);
+      noteStartup('session_ready', { kind: 'local' });
     } else {
-      // Access token missing or already expired. Tokens must persist even
-      // while contractor is still unset on this path.
-      if (epoch !== authEpoch) return;
       set({ refreshToken: storedRefreshToken });
+    }
+
+    if (accessExpired) {
       try {
         const refreshed = await get().refreshSession();
         if (epoch !== authEpoch) return;
-        if (refreshed) {
+        if (!refreshed) {
+          await clearTokens();
+          if (epoch !== authEpoch) return;
+          set(loggedOutState());
+          noteStartup(hasAccessToken ? 'session_revoked' : 'session_ready', {
+            kind: 'logged_out',
+          });
+          return;
+        }
+        if (!hasAccessToken) {
+          if (epoch !== authEpoch) return;
           set({
             contractor,
             isAuthenticated: true,
             isLoading: false,
             onboardingComplete,
           });
-          await pullLocalState(contractor.id);
-        } else {
-          if (epoch !== authEpoch) return;
-          await clearTokens();
-          if (epoch !== authEpoch) return;
-          set(loggedOutState());
+          noteStartup('session_ready', { kind: 'local' });
         }
       } catch {
         // Network / server unavailable — keep the local session; do not revoke.
         if (epoch !== authEpoch) return;
-        set({
-          contractor,
-          accessToken: storedAccessToken,
-          refreshToken: storedRefreshToken,
-          isAuthenticated: true,
-          isLoading: false,
-          onboardingComplete,
-        });
-        await pullLocalState(contractor.id);
+        if (!hasAccessToken) {
+          set({
+            contractor,
+            accessToken: storedAccessToken,
+            refreshToken: storedRefreshToken,
+            isAuthenticated: true,
+            isLoading: false,
+            onboardingComplete,
+          });
+          noteStartup('session_ready', { kind: 'local' });
+        }
       }
     }
+
+    if (epoch !== authEpoch) return;
+    await pullLocalState(contractor.id);
   } catch {
     // Unreadable SecureStore (corrupt ciphertext). Clear it so the next
     // launch is not stuck throwing, unless a login already replaced the session.
@@ -207,11 +224,13 @@ async function restoreSessionOnce(
     }
     if (epoch !== authEpoch) return;
     set(loggedOutState());
+    noteStartup('session_ready', { kind: 'logged_out' });
   }
 }
 
 /** Pull catalog/quotes after auth. Failures must not undo a successful login/restore. */
 async function pullLocalState(contractorId: string): Promise<void> {
+  noteStartup('hydrate_start');
   try {
     // Lazy require avoids loading WatermelonDB when auth-store is imported from API tests.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -219,6 +238,8 @@ async function pullLocalState(contractorId: string): Promise<void> {
     await hydrateFromServer(contractorId);
   } catch {
     // Offline or server error — local DB stays as-is; next restore retries.
+  } finally {
+    noteStartup('hydrate_end');
   }
 }
 

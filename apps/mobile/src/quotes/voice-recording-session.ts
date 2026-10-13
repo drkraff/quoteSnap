@@ -27,6 +27,18 @@ export function voiceEnqueueFailureUx(queued: boolean): 'leave' | 'retry_on_scre
 }
 
 /**
+ * After Stop, go straight to the draft when the m4a is in the offline queue.
+ * A failed queue write stays on the recorder so Try again can enqueue it.
+ * Null means stay. The href never carries audio bytes or a price.
+ */
+export function voiceAfterStopHref(input: { queued: boolean; quoteId: string }): string | null {
+  if (!input.queued) return null;
+  const quoteId = input.quoteId.trim();
+  if (!quoteId) return null;
+  return `/draft/${quoteId}`;
+}
+
+/**
  * A failed queue write leaves the m4a and the resume checkpoint. Closing the
  * recorder must keep that checkpoint. An in-progress cache take, or a take
  * that already joined the queue, is cleared on leave.

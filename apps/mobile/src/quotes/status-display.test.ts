@@ -28,8 +28,8 @@ describe('getQuoteStatusDisplay', () => {
 });
 
 describe('quotePressTarget', () => {
-  it('does not open ai_processing quotes', () => {
-    expect(quotePressTarget('ai_processing')).toBe('none');
+  it('opens the building draft while a voice quote is still processing', () => {
+    expect(quotePressTarget('ai_processing')).toBe('draft');
   });
 
   it('opens the draft editor for local drafts and failed voice quotes', () => {

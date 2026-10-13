@@ -109,20 +109,25 @@ export function createQuotesRouter(deps: QuotesRouterDeps): Router {
       const quoteIds = filterUuidCatalogIds(quoteRows.map((row) => row.id));
 
       let lineItemRows: QuoteLineItemRow[] = [];
+      let attachmentRows: QuoteAttachmentRow[] = [];
       if (quoteIds.length > 0) {
-        const lineItemsResult = await runQuery(
-          `SELECT ${LINE_ITEM_COLUMNS}
-           FROM quote_line_items
-           WHERE quote_id = ANY($1::uuid[])
-           ORDER BY created_at ASC`,
-          [quoteIds],
-        );
+        const [lineItemsResult, photos] = await Promise.all([
+          runQuery(
+            `SELECT ${LINE_ITEM_COLUMNS}
+             FROM quote_line_items
+             WHERE quote_id = ANY($1::uuid[])
+             ORDER BY created_at ASC`,
+            [quoteIds],
+          ),
+          attachmentsForQuoteIds(contractorId, quoteIds),
+        ]);
         lineItemRows = lineItemsResult.rows as QuoteLineItemRow[];
+        attachmentRows = photos;
       }
 
       const quotes = nestPhotos(
         nestLineItems(quoteRows.map(quoteRowToResponse), lineItemRows),
-        await attachmentsForQuoteIds(contractorId, quoteIds),
+        attachmentRows,
       );
       res.json({ quotes });
     } catch (err) {
@@ -164,19 +169,22 @@ export function createQuotesRouter(deps: QuotesRouterDeps): Router {
         return;
       }
 
-      const lineItemsResult = await runQuery(
-        `SELECT ${LINE_ITEM_COLUMNS}
-         FROM quote_line_items
-         WHERE quote_id = $1
-         ORDER BY created_at ASC`,
-        [id],
-      );
+      const [lineItemsResult, attachmentRows] = await Promise.all([
+        runQuery(
+          `SELECT ${LINE_ITEM_COLUMNS}
+           FROM quote_line_items
+           WHERE quote_id = $1
+           ORDER BY created_at ASC`,
+          [id],
+        ),
+        attachmentsForQuoteIds(contractorId, [id]),
+      ]);
 
       const quote = quoteRowToResponse(quoteResult.rows[0] as QuoteRow);
       const lineItems = (lineItemsResult.rows as QuoteLineItemRow[]).map(lineItemRowToResponse);
       const photos = nestPhotos(
         [quote],
-        await attachmentsForQuoteIds(contractorId, [id]),
+        attachmentRows,
       )[0]!.photos;
 
       res.json({ quote: { ...quote, photos }, lineItems });

@@ -80,6 +80,8 @@ jobs:
           grep -q 'Applied migration: 023_quote_snapshot_delete.sql' migrate-first.log
           grep -q 'Applied migration: 024_catalog_client_key.sql' migrate-first.log
           grep -q 'Applied migration: 025_fractional_quantity.sql' migrate-first.log
+          grep -q 'Applied migration: 026_locale_and_customer_document.sql' migrate-first.log
+          grep -q 'Applied migration: 027_quotes_voice_job_index.sql' migrate-first.log
           grep -q 'Migrations complete.' migrate-first.log
 
       - name: Re-run migrations
@@ -96,6 +98,8 @@ jobs:
           grep -q 'Skipping already-applied migration: 023_quote_snapshot_delete.sql' migrate-rerun.log
           grep -q 'Skipping already-applied migration: 024_catalog_client_key.sql' migrate-rerun.log
           grep -q 'Skipping already-applied migration: 025_fractional_quantity.sql' migrate-rerun.log
+          grep -q 'Skipping already-applied migration: 026_locale_and_customer_document.sql' migrate-rerun.log
+          grep -q 'Skipping already-applied migration: 027_quotes_voice_job_index.sql' migrate-rerun.log
           grep -q 'Migrations complete.' migrate-rerun.log
 
       - name: Integration tests

@@ -356,6 +356,26 @@ describe("attachVoiceLinePrices", () => {
     assert.equal(priced[0]?.unitPriceCents, null);
     assert.equal(priced[0]?.priceSource, "unknown");
   });
+
+  it("keeps line order when rate-card lookups resolve out of order", async () => {
+    const priced = await attachVoiceLinePrices(
+      [
+        line({ name: "Slow", unit: "foot", quantity: 1 }),
+        line({ name: "Fast", unit: "job", quantity: 1 }),
+      ],
+      ({ name }) =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve(name === "Slow" ? 100 : 200), name === "Slow" ? 30 : 1);
+        }),
+      "plumbing",
+    );
+    assert.equal(priced[0]?.name, "Slow");
+    assert.equal(priced[0]?.unitPriceCents, 100);
+    assert.equal(priced[0]?.priceSource, "learned");
+    assert.equal(priced[1]?.name, "Fast");
+    assert.equal(priced[1]?.unitPriceCents, 200);
+    assert.equal(priced[1]?.priceSource, "learned");
+  });
 });
 
 describe("lookupExactRateCardCents", () => {

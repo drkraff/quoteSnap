@@ -74,6 +74,10 @@ cd apps/backend && node dist/db/migrate.js
 
 Neither route is served while migrations are still running, because the API process has not started. Use `/health` for a process liveness check. Use `/ready` when the caller needs to know the pool can run a query.
 
+## Cold start
+
+A sleeping Railway service does not answer until the container is up, Postgres accepts connections, and `npm start` finishes migrations and `listen`. `/health` does not query the database, and it is also not served during that window. The phone must not hold its first screen on refresh or hydrate. Cached quotes in WatermelonDB paint first. The first API call after idle can still take several seconds. That wait is the service waking up, not a missing SQL index.
+
 This is not a claim that a live demo is deployed. These paths are covered by unit tests. They have not been exercised against a live Railway service.
 
 Android preview APKs that should hit this API use `EXPO_PUBLIC_API_URL=https://<your-railway-host>` at EAS build time — [EAS-ANDROID.md](EAS-ANDROID.md).

@@ -3,6 +3,7 @@ import {
   VOICE_UPLOAD_RETRY_LABEL,
   shouldClearVoiceCheckpointOnLeave,
   shouldPersistRecordingOnBackground,
+  voiceAfterStopHref,
   voiceEnqueueFailureUx,
   voiceStopFailureUx,
 } from './voice-recording-session';
@@ -31,6 +32,14 @@ describe('voiceEnqueueFailureUx', () => {
     expect(VOICE_UPLOAD_RETRY_BODY.toLowerCase()).toContain('try again');
     expect(VOICE_UPLOAD_RETRY_LABEL).toBe('Try again');
     expect(VOICE_UPLOAD_RETRY_BODY.toLowerCase()).not.toContain('stack');
+  });
+});
+
+describe('voiceAfterStopHref', () => {
+  it('opens the draft as soon as the recording is queued and stays put when it is not', () => {
+    expect(voiceAfterStopHref({ queued: true, quoteId: 'q-1' })).toBe('/draft/q-1');
+    expect(voiceAfterStopHref({ queued: false, quoteId: 'q-1' })).toBeNull();
+    expect(voiceAfterStopHref({ queued: true, quoteId: '  ' })).toBeNull();
   });
 });
 
