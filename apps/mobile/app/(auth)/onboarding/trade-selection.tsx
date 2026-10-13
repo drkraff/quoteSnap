@@ -1,3 +1,4 @@
+import { colors } from '../../../src/theme/tokens';
 import { useState } from 'react';
 import {
   FlatList,
@@ -233,7 +234,7 @@ export default function TradeSelectionScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.dominant,
   },
   scroll: {
     padding: 24,
@@ -244,12 +245,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 28,
     marginBottom: 8,
+    color: colors.text,
   },
   subheading: {
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#666',
+    color: colors.mutedText,
     marginBottom: 24,
   },
   list: {
@@ -261,9 +263,9 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     minHeight: 44,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.secondary,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 8,
     alignItems: 'center',
@@ -271,8 +273,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardSelected: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#0066cc',
+    backgroundColor: colors.secondary,
+    borderColor: colors.accent,
     borderWidth: 2,
   },
   checkmark: {
@@ -280,34 +282,37 @@ const styles = StyleSheet.create({
     top: 4,
     right: 4,
     fontSize: 14,
-    color: '#0066cc',
+    color: colors.accent,
   },
   cardLabel: {
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
+    color: colors.text,
   },
   fieldLabel: {
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#333',
+    color: colors.mutedText,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.border,
+    backgroundColor: colors.secondary,
+    borderRadius: 16,
     padding: 12,
     marginBottom: 16,
     fontSize: 16,
+    color: colors.text,
   },
   error: {
-    color: '#cc0000',
+    color: colors.errorText,
     marginBottom: 12,
     fontSize: 14,
   },
   cta: {
-    backgroundColor: '#0066cc',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     padding: 16,
     minHeight: 44,
@@ -318,7 +323,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   ctaText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -329,7 +334,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryText: {
-    color: '#0066cc',
+    color: colors.accent,
     fontSize: 16,
     fontWeight: '600',
   },

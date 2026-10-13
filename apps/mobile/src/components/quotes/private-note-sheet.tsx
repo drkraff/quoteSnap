@@ -10,7 +10,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
 import {
   PRIVATE_NOTE_INTERNAL_HINT,
   PRIVATE_NOTE_LABEL,
@@ -112,9 +112,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: colors.dominant,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: colors.secondary,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
     padding: spacing.lg,
   },
   handle: {
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     fontSize: typography.heading.fontSize,
     fontWeight: typography.heading.fontWeight,
     lineHeight: typography.heading.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   hint: {
     fontSize: typography.label.fontSize,
@@ -143,20 +143,20 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
     marginBottom: spacing.sm,
   },
   input: {
     minHeight: 96,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.icon,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: typography.body.fontSize,
-    color: '#000000',
+    color: colors.text,
     textAlignVertical: 'top',
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.dominant,
     marginBottom: spacing.sm,
   },
   buttonRow: {
@@ -190,6 +190,6 @@ const styles = StyleSheet.create({
   saveText: {
     fontSize: typography.body.fontSize,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.text,
   },
 });

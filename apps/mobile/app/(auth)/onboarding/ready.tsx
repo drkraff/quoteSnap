@@ -1,3 +1,4 @@
+import { colors } from '../../../src/theme/tokens';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AUTHENTICATED_ENTRY_HREF } from '../../../src/navigation/authenticated-entry';
@@ -59,7 +60,7 @@ export default function ReadyScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.dominant,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -69,16 +70,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 28,
     textAlign: 'center',
+    color: colors.text,
   },
   body: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#666',
+    color: colors.mutedText,
     textAlign: 'center',
     marginTop: 16,
   },
   cta: {
-    backgroundColor: '#0066cc',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     padding: 16,
     minHeight: 44,
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   ctaText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -99,7 +101,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryText: {
-    color: '#0066cc',
+    color: colors.accent,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     alignSelf: 'flex-start',
-    maxWidth: 140,
+    maxWidth: 160,
     flexShrink: 1,
   },
   label: {

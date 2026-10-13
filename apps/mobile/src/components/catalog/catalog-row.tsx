@@ -28,7 +28,7 @@ export function CatalogRow({ item, onPress, onArchive }: CatalogRowProps): JSX.E
         accessibilityRole="button"
         accessibilityLabel={`Archive ${item.name}`}
       >
-        <Ionicons name="trash-outline" size={24} color="#ffffff" />
+        <Ionicons name="trash-outline" size={24} color={colors.text} />
       </Pressable>
     );
   }
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   price: {
     fontSize: typography.body.fontSize,

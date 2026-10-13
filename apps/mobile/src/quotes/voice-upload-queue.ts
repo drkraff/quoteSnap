@@ -49,10 +49,8 @@ export function voiceUploadStillQueued(input: {
   return !hasVoiceJobId(input.voiceJobId);
 }
 
-export function voiceUploadQueuedAccessibility(online: boolean): string {
-  return online
-    ? 'Quote queued, will retry'
-    : 'Quote queued, will upload when online';
+export function voiceUploadQueuedAccessibility(_online: boolean): string {
+  return 'Saved on phone - will sync when online';
 }
 
 /** FAIL-03: after the m4a is in documentDirectory, never block the contractor. */

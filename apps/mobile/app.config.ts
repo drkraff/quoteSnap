@@ -22,14 +22,14 @@ const config: ExpoConfig = {
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'dark',
   // Explicitly off for the first device build — WatermelonDB 0.27 JSI is more
   // stable on the old architecture. Once confirmed working, flip to true and rebuild.
   newArchEnabled: false,
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#141414',
   },
   ios: {
     supportsTablet: false,
@@ -38,7 +38,7 @@ const config: ExpoConfig = {
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#141414',
     },
     package: 'com.quotesnap.app',
   },

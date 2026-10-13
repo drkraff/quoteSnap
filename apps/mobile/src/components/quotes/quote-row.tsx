@@ -1,8 +1,7 @@
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { Quote } from '../../db/models/quote';
-import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import { quoteRowDisplay } from '../../quotes/quote-row-display';
@@ -44,6 +43,7 @@ export function QuoteRow({
     phone,
     totalDisplay,
     processingCaption,
+    statusLabel,
     accessibilityLabel,
   } = quoteRowDisplay({
     status: quote.status,
@@ -53,6 +53,9 @@ export function QuoteRow({
     online,
   });
   const relativeDate = formatRelativeDate(quote.createdAt);
+  const subtitle = isAiProcessing
+    ? (processingCaption ?? 'Processing...')
+    : `${statusLabel} · ${totalDisplay}`;
 
   function renderLeftActions(): JSX.Element {
     return (
@@ -70,7 +73,7 @@ export function QuoteRow({
         accessibilityLabel={`${DUPLICATE_QUOTE_A11Y} ${phone}`}
         accessibilityState={{ disabled: duplicateDisabled }}
       >
-        <Ionicons name="copy-outline" size={22} color="#ffffff" />
+        <Ionicons name="copy-outline" size={22} color={colors.text} />
         <Text style={styles.duplicateLabel}>{DUPLICATE_QUOTE_LABEL}</Text>
       </Pressable>
     );
@@ -89,7 +92,7 @@ export function QuoteRow({
         accessibilityRole="button"
         accessibilityLabel={ui.label(phone)}
       >
-        <Ionicons name={ui.icon} size={24} color="#ffffff" />
+        <Ionicons name={ui.icon} size={24} color={colors.text} />
       </Pressable>
     );
   }
@@ -114,37 +117,15 @@ export function QuoteRow({
         accessibilityLabel={accessibilityLabel}
         disabled={isAiProcessing}
       >
-        {/* Left column: phone + date */}
-        <View style={styles.leftColumn}>
+        <View style={styles.copy}>
           <Text style={styles.phone} numberOfLines={1}>
             {phone}
           </Text>
-          <Text style={styles.date}>{relativeDate}</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
         </View>
-
-        {/* Center: status badge */}
-        <View style={styles.badgeWrap}>
-          <StatusBadge status={quote.status} />
-        </View>
-
-        {/* Right: total price or processing indicator */}
-        {isAiProcessing ? (
-          <View style={styles.processingRight}>
-            {processingCaption === 'Processing...' ? (
-              <>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={styles.processingText}>{processingCaption}</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="cloud-upload-outline" size={16} color={colors.mutedText} />
-                <Text style={styles.processingText}>{processingCaption}</Text>
-              </>
-            )}
-          </View>
-        ) : (
-          <Text style={styles.total}>{totalDisplay}</Text>
-        )}
+        <Text style={styles.time}>{relativeDate}</Text>
       </Pressable>
     </Swipeable>
   );
@@ -154,57 +135,36 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 56,
+    minHeight: 72,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     backgroundColor: colors.dominant,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   rowProcessing: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.dominant,
   },
   rowPressed: {
-    opacity: 0.7,
+    backgroundColor: colors.secondary,
   },
-  leftColumn: {
+  copy: {
     flex: 1,
-    marginRight: spacing.sm,
-  },
-  badgeWrap: {
-    flexShrink: 1,
-    marginRight: spacing.sm,
+    marginRight: spacing.md,
   },
   phone: {
     fontSize: typography.body.fontSize,
-    fontWeight: typography.body.fontWeight,
+    fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
-  date: {
+  subtitle: {
+    marginTop: 2,
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
     lineHeight: typography.label.lineHeight,
     color: colors.mutedText,
-    marginTop: 2,
   },
-  total: {
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 26,
-    color: '#000000',
-    marginLeft: spacing.sm,
-  },
-  processingRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginLeft: spacing.sm,
-  },
-  processingText: {
+  time: {
     fontSize: typography.label.fontSize,
-    fontWeight: typography.label.fontWeight,
     lineHeight: typography.label.lineHeight,
     color: colors.mutedText,
   },
@@ -240,7 +200,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   duplicateLabel: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 16,

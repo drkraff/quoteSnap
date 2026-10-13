@@ -97,9 +97,9 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
-    color: '#333333',
+    color: colors.mutedText,
   },
   pillTextSelected: {
-    color: '#ffffff',
+    color: colors.text,
   },
 });

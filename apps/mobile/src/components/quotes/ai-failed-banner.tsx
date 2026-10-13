@@ -73,9 +73,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: 8,
-    backgroundColor: '#fef2f2',
+    backgroundColor: colors.secondary,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: colors.border,
     gap: spacing.sm,
   },
   title: {
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   primaryLabel: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.text,
   },
   secondaryButton: {
     flex: 1,

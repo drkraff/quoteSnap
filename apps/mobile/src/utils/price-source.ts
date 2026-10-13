@@ -49,6 +49,23 @@ export function draftPriceSourceLabel(flag: DraftPriceFlag): string | null {
   }
 }
 
+/**
+ * Short grey tag on a draft line. Catalog, learned, and typed prices stay
+ * quiet (Known). Blank cents say the price is missing — never a guessed dollar.
+ */
+export function draftPriceSourceTag(flag: DraftPriceFlag): string | null {
+  switch (flag) {
+    case 'spoken':
+      return 'you said';
+    case 'computed':
+      return 'your rate';
+    case 'unknown':
+      return 'needs price';
+    case 'known':
+      return null;
+  }
+}
+
 /** Contractor typed/confirmed a number on review. Blank stays unknown — never invent. */
 export function typedPriceSource(unitPriceCents: number | null | undefined): PriceSource {
   return unitPriceCents != null && unitPriceCents > 0 ? 'known' : 'unknown';

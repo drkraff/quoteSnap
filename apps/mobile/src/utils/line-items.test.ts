@@ -8,6 +8,11 @@ import {
   recalculateTotal,
   formatQuantityLabel,
   formatUnitPriceLabel,
+  formatQtyTimesUnitPrice,
+  formatMoneyCents,
+  lineTotalCents,
+  addFreeTextLine,
+  parseLineQuantityInput,
   isUnknownUnitPrice,
   serializeLineItems,
   addAlternate,
@@ -508,5 +513,88 @@ describe('addAlternate / selectOptionForTotal / dissolve', () => {
     expect(leftover[0]!.optionGroupId).toBeUndefined();
     expect(leftover[0]!.optionRole).toBeUndefined();
     expect(leftover[0]!.name).toBe('Walk-in shower');
+  });
+});
+
+describe('line totals', () => {
+  it('multiplies qty by unit price and keeps those two amounts distinct', () => {
+    const cable = { quantity: 2, unitPriceCents: 3000 };
+    expect(lineTotalCents(cable)).toBe(6000);
+    expect(formatMoneyCents(cable.unitPriceCents)).toBe('$30.00');
+    expect(formatMoneyCents(lineTotalCents(cable))).toBe('$60.00');
+    expect(formatQtyTimesUnitPrice(2, 3000, 'each')).toBe('2 ea × $30.00');
+    expect(lineTotalCents(cable)).not.toBe(cable.unitPriceCents);
+  });
+
+  it('keeps half an hour and treats a blank unit price as no line total', () => {
+    expect(lineTotalCents({ quantity: 0.5, unitPriceCents: 1500 })).toBe(750);
+    expect(formatMoneyCents(750)).toBe('$7.50');
+    expect(lineTotalCents({ quantity: 2, unitPriceCents: null })).toBe(0);
+    expect(lineTotalCents({ quantity: 2, unitPriceCents: 0 })).toBe(0);
+    expect(parseLineQuantityInput('0.5')).toBe(0.5);
+    expect(parseLineQuantityInput('0')).toBeNull();
+  });
+
+  it('adds line totals into the quote total', () => {
+    const items: LineItem[] = [
+      { catalogItemId: '', name: 'Cable', quantity: 2, unitPriceCents: 3000, unit: 'each' },
+      { catalogItemId: '', name: 'Labor', quantity: 1, unitPriceCents: 1500, unit: 'hour' },
+    ];
+    expect(lineTotalCents(items[0]!)).toBe(6000);
+    expect(lineTotalCents(items[1]!)).toBe(1500);
+    expect(recalculateTotal(items)).toBe(7500);
+  });
+});
+
+describe('addFreeTextLine', () => {
+  const clientId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  it('creates a typed line with no catalog item', () => {
+    const next = addFreeTextLine([], {
+      name: 'Cable',
+      quantity: 2,
+      unit: 'each',
+      unitPriceCents: 3000,
+      clientId,
+    });
+    expect(next).toHaveLength(1);
+    expect(next[0]).toMatchObject({
+      catalogItemId: '',
+      name: 'Cable',
+      quantity: 2,
+      unit: 'each',
+      unitPriceCents: 3000,
+      priceSource: 'known',
+      clientId,
+    });
+    expect(lineTotalCents(next[0]!)).toBe(6000);
+  });
+
+  it('does not add a blank name and does not invent a price', () => {
+    const existing: LineItem[] = [];
+    expect(addFreeTextLine(existing, { name: '   ', unitPriceCents: 500 })).toBe(existing);
+    const blank = addFreeTextLine([], { name: 'Labor', quantity: 1, unit: 'hour' });
+    expect(blank[0]).toMatchObject({
+      catalogItemId: '',
+      name: 'Labor',
+      unit: 'hour',
+      unitPriceCents: null,
+      priceSource: 'unknown',
+    });
+    expect(lineTotalCents(blank[0]!)).toBe(0);
+  });
+
+  it('drops a placeholder id and keeps a fractional quantity', () => {
+    const next = addFreeTextLine([], {
+      name: 'Labor',
+      quantity: 0.5,
+      unit: 'hour',
+      unitPriceCents: 1500,
+      clientId: 'line-0',
+    });
+    expect(next[0]!.clientId).toBeUndefined();
+    expect(next[0]!.quantity).toBe(0.5);
+    expect(next[0]!.catalogItemId).toBe('');
+    expect(lineTotalCents(next[0]!)).toBe(750);
   });
 });

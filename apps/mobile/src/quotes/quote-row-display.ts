@@ -8,14 +8,14 @@ export type QuoteRowDisplay = {
   isAiProcessing: boolean;
   phone: string;
   totalDisplay: string;
-  processingCaption: 'Processing...' | 'Queued' | null;
+  processingCaption: 'Processing...' | 'Saved on phone - will sync when online' | null;
   statusLabel: string;
   accessibilityLabel: string;
 };
 
 /**
- * Quotes-list row copy. Queued vs Processing is FAIL-03 / UAT 5.2
- * (offline or upload not yet accepted) — not `draft_queued` (Phase 6 SMS).
+ * Quotes-list row copy. A waiting voice upload says the quote is saved on
+ * the phone (FAIL-03) — not `draft_queued` (Phase 6 SMS).
  * Totals come from quote.totalCents.
  */
 export function quoteRowDisplay(input: {
@@ -32,7 +32,7 @@ export function quoteRowDisplay(input: {
   const uploadQueued = voiceUploadStillQueued(input);
   const processingCaption = isAiProcessing
     ? uploadQueued
-      ? 'Queued'
+      ? 'Saved on phone - will sync when online'
       : 'Processing...'
     : null;
 

@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View,
   SectionList,
   StyleSheet,
   SafeAreaView,
@@ -18,7 +17,7 @@ import {
   type CatalogSection,
 } from '../../src/catalog/archive-item';
 import { catalogCreateSyncPayload } from '../../src/catalog/create-sync-payload';
-import { enqueue, getPendingCount } from '../../src/sync/sync-queue';
+import { enqueue } from '../../src/sync/sync-queue';
 import { useAuthStore } from '../../src/store/auth-store';
 import { CatalogRow } from '../../src/components/catalog/catalog-row';
 import { SectionHeader } from '../../src/components/catalog/section-header';
@@ -26,8 +25,7 @@ import { EmptyState } from '../../src/components/catalog/empty-state';
 import { Fab } from '../../src/components/catalog/fab';
 import { ItemFormSheet } from '../../src/components/catalog/item-form-sheet';
 import { UndoToast } from '../../src/components/catalog/undo-toast';
-import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
-import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
+import { SyncStatusLine } from '../../src/components/sync/sync-status-line';
 import { colors } from '../../src/theme/tokens';
 
 // Screen title: "My Catalog" — set via _layout.tsx Tabs.Screen headerTitle
@@ -37,10 +35,8 @@ export default function CatalogScreen(): JSX.Element {
   const [sections, setSections] = useState<CatalogSection<CatalogItem>[]>([]);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
   const [archivedItem, setArchivedItem] = useState<CatalogItem | null>(null);
   const [undoVisible, setUndoVisible] = useState(false);
-  const deadLetterItems = useDeadLetterItems();
 
   useEffect(() => {
     const contractorId = useAuthStore.getState().contractor?.id ?? '';
@@ -58,19 +54,6 @@ export default function CatalogScreen(): JSX.Element {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const refreshPendingCount = useCallback(async () => {
-    try {
-      const count = await getPendingCount();
-      setPendingCount(count);
-    } catch {
-      // Silent — sync count is non-critical
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshPendingCount();
-  }, [refreshPendingCount]);
 
   function handleFabPress(): void {
     setEditingItem(null);
@@ -133,11 +116,9 @@ export default function CatalogScreen(): JSX.Element {
         });
       }
       setSheetVisible(false);
-      void refreshPendingCount();
     } catch (error) {
       // TODO: surface error to user in a future plan
       // Silent catch prevents crash; data persists locally
-      void refreshPendingCount();
     }
   }
 
@@ -151,7 +132,6 @@ export default function CatalogScreen(): JSX.Element {
       });
       setUndoVisible(true);
       await enqueue(catalogArchiveEnqueue(item));
-      void refreshPendingCount();
     } catch {
       // Revert optimistic state on failure
       setArchivedItem(null);
@@ -168,7 +148,6 @@ export default function CatalogScreen(): JSX.Element {
         });
       });
       await enqueue(catalogUnarchiveEnqueue(archivedItem));
-      void refreshPendingCount();
     } catch {
       // Undo failed — item remains archived; no crash
     } finally {
@@ -184,12 +163,6 @@ export default function CatalogScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
-      {pendingCount > 0 && (
-        <View
-          style={styles.syncDot}
-          accessibilityLabel="Catalog has unsynced changes"
-        />
-      )}
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
@@ -214,9 +187,8 @@ export default function CatalogScreen(): JSX.Element {
         }
         ListHeaderComponent={
           <>
-            <DeadLetterBanner
-              count={deadLetterItems.length}
-              onPress={() => {
+            <SyncStatusLine
+              onRetry={() => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 router.push('/sync-issues' as any);
               }}
@@ -282,15 +254,5 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 16,
     fontWeight: '600',
-  },
-  syncDot: {
-    position: 'absolute',
-    top: 12,
-    right: 16,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.warning,
-    zIndex: 10,
   },
 });

@@ -1,3 +1,4 @@
+import { colors } from '../../../src/theme/tokens';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -122,7 +123,7 @@ export default function SeedingScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.dominant,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -132,12 +133,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 28,
     textAlign: 'center',
+    color: colors.text,
   },
   statusText: {
     fontSize: 16,
     lineHeight: 24,
     marginTop: 16,
     textAlign: 'center',
+    color: colors.text,
   },
   primaryButton: {
     marginTop: 24,
@@ -145,12 +148,12 @@ const styles = StyleSheet.create({
     minWidth: 160,
     paddingHorizontal: 20,
     borderRadius: 8,
-    backgroundColor: '#0066cc',
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButtonText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -163,12 +166,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryButtonText: {
-    color: '#0066cc',
+    color: colors.accent,
     fontSize: 16,
     fontWeight: '600',
   },
   offlineNotice: {
-    color: '#b45309',
+    color: colors.warning,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,

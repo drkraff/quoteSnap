@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
     marginTop: spacing.sm,
   },
   date: {
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   optionLabel: {
     fontSize: typography.label.fontSize,
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     lineHeight: 26,
-    color: '#000000',
+    color: colors.text,
     minWidth: 72,
     textAlign: 'right',
   },
@@ -301,13 +301,13 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   totalAmount: {
     fontSize: 20,
     fontWeight: '700',
     lineHeight: 26,
-    color: '#000000',
+    color: colors.text,
   },
   jobNote: {
     paddingHorizontal: spacing.md,
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: '700',
     lineHeight: typography.label.lineHeight,
-    color: '#333333',
+    color: colors.mutedText,
   },
   lineNote: {
     paddingHorizontal: spacing.md,
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   internalHint: {
     fontSize: typography.label.fontSize,
@@ -365,6 +365,6 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
 });

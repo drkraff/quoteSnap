@@ -6,6 +6,7 @@ import {
   sanitizeOptionGroups,
   selectOptionForTotal as selectOptionRoleForTotal,
   selectedOptionTotalCents,
+  lineAmountCents,
   type OptionRole,
 } from '../quotes/option-groups';
 import { normalizePrivateNote } from '../quotes/private-notes';
@@ -305,6 +306,110 @@ export function updatePrivateNote(
     if (i !== index) return item;
     return { ...item, privateNote: note };
   });
+}
+
+export const UNIT_PRICE_LABEL = 'Unit price';
+export const LINE_TOTAL_LABEL = 'Line total';
+export const SUBTOTAL_LABEL = 'Subtotal';
+export const QUOTE_TOTAL_LABEL = 'Total';
+export const ADD_LINE_LABEL = 'Add line';
+
+/** Qty × unit price in cents. Blank or unknown prices contribute 0 — never a guessed dollar. */
+export function lineTotalCents(item: {
+  quantity?: number | null;
+  unitPriceCents?: number | null;
+}): number {
+  return lineAmountCents(item);
+}
+
+export function formatMoneyCents(cents: number | null | undefined): string {
+  const safe = cents == null || !Number.isFinite(cents) ? 0 : Math.round(cents);
+  const sign = safe < 0 ? '-' : '';
+  return `${sign}$${(Math.abs(safe) / 100).toFixed(2)}`;
+}
+
+/** "2 ea × $30.00" so the unit price is not read as the line total. */
+export function formatQtyTimesUnitPrice(
+  quantity: number,
+  unitPriceCents: number | null | undefined,
+  unit?: string | null,
+): string {
+  return `${formatQuantityLabel(quantity, unit)} × ${formatUnitPriceLabel(unitPriceCents)}`;
+}
+
+/** Typed quantity. Fractions (half an hour) stay. Empty, zero, or junk is null. */
+export function parseLineQuantityInput(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const scaled = Math.round(n * 100) / 100;
+  return scaled > 0 ? scaled : null;
+}
+
+export function setLineQuantity(
+  items: LineItem[],
+  index: number,
+  quantity: number,
+): LineItem[] {
+  if (index < 0 || index >= items.length) return items;
+  if (!Number.isFinite(quantity) || quantity <= 0) return items;
+  const scaled = Math.round(quantity * 100) / 100;
+  if (scaled <= 0) return items;
+  const current = items[index];
+  if (!current || current.quantity === scaled) return items;
+  return items.map((item, i) =>
+    i === index ? { ...item, quantity: scaled, confidence: undefined } : item,
+  );
+}
+
+export function updateLineName(items: LineItem[], index: number, name: string): LineItem[] {
+  if (index < 0 || index >= items.length) return items;
+  const trimmed = name.trim();
+  if (trimmed === '') return items;
+  const current = items[index];
+  if (!current || current.name === trimmed) return items;
+  return items.map((item, i) => (i === index ? { ...item, name: trimmed } : item));
+}
+
+export type FreeTextLineInput = {
+  name: string;
+  quantity?: number;
+  unit?: string | null;
+  unitPriceCents?: number | null;
+  clientId?: string;
+};
+
+/**
+ * A typed line with no catalog row. Blank name is a no-op.
+ * Missing price stays blank (`unknown`) — never a guessed dollar.
+ */
+export function addFreeTextLine(
+  items: LineItem[],
+  input: FreeTextLineInput,
+  roomId?: string | null,
+): LineItem[] {
+  const name = input.name.trim();
+  if (name === '') return items;
+  const parsedQty =
+    typeof input.quantity === 'number' ? parseLineQuantityInput(String(input.quantity)) : null;
+  const cents = input.unitPriceCents;
+  const unitPriceCents =
+    cents == null || !Number.isInteger(cents) || cents <= 0 ? null : cents;
+  const line: LineItem = {
+    catalogItemId: '',
+    name,
+    quantity: parsedQty ?? 1,
+    unitPriceCents,
+    priceSource: unitPriceCents == null ? 'unknown' : 'known',
+  };
+  const unit = input.unit ? parseCatalogUnit(input.unit) : null;
+  if (unit) line.unit = unit;
+  const clientId = parseRoomId(input.clientId);
+  if (clientId) line.clientId = clientId;
+  const parsedRoom = parseRoomId(roomId);
+  if (parsedRoom) line.roomId = parsedRoom;
+  return [...items, line];
 }
 
 export function recalculateTotal(items: LineItem[]): number {

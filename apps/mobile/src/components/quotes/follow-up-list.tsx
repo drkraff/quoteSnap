@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   countText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     fontSize: typography.heading.fontSize,
     fontWeight: typography.heading.fontWeight,
     lineHeight: typography.heading.lineHeight,
-    color: '#000000',
+    color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
     marginBottom: spacing.xs,
   },
   phone: {
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   sent: {
     fontSize: typography.label.fontSize,
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   markText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: typography.label.fontSize,
     fontWeight: '700',
     textAlign: 'center',

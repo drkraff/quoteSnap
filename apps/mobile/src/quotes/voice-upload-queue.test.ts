@@ -84,8 +84,8 @@ describe('voiceUploadStillQueued', () => {
 
 describe('voiceUploadQueuedAccessibility', () => {
   it('uses will-retry copy when NetInfo is up and will-upload when offline', () => {
-    expect(voiceUploadQueuedAccessibility(true)).toBe('Quote queued, will retry');
-    expect(voiceUploadQueuedAccessibility(false)).toBe('Quote queued, will upload when online');
+    expect(voiceUploadQueuedAccessibility(true)).toBe('Saved on phone - will sync when online');
+    expect(voiceUploadQueuedAccessibility(false)).toBe('Saved on phone - will sync when online');
   });
 });
 
@@ -133,7 +133,7 @@ describe('dead-letter audio quote recovery (FAIL-03 after SYNC-03)', () => {
       voiceJobId: null,
     });
     expect(quotePressTarget('ai_processing')).toBe('none');
-    expect(queued.processingCaption).toBe('Queued');
+    expect(queued.processingCaption).toBe('Saved on phone - will sync when online');
 
     const plan = failQuoteAfterAudioDeadLetterPlan({
       quoteId: 'local-q1',

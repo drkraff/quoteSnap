@@ -1,5 +1,6 @@
+import { colors } from '../../src/theme/tokens';
 import { useState } from 'react';
-import { Text, TextInput, Button, StyleSheet } from 'react-native';
+import { Pressable, Text, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import {
@@ -88,11 +89,15 @@ export default function Register(): JSX.Element {
 
       {error !== null ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Button
-        title={loading ? 'Creating account...' : 'Create Account'}
+      <Pressable
+        style={({ pressed }) => [styles.button, (loading || pressed) && styles.buttonPressed]}
         onPress={handleRegister}
         disabled={loading}
-      />
+        accessibilityRole="button"
+        accessibilityLabel={loading ? 'Creating account...' : 'Create Account'}
+      >
+        <Text style={styles.buttonText}>{loading ? 'Creating account...' : 'Create Account'}</Text>
+      </Pressable>
 
       <Link href="/(auth)/login" style={styles.link}>
         Already have an account? Log In
@@ -106,37 +111,55 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.dominant,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 4,
     textAlign: 'center',
+    color: colors.text,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: colors.mutedText,
     marginBottom: 32,
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    borderColor: colors.border,
+    backgroundColor: colors.secondary,
+    borderRadius: 16,
     padding: 12,
     marginBottom: 12,
     fontSize: 16,
+    color: colors.text,
   },
   error: {
-    color: '#cc0000',
+    color: colors.errorText,
     marginBottom: 12,
     fontSize: 14,
+  },
+  button: {
+    minHeight: 52,
+    borderRadius: 26,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonPressed: {
+    opacity: 0.85,
+  },
+  buttonText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
   },
   link: {
     marginTop: 16,
     textAlign: 'center',
-    color: '#0066cc',
+    color: colors.accent,
     fontSize: 14,
   },
 });

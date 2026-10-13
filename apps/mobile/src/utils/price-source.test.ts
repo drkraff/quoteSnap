@@ -1,6 +1,7 @@
 import {
   draftPriceFlag,
   draftPriceSourceLabel,
+  draftPriceSourceTag,
   parsePriceSource,
   typedPriceSource,
 } from './price-source';
@@ -48,6 +49,22 @@ describe('draftPriceFlag', () => {
   it('treats a filled price with no stored source as Known (pre-migration drafts)', () => {
     expect(draftPriceFlag(undefined, 1500)).toBe('known');
     expect(draftPriceFlag('unknown', 1500)).toBe('known');
+  });
+});
+
+describe('draftPriceSourceTag', () => {
+  it('names spoken, computed, and blank prices in a short tag', () => {
+    expect(draftPriceSourceTag('spoken')).toBe('you said');
+    expect(draftPriceSourceTag('computed')).toBe('your rate');
+    expect(draftPriceSourceTag('unknown')).toBe('needs price');
+  });
+
+  it('leaves catalog, learned, and typed prices untagged', () => {
+    expect(draftPriceSourceTag('known')).toBeNull();
+    expect(draftPriceSourceTag(draftPriceFlag('catalog', 17500))).toBeNull();
+    expect(draftPriceSourceTag(draftPriceFlag('learned', 5200))).toBeNull();
+    expect(draftPriceSourceTag(draftPriceFlag(undefined, null))).toBe('needs price');
+    expect(draftPriceSourceTag(draftPriceFlag('spoken', 0))).toBe('needs price');
   });
 });
 

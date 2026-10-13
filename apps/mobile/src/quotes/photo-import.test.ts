@@ -1,6 +1,7 @@
 import { recalculateTotal, type LineItem } from '../utils/line-items';
 import {
   IMPORT_FROM_PHOTO_LABEL,
+  VISION_PHOTO_IMPORT_ENABLED,
   IMPORTED_ITEM_FALLBACK_NAME,
   NAME_HINT_MAX_LENGTH,
   PHOTO_IMPORT_BLANK_PRICE_HINT,
@@ -15,6 +16,12 @@ import { addPhoto, photosForLine, type QuotePhoto } from './photos';
 const PHOTO_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const LINE = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const ROOM = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+describe('VISION_PHOTO_IMPORT_ENABLED', () => {
+  it('stays off until PHOTO-01 Vision is wired', () => {
+    expect(VISION_PHOTO_IMPORT_ENABLED).toBe(false);
+  });
+});
 
 describe('captionFromStill (Vision stub)', () => {
   it('returns null when OCR is not wired — does not invent a caption or price', () => {

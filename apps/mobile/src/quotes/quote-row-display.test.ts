@@ -11,8 +11,8 @@ describe('quoteRowDisplay', () => {
 
     expect(view.isAiProcessing).toBe(true);
     expect(view.phone).toBe('New job');
-    expect(view.processingCaption).toBe('Queued');
-    expect(view.accessibilityLabel).toBe('Quote queued, will upload when online');
+    expect(view.processingCaption).toBe('Saved on phone - will sync when online');
+    expect(view.accessibilityLabel).toBe('Saved on phone - will sync when online');
   });
 
   it('shows Queued while online until the upload is accepted (FAIL-03)', () => {
@@ -24,8 +24,8 @@ describe('quoteRowDisplay', () => {
       voiceJobId: null,
     });
 
-    expect(view.processingCaption).toBe('Queued');
-    expect(view.accessibilityLabel).toBe('Quote queued, will retry');
+    expect(view.processingCaption).toBe('Saved on phone - will sync when online');
+    expect(view.accessibilityLabel).toBe('Saved on phone - will sync when online');
   });
 
   it('shows Processing when an ai_processing row is online and has a job id', () => {

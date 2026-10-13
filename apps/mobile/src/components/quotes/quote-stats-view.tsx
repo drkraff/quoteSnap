@@ -131,13 +131,13 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
     marginRight: spacing.md,
   },
   rowValue: {
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
 });

@@ -27,14 +27,20 @@ import { CatalogItem } from '../../../src/db/models/catalog-item';
 import {
   LineItem,
   parseLineItems,
+  ADD_LINE_LABEL,
+  QUOTE_TOTAL_LABEL,
+  SUBTOTAL_LABEL,
   addItem,
   addAlternate,
+  addFreeTextLine,
   removeItem,
-  updateQuantity,
+  setLineQuantity,
+  updateLineName,
   updatePrice,
   updatePrivateNote,
   recalculateTotal,
   serializeLineItems,
+  formatMoneyCents,
   isUnknownUnitPrice,
   selectOptionForTotal,
 } from '../../../src/utils/line-items';
@@ -68,13 +74,13 @@ import { createDraftPhoneSync, createLatestDebouncer, PHONE_SYNC_DEBOUNCE_MS } f
 import { QUOTE_NOT_FOUND, findQuoteRecord } from '../../../src/quotes/find-quote';
 import { LineItemRow } from '../../../src/components/quotes/line-item-row';
 import { PriceEditSheet, type PriceEditSave } from '../../../src/components/quotes/price-edit-sheet';
-import { CatalogPickerSheet } from '../../../src/components/quotes/catalog-picker-sheet';
+import { AddLineSheet, type FreeTextLineDraft } from '../../../src/components/quotes/catalog-picker-sheet';
+import { SyncStatusLine } from '../../../src/components/sync/sync-status-line';
 import { AlternateOptionSheet } from '../../../src/components/quotes/alternate-option-sheet';
 import { PrivateNoteField } from '../../../src/components/quotes/private-note-field';
 import { ClientSentenceField } from '../../../src/components/quotes/client-sentence-field';
 import { PrivateNoteSheet } from '../../../src/components/quotes/private-note-sheet';
 import { PhotoStrip } from '../../../src/components/quotes/photo-strip';
-import { EmptyState } from '../../../src/components/catalog/empty-state';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
 import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review-before-sending-banner';
@@ -111,7 +117,6 @@ import {
 import {
   ADD_ROOM_LABEL,
   ADD_ROOM_PLACEHOLDER,
-  ROOM_ADD_ITEM_LABEL,
   ROOM_DELETE_CONFIRM_ACTION,
   ROOM_DELETE_CONFIRM_MESSAGE,
   ROOM_DELETE_CONFIRM_TITLE,
@@ -123,6 +128,7 @@ import {
   ROOM_UNGROUPED_CHOICE,
   UNGROUPED_ROOM_LABEL,
   addRoom,
+  newRoomId,
   assignLineRoom,
   draftListRowKey,
   draftListRows,
@@ -161,6 +167,7 @@ import {
 import {
   IMPORT_FROM_PHOTO_LABEL,
   PHOTO_IMPORT_BLANK_PRICE_HINT,
+  VISION_PHOTO_IMPORT_ENABLED,
   importLineFromPhoto,
 } from '../../../src/quotes/photo-import';
 import { typedPriceSource } from '../../../src/utils/price-source';
@@ -588,11 +595,28 @@ function DraftScreen(): JSX.Element {
     });
   }
 
-  async function handleQuantityChange(index: number, delta: number): Promise<void> {
+  async function handleQuantitySet(index: number, quantity: number): Promise<void> {
     if (!draft || !quote) return;
     if (rejectFrozenMoneyWrite()) return;
     await recoverFromAiFailed();
-    const newItems = updateQuantity(lineItems, index, delta);
+    const newItems = setLineQuantity(lineItems, index, quantity);
+    await persistLineItems(newItems);
+  }
+
+  async function handleNameCommit(index: number, name: string): Promise<void> {
+    if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const newItems = updateLineName(lineItems, index, name);
+    if (newItems === lineItems) return;
+    await persistLineItems(newItems, { includeTotal: false });
+  }
+
+  async function handleUnitPriceCommit(index: number, cents: number | null): Promise<void> {
+    if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const newItems = updatePrice(lineItems, index, cents);
     await persistLineItems(newItems);
   }
 
@@ -671,6 +695,21 @@ function DraftScreen(): JSX.Element {
       unitPriceCents: catalogItem.unitPriceCents,
       unit: catalogItems.find((c) => c.id === catalogItem.id)?.unit,
     }, addToRoomId);
+    await persistLineItems(newItems);
+    setShowCatalogPicker(false);
+    setAddToRoomId(null);
+  }
+
+  async function handleAddFreeText(line: FreeTextLineDraft): Promise<void> {
+    if (!draft || !quote) return;
+    if (rejectFrozenMoneyWrite()) return;
+    await recoverFromAiFailed();
+    const newItems = addFreeTextLine(
+      lineItems,
+      { ...line, clientId: newRoomId() },
+      addToRoomId,
+    );
+    if (newItems === lineItems) return;
     await persistLineItems(newItems);
     setShowCatalogPicker(false);
     setAddToRoomId(null);
@@ -1176,7 +1215,7 @@ function DraftScreen(): JSX.Element {
   }
 
   const sendEnabled = canSend(lineItems.length, phone) && !needsReview;
-  const totalDisplay = `$${(recalculateTotal(lineItems) / 100).toFixed(2)}`;
+  const totalDisplay = formatMoneyCents(recalculateTotal(lineItems));
   const listRows = draftListRows(rooms, lineItems);
 
   return (
@@ -1224,19 +1263,21 @@ function DraftScreen(): JSX.Element {
                       setShowCatalogPicker(true);
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={`${ROOM_ADD_ITEM_LABEL} in ${row.room.name}`}
+                    accessibilityLabel={`${ADD_LINE_LABEL} in ${row.room.name}`}
                     style={styles.roomHeaderButton}
                   >
-                    <Text style={styles.roomHeaderButtonText}>{ROOM_ADD_ITEM_LABEL}</Text>
+                    <Text style={styles.roomHeaderButtonText}>{ADD_LINE_LABEL}</Text>
                   </Pressable>
-                  <Pressable
-                    onPress={() => { void handleImportFromPhoto(row.room.id); }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${IMPORT_FROM_PHOTO_LABEL} in ${row.room.name}. ${PHOTO_IMPORT_BLANK_PRICE_HINT}`}
-                    style={styles.roomHeaderButton}
-                  >
-                    <Text style={styles.roomHeaderButtonText}>{IMPORT_FROM_PHOTO_LABEL}</Text>
-                  </Pressable>
+                  {VISION_PHOTO_IMPORT_ENABLED ? (
+                    <Pressable
+                      onPress={() => { void handleImportFromPhoto(row.room.id); }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${IMPORT_FROM_PHOTO_LABEL} in ${row.room.name}. ${PHOTO_IMPORT_BLANK_PRICE_HINT}`}
+                      style={styles.roomHeaderButton}
+                    >
+                      <Text style={styles.roomHeaderButtonText}>{IMPORT_FROM_PHOTO_LABEL}</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     onPress={() => setRoomNoteId(row.room.id)}
                     accessibilityRole="button"
@@ -1295,8 +1336,10 @@ function DraftScreen(): JSX.Element {
                 unitPriceCents={item.unitPriceCents}
                 confidence={displayTier}
                 priceSource={item.priceSource}
-                onQuantityChange={(delta) => { void handleQuantityChange(index, delta); }}
-                onPricePress={() => setPriceEditIndex(index)}
+                onNameCommit={(name) => { void handleNameCommit(index, name); }}
+                onQuantityCommit={(quantity) => { void handleQuantitySet(index, quantity); }}
+                onUnitPriceCommit={(cents) => { void handleUnitPriceCommit(index, cents); }}
+                onPriceDetails={() => setPriceEditIndex(index)}
                 onDelete={() => { void handleDeleteItem(index); }}
               />
               {rooms.length > 0 ? (
@@ -1403,6 +1446,12 @@ function DraftScreen(): JSX.Element {
         }}
         ListHeaderComponent={
           <>
+            <SyncStatusLine
+              onRetry={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                router.push('/sync-issues' as any);
+              }}
+            />
             {needsReview ? (
               <ReviewBeforeSendingBanner
                 onAcknowledge={() => {
@@ -1467,7 +1516,9 @@ function DraftScreen(): JSX.Element {
           </>
         }
         ListEmptyComponent={
-          <EmptyState onAddItem={() => setShowCatalogPicker(true)} />
+          <View style={styles.emptyLines}>
+            <Text style={styles.emptyLinesText}>No lines yet. Add a line with a name, quantity, and unit price.</Text>
+          </View>
         }
         ListFooterComponent={
           <>
@@ -1478,20 +1529,21 @@ function DraftScreen(): JSX.Element {
                 setShowCatalogPicker(true);
               }}
               accessibilityRole="button"
-              accessibilityLabel="Add item from catalog"
+              accessibilityLabel={ADD_LINE_LABEL}
             >
-              <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
-              <Text style={styles.addItemText}>Add Item</Text>
+              <Text style={styles.addItemText}>{ADD_LINE_LABEL}</Text>
             </Pressable>
-            <Pressable
-              style={styles.addItemButton}
-              onPress={() => { void handleImportFromPhoto(null); }}
-              accessibilityRole="button"
-              accessibilityLabel={`${IMPORT_FROM_PHOTO_LABEL}. ${PHOTO_IMPORT_BLANK_PRICE_HINT}`}
-            >
-              <Ionicons name="camera-outline" size={20} color={colors.accent} />
-              <Text style={styles.addItemText}>{IMPORT_FROM_PHOTO_LABEL}</Text>
-            </Pressable>
+            {VISION_PHOTO_IMPORT_ENABLED ? (
+              <Pressable
+                style={styles.addItemButton}
+                onPress={() => { void handleImportFromPhoto(null); }}
+                accessibilityRole="button"
+                accessibilityLabel={`${IMPORT_FROM_PHOTO_LABEL}. ${PHOTO_IMPORT_BLANK_PRICE_HINT}`}
+              >
+                <Ionicons name="camera-outline" size={20} color={colors.accent} />
+                <Text style={styles.addItemText}>{IMPORT_FROM_PHOTO_LABEL}</Text>
+              </Pressable>
+            ) : null}
             <PrivateNoteField
               value={privateNote}
               onChangeText={handlePrivateNoteChange}
@@ -1523,7 +1575,11 @@ function DraftScreen(): JSX.Element {
           <Text style={styles.validationError}>{validationError}</Text>
         )}
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.subtotalLabel}>{SUBTOTAL_LABEL}</Text>
+          <Text style={styles.subtotalAmount}>{totalDisplay}</Text>
+        </View>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>{QUOTE_TOTAL_LABEL}</Text>
           <Text style={styles.totalAmount}>{totalDisplay}</Text>
         </View>
         <Pressable
@@ -1547,7 +1603,7 @@ function DraftScreen(): JSX.Element {
           <Text
             style={[
               styles.sendButtonText,
-              { color: sendEnabled ? '#ffffff' : colors.mutedText },
+              { color: sendEnabled ? colors.text : colors.mutedText },
             ]}
           >
             Send Quote
@@ -1603,10 +1659,16 @@ function DraftScreen(): JSX.Element {
         onDismiss={() => setAlternateForIndex(null)}
       />
 
-      <CatalogPickerSheet
+      <AddLineSheet
         visible={showCatalogPicker}
-        items={catalogItems.map((c) => ({ id: c.id, name: c.name, unitPriceCents: c.unitPriceCents }))}
-        onSelect={(item) => { void handleAddItem(item); }}
+        suggestions={catalogItems.map((c) => ({
+          id: c.id,
+          name: c.name,
+          unitPriceCents: c.unitPriceCents,
+          unit: c.unit,
+        }))}
+        onFreeText={(line) => { void handleAddFreeText(line); }}
+        onSelectSuggestion={(item) => { void handleAddItem(item); }}
         onDismiss={() => {
           setShowCatalogPicker(false);
           setAddToRoomId(null);
@@ -1649,7 +1711,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: colors.accent,
+    color: colors.text,
   },
   addRoomRow: {
     flexDirection: 'row',
@@ -1663,10 +1725,11 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: spacing.sm,
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
     fontSize: typography.body.fontSize,
-    color: '#000000',
+    color: colors.text,
+    backgroundColor: colors.dominant,
   },
   addRoomButton: {
     minHeight: 44,
@@ -1676,7 +1739,7 @@ const styles = StyleSheet.create({
   addRoomButtonText: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: colors.accent,
+    color: colors.text,
   },
   roomHeader: {
     backgroundColor: colors.secondary,
@@ -1690,7 +1753,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   roomHeaderActions: {
     flexDirection: 'row',
@@ -1704,7 +1767,7 @@ const styles = StyleSheet.create({
   roomHeaderButtonText: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: colors.accent,
+    color: colors.text,
   },
   roomAssign: {
     paddingHorizontal: spacing.md,
@@ -1718,7 +1781,7 @@ const styles = StyleSheet.create({
   roomAssignText: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: colors.accent,
+    color: colors.text,
   },
   roomPicker: {
     gap: 0,
@@ -1729,7 +1792,7 @@ const styles = StyleSheet.create({
   },
   roomPickerChoiceText: {
     fontSize: typography.label.fontSize,
-    color: '#000000',
+    color: colors.text,
   },
   lineNoteButton: {
     paddingHorizontal: spacing.md,
@@ -1743,10 +1806,10 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
     lineHeight: typography.label.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   lineNotePlaceholder: {
-    color: colors.accent,
+    color: colors.text,
   },
   lineNoteHint: {
     fontSize: 12,
@@ -1769,7 +1832,7 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: '700',
     lineHeight: typography.label.lineHeight,
-    color: colors.accent,
+    color: colors.text,
   },
   optionBadgeAlt: {
     color: colors.mutedText,
@@ -1781,7 +1844,7 @@ const styles = StyleSheet.create({
   optionSelectText: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: colors.accent,
+    color: colors.text,
   },
   optionSelectedHint: {
     fontSize: typography.label.fontSize,
@@ -1798,24 +1861,46 @@ const styles = StyleSheet.create({
   optionAddText: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: colors.accent,
+    color: colors.text,
+  },
+  emptyLines: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+  },
+  emptyLinesText: {
+    fontSize: typography.body.fontSize,
+    lineHeight: typography.body.lineHeight,
+    color: colors.mutedText,
   },
   totalRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  subtotalLabel: {
+    fontSize: typography.body.fontSize,
+    fontWeight: typography.body.fontWeight,
+    lineHeight: typography.body.lineHeight,
+    color: colors.mutedText,
+  },
+  subtotalAmount: {
+    fontSize: typography.body.fontSize,
+    fontWeight: typography.body.fontWeight,
+    lineHeight: typography.body.lineHeight,
+    color: colors.mutedText,
   },
   totalLabel: {
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   totalAmount: {
     fontSize: 20,
     fontWeight: '700',
     lineHeight: 26,
-    color: '#000000',
+    color: colors.text,
   },
   footer: {
     position: 'absolute',
@@ -1831,11 +1916,12 @@ const styles = StyleSheet.create({
   },
   phoneInput: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: spacing.sm,
-    minHeight: 44,
+    borderRadius: 22,
+    paddingHorizontal: spacing.md,
+    minHeight: 48,
     fontSize: typography.body.fontSize,
-    color: '#000000',
+    color: colors.text,
+    backgroundColor: colors.secondary,
   },
   phoneInputDefault: {
     borderColor: colors.border,
@@ -1855,8 +1941,8 @@ const styles = StyleSheet.create({
     color: colors.errorText,
   },
   sendButton: {
-    height: 48,
-    borderRadius: 8,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1866,11 +1952,11 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     height: 48,
-    borderRadius: 8,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: colors.border,
     backgroundColor: colors.dominant,
   },
   shareButtonBusy: {
@@ -1879,7 +1965,7 @@ const styles = StyleSheet.create({
   shareButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.accent,
+    color: colors.text,
   },
 });
 
