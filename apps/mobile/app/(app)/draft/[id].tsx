@@ -987,7 +987,7 @@ function DraftScreen(): JSX.Element {
       if (!permission.granted) {
         Alert.alert(
           'Photo access needed',
-          'QuoteSnap needs camera or library access to attach job photos.',
+          'Vela needs camera or library access to attach job photos.',
           [
             { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
             { text: 'Cancel', style: 'cancel' },

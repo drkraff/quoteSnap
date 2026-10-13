@@ -1,6 +1,6 @@
 # Vela
 
-Vela is a quoting app for solo trade contractors. The Android app is still labeled **QuoteSnap**.
+Vela is a quoting app for solo trade contractors. The Android app is labeled **Vela**.
 
 ## Install the Android test build
 
@@ -8,7 +8,7 @@ You need the APK link from the person running the test. You do not need a Google
 
 1. Open the link on your Android phone and download the `.apk`. If the phone will not download it, download the file on a computer and transfer it.
 2. Open the file. If Android asks, allow installation from that source (the browser or Files).
-3. Open QuoteSnap.
+3. Open Vela.
 4. Create an account.
 5. On the first screen, choose **United States**. That sets US dollars, feet for cable, hours for labor, and **Sales tax** at 0%. Type a different sales tax percent if you need one, then continue. **Israel** is the other choice (shekels, meters, 18% VAT).
 6. Pick your trade and hourly rate, then make a quote. **Share quote** builds a PDF in dollars with the sales tax label.

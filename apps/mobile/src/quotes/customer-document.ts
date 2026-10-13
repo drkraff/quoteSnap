@@ -80,8 +80,8 @@ const TRADE_LABELS: Record<string, string> = {
   hvac: 'HVAC',
 };
 
-export const CUSTOMER_QUOTE_FILENAME_PDF = 'QuoteSnap-quote.pdf';
-export const CUSTOMER_QUOTE_FILENAME_HTML = 'QuoteSnap-quote.html';
+export const CUSTOMER_QUOTE_FILENAME_PDF = 'Vela-quote.pdf';
+export const CUSTOMER_QUOTE_FILENAME_HTML = 'Vela-quote.html';
 
 export function formatCustomerTrade(trade: string | null | undefined): string | null {
   if (trade == null) return null;

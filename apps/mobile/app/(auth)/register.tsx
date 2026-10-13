@@ -54,7 +54,7 @@ export default function Register(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>QuoteSnap</Text>
+      <Text style={styles.title}>Vela</Text>
       <Text style={styles.subtitle}>Create your account</Text>
 
       <TextInput
