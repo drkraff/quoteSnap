@@ -3,7 +3,7 @@
  * There is no update function. A second save returns the stored row.
  */
 
-import type { CurrencyCode } from "../money/currency.js";
+import type { CountryCode, CurrencyCode } from "../money/currency.js";
 import type { CustomerQuotePayload } from "./customer-payload.js";
 import { toCustomerQuotePayload } from "./customer-payload.js";
 import { roomNameForId, roomsFromDb } from "./rooms.js";
@@ -61,6 +61,7 @@ export function buildQuoteSnapshotPayload(args: {
   lineItems: QuoteLineItemRow[];
   currencyCode?: CurrencyCode | null;
   vatPercent?: number | null;
+  countryCode?: CountryCode | null;
 }): CustomerQuotePayload {
   const rooms = roomsFromDb(args.quote.rooms);
   return toCustomerQuotePayload({
@@ -71,6 +72,7 @@ export function buildQuoteSnapshotPayload(args: {
     exclusions: args.quote.exclusions,
     currencyCode: args.currencyCode,
     vatPercent: args.vatPercent,
+    countryCode: args.countryCode,
     privateNote: args.quote.private_note,
     rooms,
     lineItems: args.lineItems.map((item) => ({

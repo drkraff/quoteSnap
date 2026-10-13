@@ -125,6 +125,7 @@ export function onboardingProfileEnqueueParams(
     currencyCode?: string;
     unitSystem?: string;
     vatPercent?: number;
+    countryCode?: string;
   },
 ): {
   entityType: 'onboarding';
@@ -137,6 +138,7 @@ export function onboardingProfileEnqueueParams(
     currencyCode?: string;
     unitSystem?: string;
     vatPercent?: number;
+    countryCode?: string;
   };
 } {
   return {
@@ -171,6 +173,7 @@ export async function syncQueuedOnboardingProfile(payload: {
   currencyCode?: string;
   unitSystem?: string;
   vatPercent?: number;
+  countryCode?: string;
 }): Promise<void> {
   await saveOnboardingProfile(payload);
 }

@@ -1,6 +1,8 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
+  // Country, currency, and tax live on the contractor record (SecureStore +
+  // Postgres). Migration 028 does not add a quote column, so this stays v13.
   version: 13,
   tables: [
     tableSchema({

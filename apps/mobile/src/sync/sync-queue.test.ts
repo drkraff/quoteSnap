@@ -875,6 +875,47 @@ describe('processQueue', () => {
     expect(item.status).toBe('destroyed');
   });
 
+  it('forwards a US country on a queued profile save', async () => {
+    const item = makeQueueItem({
+      entityType: 'onboarding',
+      entityId: 'contractor-1',
+      action: 'profile',
+      payloadJson: JSON.stringify({
+        trade: 'electrical',
+        hourlyRateCents: 8500,
+        markupPercent: null,
+        countryCode: 'US',
+        currencyCode: 'USD',
+        unitSystem: 'imperial',
+        vatPercent: 0,
+      }),
+    });
+    queueItems = [item];
+    mockedSaveOnboardingProfile.mockResolvedValue({
+      contractor: {
+        id: 'contractor-1',
+        email: null,
+        phone: null,
+        displayName: null,
+        trade: 'electrical',
+        hourlyRateCents: 8500,
+        markupPercent: null,
+      },
+    });
+
+    await processQueue();
+
+    expect(mockedSaveOnboardingProfile).toHaveBeenCalledWith({
+      trade: 'electrical',
+      hourlyRateCents: 8500,
+      markupPercent: null,
+      countryCode: 'US',
+      currencyCode: 'USD',
+      unitSystem: 'imperial',
+      vatPercent: 0,
+    });
+  });
+
   it('skips POST /catalog when a queued create already has a server id (seed de-dupe)', async () => {
     catalogItems = [
       {

@@ -26,6 +26,7 @@ export interface OnboardingProfileResponse {
     currencyCode?: string | null;
     unitSystem?: string | null;
     vatPercent?: number | null;
+    countryCode?: string | null;
   };
 }
 
@@ -36,6 +37,7 @@ export async function saveOnboardingProfile(params: {
   currencyCode?: string;
   unitSystem?: string;
   vatPercent?: number;
+  countryCode?: string;
 }): Promise<OnboardingProfileResponse> {
   return apiClient.post<OnboardingProfileResponse>('/onboarding/profile', params);
 }

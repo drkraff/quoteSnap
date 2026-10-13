@@ -4,7 +4,7 @@ import * as authApi from '../api/auth';
 import type { ContractorResponse } from '../api/auth';
 import { isUnauthorizedError } from '../api/client';
 import { accessTokenExpired, parseStoredContractor } from '../auth/stored-session';
-import { localeFromUnknown, type ContractorLocale } from '../money/currency';
+import { localeFromUnknown, type ContractorLocale, type CountryCode } from '../money/currency';
 import { noteStartup } from '../startup/trace';
 import { createSingleFlight } from '../sync/single-flight';
 
@@ -65,6 +65,7 @@ interface AuthActions {
     currencyCode?: ContractorLocale['currencyCode'];
     unitSystem?: ContractorLocale['unitSystem'];
     vatPercent?: number;
+    countryCode?: CountryCode | null;
   }): Promise<void>;
   setOnboardingComplete(profile: {
     trade: string;
@@ -371,6 +372,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     currencyCode?: ContractorLocale['currencyCode'];
     unitSystem?: ContractorLocale['unitSystem'];
     vatPercent?: number;
+    countryCode?: CountryCode | null;
   }): Promise<void> {
     const contractor = get().contractor;
     if (!contractor) return;
@@ -388,6 +390,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       currencyCode: profile.currencyCode !== undefined ? profile.currencyCode : contractor.currencyCode,
       unitSystem: profile.unitSystem !== undefined ? profile.unitSystem : contractor.unitSystem,
       vatPercent: profile.vatPercent !== undefined ? profile.vatPercent : contractor.vatPercent,
+      countryCode: profile.countryCode !== undefined ? profile.countryCode : contractor.countryCode,
     });
     await SecureStore.setItemAsync(KEYS.CONTRACTOR, JSON.stringify(updated));
     set({ contractor: updated });

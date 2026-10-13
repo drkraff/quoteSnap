@@ -25,6 +25,7 @@ router.post("/profile", authenticateToken, async (req: Request, res: Response): 
         currencyCode: parsed.currencyCode,
         unitSystem: parsed.unitSystem,
         vatPercent: parsed.vatPercent,
+        countryCode: parsed.countryCode,
       }),
     );
     res.status(outcome.status).json(outcome.json);

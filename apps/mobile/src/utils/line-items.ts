@@ -1,4 +1,4 @@
-import { parseCatalogUnit } from '../catalog/units';
+import { customerUnitLabel, parseCatalogUnit } from '../catalog/units';
 import {
   newOptionGroupId,
   parseOptionGroupId,
@@ -37,16 +37,6 @@ export interface LineItem {
   clientId?: string;
 }
 
-const UNIT_SHORT: Record<string, string> = {
-  each: 'ea',
-  hour: 'h',
-  meter: 'm',
-  sqm: 'm²',
-  foot: 'ft',
-  sqft: 'sq ft',
-  job: 'job',
-};
-
 export function isUnknownUnitPrice(cents: number | null | undefined): boolean {
   return cents == null || cents === 0;
 }
@@ -62,11 +52,11 @@ export function formatUnitPriceLabel(
 }
 
 export function formatQuantityLabel(quantity: number, unit?: string | null): string {
-  const parsed = unit ? parseCatalogUnit(unit) : null;
-  if (!parsed) {
+  const label = customerUnitLabel(unit);
+  if (!label) {
     return String(quantity);
   }
-  return `${quantity} ${UNIT_SHORT[parsed]}`;
+  return `${quantity} ${label}`;
 }
 
 /** Half an hour is 0.5. There is no one-hour minimum. Missing or invalid stays 1. */

@@ -61,6 +61,35 @@ describe("parseOnboardingProfileBody", () => {
     }
   });
 
+  it("accepts a US country and rejects a country it cannot store", () => {
+    assert.deepEqual(
+      parseOnboardingProfileBody({
+        trade: "electrical",
+        hourlyRateCents: 8500,
+        countryCode: "US",
+        currencyCode: "USD",
+        unitSystem: "imperial",
+        vatPercent: 0,
+      }),
+      {
+        ok: true,
+        trade: "electrical",
+        hourlyRateCents: 8500,
+        markupPercent: null,
+        countryCode: "US",
+        currencyCode: "USD",
+        unitSystem: "imperial",
+        vatPercent: 0,
+      },
+    );
+    const rejected = parseOnboardingProfileBody({
+      trade: "plumbing",
+      hourlyRateCents: 7500,
+      countryCode: "FR",
+    });
+    assert.equal(rejected.ok, false);
+  });
+
   it("rejects markup outside 0-100 integers", () => {
     const parsed = parseOnboardingProfileBody({
       trade: "hvac",
@@ -138,12 +167,13 @@ describe("applyOnboardingProfile", () => {
       currencyCode: "ILS",
       unitSystem: "metric",
       vatPercent: 18,
+      countryCode: null,
     });
     assert.equal(calls.length, 2);
     assert.equal(calls[0]?.sql, SELECT_CONTRACTOR_FOR_PROFILE_SQL);
     assert.deepEqual(calls[0]?.params, [CONTRACTOR_ID]);
     assert.equal(calls[1]?.sql, UPDATE_CONTRACTOR_PROFILE_SQL);
-    assert.deepEqual(calls[1]?.params, ["plumbing", 7500, 20, CONTRACTOR_ID, null, null, null]);
+    assert.deepEqual(calls[1]?.params, ["plumbing", 7500, 20, CONTRACTOR_ID, null, null, null, null]);
     assert.equal(
       calls.some((c) => /INSERT INTO catalog_items/i.test(c.sql)),
       false,
@@ -152,6 +182,65 @@ describe("applyOnboardingProfile", () => {
       calls.some((c) => /FROM catalog_items/i.test(c.sql)),
       false,
     );
+  });
+
+  it("writes US dollars, imperial units, and a zero sales-tax percent", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    const queryFn = async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql === SELECT_CONTRACTOR_FOR_PROFILE_SQL) {
+        return { rows: [{ id: CONTRACTOR_ID }] };
+      }
+      if (sql === UPDATE_CONTRACTOR_PROFILE_SQL) {
+        return {
+          rows: [
+            {
+              id: CONTRACTOR_ID,
+              email: null,
+              phone: "+15555550100",
+              display_name: "Ada",
+              trade: "electrical",
+              hourly_rate_cents: 8500,
+              markup_percent: null,
+              currency_code: "USD",
+              unit_system: "imperial",
+              vat_percent: 0,
+              country_code: "US",
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected sql: ${sql}`);
+    };
+
+    const outcome = await applyOnboardingProfile(queryFn, {
+      contractorId: CONTRACTOR_ID,
+      trade: "electrical",
+      hourlyRateCents: 8500,
+      markupPercent: null,
+      currencyCode: "USD",
+      unitSystem: "imperial",
+      vatPercent: 0,
+      countryCode: "US",
+    });
+
+    assert.equal(outcome.status, 200);
+    if (outcome.status !== 200) return;
+    assert.equal(outcome.json.contractor.countryCode, "US");
+    assert.equal(outcome.json.contractor.currencyCode, "USD");
+    assert.equal(outcome.json.contractor.unitSystem, "imperial");
+    assert.equal(outcome.json.contractor.vatPercent, 0);
+    assert.deepEqual(calls[1]?.params, [
+      "electrical",
+      8500,
+      null,
+      CONTRACTOR_ID,
+      "USD",
+      "imperial",
+      0,
+      "US",
+    ]);
+    assert.match(UPDATE_CONTRACTOR_PROFILE_SQL, /country_code = COALESCE\(\$8, country_code\)/);
   });
 
   it("returns 404 when the contractor row is missing", async () => {

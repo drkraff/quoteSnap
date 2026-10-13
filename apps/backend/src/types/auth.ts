@@ -16,6 +16,8 @@ export interface ContractorPublic {
   currencyCode: "ILS" | "USD";
   unitSystem: "metric" | "imperial";
   vatPercent: number;
+  /** Null when the contractor has not chosen a country. */
+  countryCode: "US" | "IL" | null;
 }
 
 export interface RegisterBody {
