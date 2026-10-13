@@ -32,8 +32,12 @@ describe('toCustomerQuotePayload', () => {
 
     expect(payload).toEqual({
       customerPhone: '+15555550100',
+      customerName: null,
       totalCents: 2500,
       clientSentence: 'Appliances and decorative lighting not included.',
+      exclusions: null,
+      currencyCode: 'ILS',
+      vatPercent: 18,
       lineItems: [
         {
           name: 'Replace outlet',

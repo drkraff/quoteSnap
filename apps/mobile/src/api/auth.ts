@@ -8,6 +8,9 @@ export interface ContractorResponse {
   trade: string | null;
   hourlyRateCents: number | null;
   markupPercent: number | null;
+  currencyCode?: string | null;
+  unitSystem?: string | null;
+  vatPercent?: number | null;
 }
 
 export interface AuthResponse {

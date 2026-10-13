@@ -72,9 +72,9 @@ describe('shareCustomerQuote', () => {
     expect(result).toEqual({ ok: true, kind: 'pdf' });
     expect(deps.printToPdf).toHaveBeenCalledTimes(1);
     const html = (deps.printToPdf as jest.Mock).mock.calls[0]![0] as string;
-    expect(html).toContain('Assumptions');
+    expect(html).toContain('Note');
     expect(html).toContain('Appliances not included.');
-    expect(html).toContain('Replace outlet');
+    expect(html).toContain('Replace Outlet');
     expect(html).toContain('Ada');
     expect(html).toContain('Plumbing');
     expect(html).not.toContain(SECRET_JOB);
@@ -101,7 +101,7 @@ describe('shareCustomerQuote', () => {
     );
     expect(result).toEqual({ ok: true, kind: 'pdf' });
     const html = (deps.printToPdf as jest.Mock).mock.calls[0]![0] as string;
-    expect(html).toContain('Replace outlet');
+    expect(html).toContain('Replace Outlet');
     expect(html.toLowerCase()).not.toContain('assumptions');
     expect(html).not.toContain('Appliances not included.');
     expect(html).not.toContain('Leave blank if none');
@@ -169,9 +169,9 @@ describe('shareCustomerQuote', () => {
     expect(result).toEqual({ ok: true, kind: 'html' });
     expect(deps.writeTextFile).toHaveBeenCalled();
     const html = (deps.writeTextFile as jest.Mock).mock.calls[0]![1] as string;
-    expect(html).toContain('Assumptions');
+    expect(html).toContain('Note');
     expect(html).toContain('Appliances not included.');
-    expect(html).toContain('Replace outlet');
+    expect(html).toContain('Replace Outlet');
     expect(html).not.toContain(SECRET_JOB);
     expect(html).not.toContain(SECRET_LINE);
     expect(deps.shareFile).toHaveBeenCalledWith(

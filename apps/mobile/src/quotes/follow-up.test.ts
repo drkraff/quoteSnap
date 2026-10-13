@@ -192,7 +192,7 @@ describe('followUpRowView', () => {
     ).toEqual({
       customerName: 'Ada',
       customerPhone: '+15555550100',
-      totalDisplay: '$12.50',
+      totalDisplay: '₪12.50',
       sentLabel: 'Sent 4 days ago',
     });
   });
@@ -208,7 +208,7 @@ describe('followUpRowView', () => {
     expect(view).toEqual({
       customerName: null,
       customerPhone: null,
-      totalDisplay: '$0.00',
+      totalDisplay: '₪0.00',
       sentLabel: 'Sent 4 days ago',
     });
     expect(JSON.stringify(view)).not.toContain('No phone');
@@ -241,7 +241,7 @@ describe('followUpRowView', () => {
       now: NOW,
     });
     expect(view?.sentLabel).toBe('Sent 3 days ago');
-    expect(view?.totalDisplay).toBe('$695.00');
+    expect(view?.totalDisplay).toBe('₪695.00');
     expect(view?.customerName).toBeNull();
   });
 });

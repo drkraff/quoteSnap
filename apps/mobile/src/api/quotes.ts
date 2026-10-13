@@ -16,6 +16,10 @@ export interface QuoteResponse {
   privateNote?: string | null;
   /** Customer-facing scope / assumptions. Include on PDF/SMS. */
   clientSentence?: string | null;
+  /** Customer name on the PDF. Null when blank. */
+  customerName?: string | null;
+  /** Customer-facing "Not included". Null when blank. */
+  exclusions?: string | null;
   /** Thin rooms/zones. Empty = single-memo / ungrouped. */
   rooms?: {
     id: string;
@@ -92,6 +96,8 @@ export async function createQuoteOnServer(body: {
   totalCents?: number;
   privateNote?: string | null;
   clientSentence?: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   /** Stable local quote id. The server returns the same quote on a retry. */
   clientKey?: string;
 }): Promise<QuoteResponse> {
@@ -107,6 +113,8 @@ export async function updateQuoteOnServer(
     totalCents?: number;
     privateNote?: string | null;
     clientSentence?: string | null;
+    customerName?: string | null;
+    exclusions?: string | null;
     rooms?: {
       id: string;
       name: string;
@@ -132,6 +140,12 @@ export async function updateQuoteOnServer(
     body,
   );
   return data.quote;
+}
+
+export async function sendQuoteForApproval(serverId: string, customerPhone: string): Promise<{
+  approvalUrl?: string;
+}> {
+  return apiClient.post(`/quotes/${serverId}/send`, { customerPhone });
 }
 
 export async function archiveQuote(serverId: string): Promise<void> {

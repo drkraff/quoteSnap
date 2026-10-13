@@ -140,7 +140,7 @@ describe("approval page rendering", () => {
     assert.equal(result.html.includes("$0.00"), false);
     assert.match(result.html, /\$250\.00/);
     assert.match(result.html, /\$1800\.00/);
-    assert.match(result.html, /Quartz countertop/);
+    assert.match(result.html, /Quartz Countertop/);
     assert.match(result.html, />Approve</);
     assert.match(result.html, />Decline</);
     assert.match(result.html, /name="viewport"/);

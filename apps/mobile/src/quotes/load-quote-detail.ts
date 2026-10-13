@@ -2,6 +2,7 @@ import type { QuoteLineItemResponse, QuoteResponse } from '../api/quotes';
 import { parseLineItems, serializeLineItems, type LineItem } from '../utils/line-items';
 import { parseOptionGroupId, parseOptionRole } from './option-groups';
 import { parsePriceSource } from '../utils/price-source';
+import { normalizeCustomerName, normalizeExclusions } from './customer-fields';
 import { normalizePrivateNote, assignNormalizedPrivateNote } from './private-notes';
 import { parseRoomId, parseRoomsJson, type QuoteRoom } from './rooms';
 import { mergeStoredPhotosWithServer, parsePhotosJson, type QuotePhoto, type ServerQuotePhoto } from './photos';
@@ -23,6 +24,8 @@ export type LocalQuoteRecord = {
   voiceJobId?: string | null;
   privateNote?: string | null;
   clientSentence?: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   roomsJson?: string | null;
   photosJson?: string | null;
   localDirty?: string | null;
@@ -36,6 +39,8 @@ export type QuoteDetailSnapshot = {
   sentAt: string | null;
   privateNote?: string | null;
   clientSentence?: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   rooms?: QuoteRoom[];
   photos?: QuotePhoto[];
 };
@@ -147,6 +152,8 @@ function snapshotFromLocal(quote: LocalQuoteRecord): QuoteDetailSnapshot {
     sentAt: quote.sentAt?.toISOString() ?? null,
     privateNote: normalizePrivateNote(quote.privateNote),
     clientSentence: quote.clientSentence ?? null,
+    customerName: normalizeCustomerName(quote.customerName),
+    exclusions: normalizeExclusions(quote.exclusions),
     rooms: parseRoomsJson(quote.roomsJson),
     photos: parsePhotosJson(quote.photosJson),
   };
@@ -164,6 +171,8 @@ function snapshotFromRemote(
     sentAt: quote.sentAt,
     privateNote: normalizePrivateNote(quote.privateNote),
     clientSentence: quote.clientSentence ?? null,
+    customerName: normalizeCustomerName(quote.customerName),
+    exclusions: normalizeExclusions(quote.exclusions),
     rooms: quote.rooms ?? [],
     photos: mergeStoredPhotosWithServer(
       localPhotosJson,
@@ -210,6 +219,8 @@ export function resolveQuoteDetailView(input: {
         totalCents: preserve?.lines ? localSnap.totalCents : remoteSnap.totalCents,
         privateNote: preserve?.privateNote ? localSnap.privateNote : remoteSnap.privateNote,
         clientSentence: preserve?.clientSentence ? localSnap.clientSentence : remoteSnap.clientSentence,
+        customerName: preserve?.customerName ? localSnap.customerName : remoteSnap.customerName,
+        exclusions: preserve?.exclusions ? localSnap.exclusions : remoteSnap.exclusions,
         rooms: preserve?.rooms ? localSnap.rooms : remoteSnap.rooms,
       },
       lineItems: preserve?.lines ? localItems : input.remote.lineItems,

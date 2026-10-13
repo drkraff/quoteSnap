@@ -28,6 +28,10 @@ export interface QuoteResponse {
   privateNote: string | null;
   /** Customer-facing scope / assumptions. Include on PDF/SMS/approval. */
   clientSentence: string | null;
+  /** Customer name on the PDF. Null when blank. */
+  customerName: string | null;
+  /** Customer-facing Not included section. Null when blank. */
+  exclusions: string | null;
   /** Thin rooms/zones. Empty = single-memo / ungrouped. */
   rooms: QuoteRoomResponse[];
   /** FAIL-04/05. Omitted when the column is empty or unknown — do not invent. */
@@ -66,9 +70,11 @@ export interface QuoteListItemResponse extends QuoteResponse {
 export interface CreateQuoteBody {
   status?: string;
   customerPhone?: string;
+  customerName?: string | null;
   totalCents?: number;
   privateNote?: string | null;
   clientSentence?: string | null;
+  exclusions?: string | null;
 }
 
 export interface UpdateQuoteLineItemBody {
@@ -97,11 +103,14 @@ export interface UpdateQuoteLineItemBody {
 export interface UpdateQuoteBody {
   status?: string;
   customerPhone?: string;
+  customerName?: string | null;
   totalCents?: number;
   /** Contractor-only job note. Omit to preserve; null clears. */
   privateNote?: string | null;
   /** Customer-facing quote note. Omit to preserve; null clears. */
   clientSentence?: string | null;
+  /** Customer-facing Not included. Omit to preserve; null clears. */
+  exclusions?: string | null;
   /** Full replacement of rooms/zones. Omit to preserve; [] clears. */
   rooms?: QuoteRoomResponse[];
   lineItems?: UpdateQuoteLineItemBody[];

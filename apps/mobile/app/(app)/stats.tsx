@@ -12,6 +12,7 @@ import {
   type QuoteStatsQuote,
   type QuoteStatsWindowId,
 } from '../../src/quotes/quote-stats';
+import { useContractorLocale } from '../../src/money/use-contractor-locale';
 import { useAuthStore } from '../../src/store/auth-store';
 import { colors } from '../../src/theme/tokens';
 
@@ -43,7 +44,8 @@ export default function StatsScreen(): JSX.Element {
     return () => subscription.unsubscribe();
   }, []);
 
-  const view = quoteStatsView(computeQuoteStats(quotes, windowId, new Date()));
+  const locale = useContractorLocale();
+  const view = quoteStatsView(computeQuoteStats(quotes, windowId, new Date()), locale.currencyCode);
 
   return (
     <SafeAreaView style={styles.container}>

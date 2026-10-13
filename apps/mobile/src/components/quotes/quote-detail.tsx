@@ -3,6 +3,9 @@ import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
 import { draftPriceFlag, draftPriceSourceLabel } from '../../utils/price-source';
+import { formatMoneyCents } from '../../money/currency';
+import { useContractorLocale } from '../../money/use-contractor-locale';
+import { quoteVatTotals } from '../../money/vat';
 import { colors, spacing, typography } from '../../theme/tokens';
 import { PRIVATE_NOTE_INTERNAL_HINT, PRIVATE_NOTE_LABEL, hasPrivateNote, normalizePrivateNote } from '../../quotes/private-notes';
 import {
@@ -38,6 +41,8 @@ interface QuoteDetailProps {
     sentAt: string | null;
     privateNote?: string | null;
     clientSentence?: string | null;
+    customerName?: string | null;
+    exclusions?: string | null;
     rooms?: { id: string; name: string; privateNote?: string | null }[];
     photos?: QuotePhoto[];
   };
@@ -45,7 +50,14 @@ interface QuoteDetailProps {
 }
 
 export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element {
-  const totalDisplay = `$${(quote.totalCents / 100).toFixed(2)}`;
+  const locale = useContractorLocale();
+  const totals = quoteVatTotals(quote.totalCents, locale.vatPercent);
+  const subtotalDisplay = formatMoneyCents(quote.totalCents, locale.currencyCode);
+  const vatDisplay = totals ? formatMoneyCents(totals.vatCents, locale.currencyCode) : null;
+  const totalDisplay = formatMoneyCents(
+    totals?.totalCents ?? quote.totalCents,
+    locale.currencyCode,
+  );
   const createdDate = formatRelativeDate(new Date(quote.createdAt));
   const phone = quote.customerPhone || 'No phone';
   const photos = quote.photos ?? [];
@@ -71,7 +83,7 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
     const sourceLabel = draftPriceSourceLabel(flag);
     const itemTotal = priceUnknown
       ? formatUnitPriceLabel(item.unitPriceCents)
-      : `$${(((item.unitPriceCents ?? 0) * item.quantity) / 100).toFixed(2)}`;
+      : formatMoneyCents((item.unitPriceCents ?? 0) * item.quantity, locale.currencyCode);
     const optionLabel = optionBadgeLabel(item.optionRole);
     return (
       <View>
@@ -176,6 +188,10 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
 
       {/* Footer: total */}
       <View style={styles.footer}>
+        <Text style={styles.totalLabel}>Subtotal {subtotalDisplay}</Text>
+        {vatDisplay != null ? (
+          <Text style={styles.totalLabel}>VAT {locale.vatPercent}% {vatDisplay}</Text>
+        ) : null}
         <Text style={styles.totalLabel}>Total</Text>
         <Text style={styles.totalAmount}>{totalDisplay}</Text>
       </View>

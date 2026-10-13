@@ -23,6 +23,9 @@ export interface OnboardingProfileResponse {
     trade: string;
     hourlyRateCents: number;
     markupPercent: number | null;
+    currencyCode?: string | null;
+    unitSystem?: string | null;
+    vatPercent?: number | null;
   };
 }
 
@@ -30,6 +33,9 @@ export async function saveOnboardingProfile(params: {
   trade: Trade;
   hourlyRateCents: number;
   markupPercent?: number | null;
+  currencyCode?: string;
+  unitSystem?: string;
+  vatPercent?: number;
 }): Promise<OnboardingProfileResponse> {
   return apiClient.post<OnboardingProfileResponse>('/onboarding/profile', params);
 }

@@ -5,7 +5,7 @@ export const AUTHENTICATED_ENTRY_HREF = '/(app)/quotes' as const;
 
 export const LOGIN_HREF = '/(auth)/login' as const;
 
-export const ONBOARDING_HREF = '/(auth)/onboarding/trade-selection' as const;
+export const ONBOARDING_HREF = '/(auth)/onboarding/locale' as const;
 
 export type SessionRedirectHref =
   | typeof AUTHENTICATED_ENTRY_HREF

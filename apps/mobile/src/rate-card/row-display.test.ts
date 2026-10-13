@@ -26,8 +26,8 @@ describe('rateCardRowDisplay', () => {
       source: 'imported',
     });
     expect(row.name).toBe('Copper Pipe');
-    expect(row.priceDisplay).toBe('$45.00');
-    expect(row.unitLabel).toBe('foot');
+    expect(row.priceDisplay).toBe('₪45.00');
+    expect(row.unitLabel).toBe('ft');
     expect(row.useCountLabel).toBe('Used 3 times');
     expect(row.sourceLabel).toBe('Imported');
     expect(row.accessibilityLabel).toContain('imported');

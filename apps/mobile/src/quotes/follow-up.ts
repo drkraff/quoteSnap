@@ -4,6 +4,8 @@
  * Does not read totals, line items, or invent sent_at / customer name.
  */
 
+import { formatMoneyCents, type CurrencyCode } from '../money/currency';
+
 export const FOLLOW_UP_AFTER_DAYS = 3;
 
 export const FOLLOW_UP_DAY_MS = 24 * 60 * 60 * 1000;
@@ -132,6 +134,7 @@ export function followUpRowView(input: {
   totalCents: number;
   sentAt: FollowUpInstant;
   now: Date;
+  currency?: CurrencyCode;
 }): FollowUpRowView | null {
   if (typeof input.totalCents !== 'number' || !Number.isFinite(input.totalCents)) return null;
   const sentLabel = sentDaysAgoLabel(sentDaysAgo(input.sentAt, input.now));
@@ -139,7 +142,7 @@ export function followUpRowView(input: {
   return {
     customerName: presentCustomerText(input.customerName),
     customerPhone: presentCustomerText(input.customerPhone),
-    totalDisplay: `$${(input.totalCents / 100).toFixed(2)}`,
+    totalDisplay: formatMoneyCents(input.totalCents, input.currency),
     sentLabel,
   };
 }

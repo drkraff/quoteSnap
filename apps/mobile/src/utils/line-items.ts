@@ -11,6 +11,7 @@ import {
 } from '../quotes/option-groups';
 import { normalizePrivateNote } from '../quotes/private-notes';
 import { parseRoomId } from '../quotes/rooms';
+import { formatMoneyCents as formatCurrencyCents, type CurrencyCode } from '../money/currency';
 import { parsePriceSource, typedPriceSource, type PriceSource } from './price-source';
 
 export interface LineItem {
@@ -39,6 +40,8 @@ export interface LineItem {
 const UNIT_SHORT: Record<string, string> = {
   each: 'ea',
   hour: 'h',
+  meter: 'm',
+  sqm: 'm²',
   foot: 'ft',
   sqft: 'sq ft',
   job: 'job',
@@ -48,11 +51,14 @@ export function isUnknownUnitPrice(cents: number | null | undefined): boolean {
   return cents == null || cents === 0;
 }
 
-export function formatUnitPriceLabel(cents: number | null | undefined): string {
+export function formatUnitPriceLabel(
+  cents: number | null | undefined,
+  currency: CurrencyCode = 'ILS',
+): string {
   if (cents == null || cents === 0) {
     return 'Price needed';
   }
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatCurrencyCents(cents, currency);
 }
 
 export function formatQuantityLabel(quantity: number, unit?: string | null): string {
@@ -322,19 +328,21 @@ export function lineTotalCents(item: {
   return lineAmountCents(item);
 }
 
-export function formatMoneyCents(cents: number | null | undefined): string {
-  const safe = cents == null || !Number.isFinite(cents) ? 0 : Math.round(cents);
-  const sign = safe < 0 ? '-' : '';
-  return `${sign}$${(Math.abs(safe) / 100).toFixed(2)}`;
+export function formatMoneyCents(
+  cents: number | null | undefined,
+  currency: CurrencyCode = 'ILS',
+): string {
+  return formatCurrencyCents(cents, currency);
 }
 
-/** "2 ea × $30.00" so the unit price is not read as the line total. */
+/** "2 ea × ₪30.00" so the unit price is not read as the line total. */
 export function formatQtyTimesUnitPrice(
   quantity: number,
   unitPriceCents: number | null | undefined,
   unit?: string | null,
+  currency: CurrencyCode = 'ILS',
 ): string {
-  return `${formatQuantityLabel(quantity, unit)} × ${formatUnitPriceLabel(unitPriceCents)}`;
+  return `${formatQuantityLabel(quantity, unit)} × ${formatUnitPriceLabel(unitPriceCents, currency)}`;
 }
 
 /** Typed quantity. Fractions (half an hour) stay. Empty, zero, or junk is null. */

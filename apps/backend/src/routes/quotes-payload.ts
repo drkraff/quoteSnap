@@ -18,6 +18,8 @@ export type QuoteRow = {
   is_archived: boolean;
   private_note: string | null;
   client_sentence: string | null;
+  customer_name?: string | null;
+  exclusions?: string | null;
   rooms: unknown;
   ai_failure_stage?: string | null;
 };
@@ -41,7 +43,7 @@ export type QuoteLineItemRow = {
 };
 
 export const QUOTE_COLUMNS =
-  "id, contractor_id, status, customer_phone, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note, client_sentence, rooms, ai_failure_stage";
+  "id, contractor_id, status, customer_phone, customer_name, total_cents, created_at, updated_at, sent_at, voice_job_id, is_archived, private_note, client_sentence, exclusions, rooms, ai_failure_stage";
 
 /** Active Quotes list (catalog GET analog). Default GET /quotes. */
 export function listQuotesSql(archived: boolean): string {
@@ -78,6 +80,8 @@ export function quoteRowToResponse(row: QuoteRow): QuoteResponse {
     isArchived: row.is_archived,
     privateNote: normalizePrivateNote(row.private_note),
     clientSentence: row.client_sentence,
+    customerName: row.customer_name ?? null,
+    exclusions: row.exclusions ?? null,
     rooms: roomsFromDb(row.rooms),
     ...(failureStage ? { failureStage } : {}),
   };

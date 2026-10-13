@@ -14,9 +14,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { database } from '../../../src/db';
 import { Quote } from '../../../src/db/models/quote';
 import { Draft } from '../../../src/db/models/draft';
-import { fetchQuote, QuoteLineItemResponse } from '../../../src/api/quotes';
+import { fetchQuote, sendQuoteForApproval, QuoteLineItemResponse } from '../../../src/api/quotes';
+import { isConflictError } from '../../../src/api/client';
+import * as Clipboard from 'expo-clipboard';
+import { CopyApprovalLinkButton } from '../../../src/components/quotes/copy-approval-link-button';
 import { QuoteDetail } from '../../../src/components/quotes/quote-detail';
 import { isOnline } from '../../../src/sync/network-monitor';
+import { useIsOnline } from '../../../src/sync/use-is-online';
+import { useContractorLocale } from '../../../src/money/use-contractor-locale';
+import {
+  copyApprovalMessage,
+  planAfterApprovalSend,
+  planCopyApprovalLink,
+} from '../../../src/quotes/copy-approval-link';
 import {
   loadQuoteDetail,
   remoteLineItemsToDraftJson,
@@ -57,6 +67,8 @@ export default function QuoteDetailScreen(): JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const contractor = useAuthStore((s) => s.contractor);
+  const locale = useContractorLocale();
+  const online = useIsOnline();
   const duplicateGuard = useRef(createDuplicateTapGuard()).current;
 
   const [quote, setQuote] = useState<QuoteDetailSnapshot | null>(null);
@@ -65,6 +77,8 @@ export default function QuoteDetailScreen(): JSX.Element {
   const [error, setError] = useState('');
   const [sharing, setSharing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [copyingLink, setCopyingLink] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,6 +170,12 @@ export default function QuoteDetailScreen(): JSX.Element {
                 if (!fieldHeld(q.id, record.localDirty, 'clientSentence')) {
                   record.clientSentence = remoteQuote.clientSentence ?? null;
                 }
+                if (!fieldHeld(q.id, record.localDirty, 'customerName')) {
+                  record.customerName = remoteQuote.customerName ?? null;
+                }
+                if (!fieldHeld(q.id, record.localDirty, 'exclusions')) {
+                  record.exclusions = remoteQuote.exclusions ?? null;
+                }
                 if (!fieldHeld(q.id, record.localDirty, 'rooms')) {
                   record.roomsJson = serializeRooms(remoteQuote.rooms ?? []);
                 }
@@ -204,8 +224,12 @@ export default function QuoteDetailScreen(): JSX.Element {
       const { share, marked } = await shareCustomerQuoteAndMarkSent(
         {
           customerPhone: quote.customerPhone,
+          customerName: quote.customerName,
           totalCents: quote.totalCents,
           clientSentence: quote.clientSentence,
+          exclusions: quote.exclusions,
+          currencyCode: locale.currencyCode,
+          vatPercent: locale.vatPercent,
           privateNote: quote.privateNote,
           rooms: quote.rooms,
           photos: quote.photos,
@@ -215,6 +239,11 @@ export default function QuoteDetailScreen(): JSX.Element {
         {
           displayName: contractor?.displayName,
           trade: contractor?.trade,
+          phone: contractor?.phone,
+          email: contractor?.email,
+          quoteId: id,
+          issuedAt: quote.createdAt,
+          approvalUrl: found.ok ? found.record.approvalUrl : null,
         },
       );
       if (!share.ok) {
@@ -237,6 +266,51 @@ export default function QuoteDetailScreen(): JSX.Element {
       Alert.alert(SHARE_QUOTE_ALERT_FAILED, SHARE_QUOTE_FAILED);
     } finally {
       setSharing(false);
+    }
+  }
+
+  async function handleCopyApprovalLink(): Promise<void> {
+    if (!id || copyingLink) return;
+    setCopyingLink(true);
+    setCopyMessage(null);
+    try {
+      const found = await findQuoteRecord(() => database.get<Quote>('quotes').find(id));
+      const record = found.ok ? found.record : null;
+      const plan = planCopyApprovalLink({
+        storedUrl: record?.approvalUrl,
+        serverId: record?.serverId,
+        online,
+        phone: quote?.customerPhone,
+      });
+      if (plan.action === 'copy') {
+        await Clipboard.setStringAsync(plan.url);
+        setCopyMessage(copyApprovalMessage(plan));
+        return;
+      }
+      if (plan.action !== 'request' || !record?.serverId || !quote?.customerPhone) {
+        setCopyMessage(copyApprovalMessage(plan));
+        return;
+      }
+      try {
+        const sent = await sendQuoteForApproval(record.serverId, quote.customerPhone.trim());
+        const after = planAfterApprovalSend({ approvalUrl: sent.approvalUrl });
+        if (after.action === 'copy') {
+          await database.write(async () => {
+            await record.update((row) => {
+              row.approvalUrl = after.url;
+            });
+          });
+          await Clipboard.setStringAsync(after.url);
+        }
+        setCopyMessage(copyApprovalMessage(after));
+      } catch (error) {
+        const after = planAfterApprovalSend({ alreadyIssued: isConflictError(error) });
+        setCopyMessage(copyApprovalMessage(after));
+      }
+    } catch {
+      setCopyMessage(copyApprovalMessage({ action: 'failed' }));
+    } finally {
+      setCopyingLink(false);
     }
   }
 
@@ -303,6 +377,8 @@ export default function QuoteDetailScreen(): JSX.Element {
           sentAt: quote.sentAt,
           privateNote: quote.privateNote,
           clientSentence: quote.clientSentence,
+          customerName: quote.customerName,
+          exclusions: quote.exclusions,
           rooms: quote.rooms,
           photos: quote.photos,
         }}
@@ -317,6 +393,15 @@ export default function QuoteDetailScreen(): JSX.Element {
       >
         <Text style={styles.shareButtonText}>{SHARE_QUOTE_LABEL}</Text>
       </Pressable>
+      {quote.status === 'sent' ? (
+        <CopyApprovalLinkButton
+          busy={copyingLink}
+          message={copyMessage}
+          onPress={() => {
+            void handleCopyApprovalLink();
+          }}
+        />
+      ) : null}
       <Pressable
         style={[styles.duplicateButton, duplicating && styles.shareButtonBusy]}
         onPress={() => { void handleDuplicatePress(); }}

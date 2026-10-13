@@ -372,6 +372,14 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           payload.clientSentence === undefined
             ? undefined
             : (payload.clientSentence as string | null),
+        customerName:
+          payload.customerName === undefined
+            ? undefined
+            : (payload.customerName as string | null),
+        exclusions:
+          payload.exclusions === undefined
+            ? undefined
+            : (payload.exclusions as string | null),
       };
       let response = await createQuoteOnServer({
         ...createBody,
@@ -448,6 +456,14 @@ async function pushToServer(item: SyncQueueItem): Promise<void> {
           payload.clientSentence === undefined
             ? undefined
             : (payload.clientSentence as string | null),
+        customerName:
+          payload.customerName === undefined
+            ? undefined
+            : (payload.customerName as string | null),
+        exclusions:
+          payload.exclusions === undefined
+            ? undefined
+            : (payload.exclusions as string | null),
         ...(payload.rooms !== undefined
           ? {
               rooms: payload.rooms as {
@@ -717,6 +733,8 @@ async function clearPushedDirtyFields(
     customerPhone: quote.customerPhone ?? null,
     privateNote: quote.privateNote ?? null,
     clientSentence: quote.clientSentence ?? null,
+    customerName: quote.customerName ?? null,
+    exclusions: quote.exclusions ?? null,
     roomsJson: quote.roomsJson ?? null,
     lineItemsJson,
     payload,

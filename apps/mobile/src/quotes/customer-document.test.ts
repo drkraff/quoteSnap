@@ -71,7 +71,7 @@ describe('customerQuoteToDocument', () => {
     const doc = customerQuoteToDocument(payload);
     expect(doc.clientSentence).toBeNull();
     const haystack = `${doc.html}\n${doc.text}`;
-    expect(haystack).toContain('Replace outlet');
+    expect(haystack).toContain('Replace Outlet');
     expect(haystack.toLowerCase()).not.toContain('assumptions');
     expect(haystack).not.toContain('class="sentence"');
     expect(haystack).not.toContain(CLIENT_SENTENCE_PLACEHOLDER);
@@ -131,9 +131,9 @@ describe('customerQuoteToDocument', () => {
     const haystack = `${doc.html}\n${doc.text}`;
     expect(haystack).toContain('Appliances not included.');
     expect(haystack).toContain(CUSTOMER_ASSUMPTIONS_HEADING);
-    expect(haystack).toContain('Walk-in shower');
+    expect(haystack).toContain('Walk-in Shower');
     expect(haystack).toContain('Kitchen');
-    expect(haystack).toContain('$1800.00');
+    expect(haystack).toContain('₪1800.00');
     expect(haystack).not.toContain(SECRET_JOB);
     expect(haystack).not.toContain(SECRET_LINE);
     expect(haystack).not.toContain(SECRET_ROOM);
@@ -143,11 +143,11 @@ describe('customerQuoteToDocument', () => {
     expect(haystack).not.toContain('priceSource');
     expect(haystack).not.toContain('price_source');
     expect(haystack).not.toContain('Keep the tub');
-    expect(haystack).not.toContain('$450.00');
-    expect(haystack).not.toContain('$2250.00');
+    expect(haystack).not.toContain('₪450.00');
+    expect(haystack).not.toContain('₪2250.00');
     expect(haystack).not.toContain('secret.jpg');
     expect(haystack).not.toContain('r2Key');
-    expect(doc.totalLabel).toBe('$1800.00');
+    expect(doc.totalLabel).toBe('₪2124.00');
     expect(doc.sections.some((section) => section.heading === 'Kitchen')).toBe(true);
   });
 
@@ -169,15 +169,15 @@ describe('customerQuoteToDocument', () => {
     const doc = customerQuoteToDocument(payload);
     expect(doc.sections[0]!.lines[0]!.unitPriceLabel).toBe('');
     expect(doc.sections[0]!.lines[0]!.amountLabel).toBe('');
-    expect(doc.totalLabel).toBe('$0.00');
-    expect(doc.html).toContain('Laminate cabinets');
+    expect(doc.totalLabel).toBe('₪0.00');
+    expect(doc.html).toContain('Laminate Cabinets');
     expect(doc.html).not.toContain(SECRET_JOB);
-    expect(doc.text).not.toContain('$185');
+    expect(doc.text).not.toContain('₪185');
     const cabinetsHtml = doc.html.slice(
-      doc.html.indexOf('Laminate cabinets'),
+      doc.html.indexOf('Laminate Cabinets'),
       doc.html.indexOf('Total'),
     );
-    expect(cabinetsHtml).not.toContain('$0.00');
+    expect(cabinetsHtml).not.toContain('₪0.00');
   });
 
   it('treats stored 0 cents as blank, not a zero-dollar price', () => {
@@ -190,12 +190,13 @@ describe('customerQuoteToDocument', () => {
       ],
     });
     const doc = customerQuoteToDocument(payload);
-    const quartz = doc.sections[0]!.lines.find((line) => line.name === 'Quartz countertop');
+    const quartz = doc.sections[0]!.lines.find((line) => line.name === 'Quartz Countertop');
     expect(quartz?.unitPriceLabel).toBe('');
     expect(quartz?.amountLabel).toBe('');
-    expect(doc.totalLabel).toBe('$150.00');
-    expect(doc.html).toContain('$75.00');
-    expect(doc.html).toContain('$150.00');
+    expect(doc.subtotalLabel).toBe('₪150.00');
+    expect(doc.totalLabel).toBe('₪177.00');
+    expect(doc.html).toContain('₪75.00');
+    expect(doc.html).toContain('₪150.00');
   });
 
   it('groups ungrouped lines under Job when other rooms exist', () => {
@@ -236,7 +237,7 @@ describe('customerQuoteToDocument', () => {
       ],
     });
     const doc = customerQuoteToDocument(payload);
-    expect(doc.totalLabel).toBe('$250.00');
+    expect(doc.totalLabel).toBe('₪295.00');
     const mystery = doc.sections[0]!.lines.find((line) => line.name === 'Mystery SKU');
     expect(mystery?.unitPriceLabel).toBe('');
     expect(mystery?.amountLabel).toBe('');
@@ -263,6 +264,47 @@ describe('customerQuoteToDocument', () => {
   });
 });
 
+describe('professional customer page', () => {
+  it('prints quote meta, VAT, capitalized names, and omits a blank exclusions section', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: '+972501234567',
+      customerName: '  Noa Levi  ',
+      totalCents: 11500,
+      clientSentence: 'Replace the switch only.',
+      exclusions: '   ',
+      currencyCode: 'ILS',
+      vatPercent: 18,
+      photos: [{ id: 'p1', localUri: 'file:///private/line.jpg' }],
+      lineItems: [
+        { name: 'light switch replacement', quantity: 1, unitPriceCents: 4000, unit: 'each' },
+        { name: 'cable', quantity: 2, unitPriceCents: 3000, unit: 'sqm' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload, {
+      displayName: 'Grok Test',
+      trade: 'electrical',
+      phone: '050-000-0000',
+      email: 'ada@example.com',
+      quoteId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11',
+      issuedAt: new Date('2026-10-08T00:00:00.000Z'),
+      approvalUrl: 'https://vela.example/q/token',
+    });
+    expect(doc.html).toContain('GT');
+    expect(doc.html).toContain('QS-AAAA11');
+    expect(doc.html).toContain('8 Oct 2026');
+    expect(doc.html).toContain('22 Oct 2026');
+    expect(doc.html).toContain('Noa Levi');
+    expect(doc.html).toContain('Light Switch Replacement');
+    expect(doc.html).toContain('m²');
+    expect(doc.html).toContain('VAT 18%');
+    expect(doc.totalLabel).toBe('₪135.70');
+    expect(doc.html).toContain('https://vela.example/q/token');
+    expect(doc.html).not.toContain('Not included');
+    expect(doc.html).not.toContain('file:///private/line.jpg');
+    expect(doc.text).toContain('Accept this quote: https://vela.example/q/token');
+  });
+});
+
 describe('format helpers', () => {
   it('maps known trades and trims blank brand fields', () => {
     expect(formatCustomerTrade('hvac')).toBe('HVAC');
@@ -272,7 +314,7 @@ describe('format helpers', () => {
     expect(formatCustomerDisplayName('   ')).toBeNull();
     expect(formatCustomerLineMoney(null)).toBe('');
     expect(formatCustomerLineMoney(0)).toBe('');
-    expect(formatCustomerLineMoney(2500)).toBe('$25.00');
+    expect(formatCustomerLineMoney(2500)).toBe('₪25.00');
     expect(escapeHtml(`a&b<"'>`)).toBe('a&amp;b&lt;&quot;&#39;&gt;');
   });
 

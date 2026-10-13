@@ -520,15 +520,15 @@ describe('line totals', () => {
   it('multiplies qty by unit price and keeps those two amounts distinct', () => {
     const cable = { quantity: 2, unitPriceCents: 3000 };
     expect(lineTotalCents(cable)).toBe(6000);
-    expect(formatMoneyCents(cable.unitPriceCents)).toBe('$30.00');
-    expect(formatMoneyCents(lineTotalCents(cable))).toBe('$60.00');
-    expect(formatQtyTimesUnitPrice(2, 3000, 'each')).toBe('2 ea × $30.00');
+    expect(formatMoneyCents(cable.unitPriceCents)).toBe('₪30.00');
+    expect(formatMoneyCents(lineTotalCents(cable))).toBe('₪60.00');
+    expect(formatQtyTimesUnitPrice(2, 3000, 'each')).toBe('2 ea × ₪30.00');
     expect(lineTotalCents(cable)).not.toBe(cable.unitPriceCents);
   });
 
   it('keeps half an hour and treats a blank unit price as no line total', () => {
     expect(lineTotalCents({ quantity: 0.5, unitPriceCents: 1500 })).toBe(750);
-    expect(formatMoneyCents(750)).toBe('$7.50');
+    expect(formatMoneyCents(750)).toBe('₪7.50');
     expect(lineTotalCents({ quantity: 2, unitPriceCents: null })).toBe(0);
     expect(lineTotalCents({ quantity: 2, unitPriceCents: 0 })).toBe(0);
     expect(parseLineQuantityInput('0.5')).toBe(0.5);

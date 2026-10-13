@@ -58,7 +58,7 @@ export const SELECT_SEND_LINE_ITEMS_SQL = `SELECT ${LINE_ITEM_COLUMNS}
   WHERE quote_id = $1
   ORDER BY created_at ASC`;
 
-export const SELECT_CONTRACTOR_BRAND_SQL = `SELECT display_name, trade
+export const SELECT_CONTRACTOR_BRAND_SQL = `SELECT display_name, trade, currency_code, vat_percent
   FROM contractors
   WHERE id = $1`;
 
@@ -190,9 +190,23 @@ export async function sendQuoteForApproval(
   }
 
   const lineResult = await queryFn(SELECT_SEND_LINE_ITEMS_SQL, [args.quoteId]);
+
+  const brandResult = await queryFn(SELECT_CONTRACTOR_BRAND_SQL, [args.contractorId]);
+  if (brandResult.rows.length === 0) {
+    return { status: 404, json: { error: QUOTE_NOT_FOUND_ERROR } };
+  }
+  const brandRow = brandResult.rows[0] as {
+    display_name: string | null;
+    trade: string | null;
+    currency_code?: string | null;
+    vat_percent?: number | null;
+  };
+  const brand = normalizeSnapshotBrand(brandRow.display_name, brandRow.trade);
   const payload = buildQuoteSnapshotPayload({
     quote,
     lineItems: lineResult.rows as QuoteLineItemRow[],
+    currencyCode: brandRow.currency_code === "USD" ? "USD" : brandRow.currency_code === "ILS" ? "ILS" : undefined,
+    vatPercent: typeof brandRow.vat_percent === "number" ? brandRow.vat_percent : undefined,
   });
   if (payload.lineItems.length === 0) {
     return { status: 400, json: { error: SEND_EMPTY_QUOTE_ERROR } };
@@ -206,16 +220,6 @@ export async function sendQuoteForApproval(
   if (!phone.ok) {
     return { status: 400, json: { error: phone.error } };
   }
-
-  const brandResult = await queryFn(SELECT_CONTRACTOR_BRAND_SQL, [args.contractorId]);
-  if (brandResult.rows.length === 0) {
-    return { status: 404, json: { error: QUOTE_NOT_FOUND_ERROR } };
-  }
-  const brandRow = brandResult.rows[0] as {
-    display_name: string | null;
-    trade: string | null;
-  };
-  const brand = normalizeSnapshotBrand(brandRow.display_name, brandRow.trade);
 
   const saved = await insertQuoteSnapshotOnce(queryFn, {
     quoteId: args.quoteId,

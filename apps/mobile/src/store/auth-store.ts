@@ -4,6 +4,7 @@ import * as authApi from '../api/auth';
 import type { ContractorResponse } from '../api/auth';
 import { isUnauthorizedError } from '../api/client';
 import { accessTokenExpired, parseStoredContractor } from '../auth/stored-session';
+import { localeFromUnknown, type ContractorLocale } from '../money/currency';
 import { createSingleFlight } from '../sync/single-flight';
 
 const KEYS = {
@@ -32,6 +33,10 @@ export function resetAuthSessionForTests(): void {
 
 export type Contractor = ContractorResponse;
 
+function withLocale(contractor: Contractor): Contractor {
+  return { ...contractor, ...localeFromUnknown(contractor) };
+}
+
 interface AuthState {
   contractor: Contractor | null;
   accessToken: string | null;
@@ -56,6 +61,9 @@ interface AuthActions {
     trade?: string | null;
     hourlyRateCents?: number | null;
     markupPercent?: number | null;
+    currencyCode?: ContractorLocale['currencyCode'];
+    unitSystem?: ContractorLocale['unitSystem'];
+    vatPercent?: number;
   }): Promise<void>;
   setOnboardingComplete(profile: {
     trade: string;
@@ -119,7 +127,8 @@ async function restoreSessionOnce(
       ]);
     if (epoch !== authEpoch) return;
 
-    const contractor = parseStoredContractor(storedContractor) as Contractor | null;
+    const stored = parseStoredContractor(storedContractor) as Contractor | null;
+    const contractor = stored ? withLocale(stored) : null;
     const hadStoredSession = Boolean(
       storedRefreshToken || storedAccessToken || storedContractor,
     );
@@ -225,33 +234,35 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     const epoch = bumpAuthEpoch();
     const response = await authApi.login(params);
     if (epoch !== authEpoch) return;
-    await storeTokens(response.accessToken, response.refreshToken, response.contractor);
+    const contractor = withLocale(response.contractor);
+    await storeTokens(response.accessToken, response.refreshToken, contractor);
     if (epoch !== authEpoch) return;
     // Returning user who already onboarded has a trade set
-    const alreadyOnboarded = response.contractor.trade !== null;
+    const alreadyOnboarded = contractor.trade !== null;
     if (alreadyOnboarded) {
       await SecureStore.setItemAsync(KEYS.ONBOARDING_COMPLETE, 'true');
     }
     if (epoch !== authEpoch) return;
     set({
-      contractor: response.contractor,
+      contractor,
       accessToken: response.accessToken,
       refreshToken: response.refreshToken,
       isAuthenticated: true,
       isLoading: false,
       onboardingComplete: alreadyOnboarded,
     });
-    await pullLocalState(response.contractor.id);
+    await pullLocalState(contractor.id);
   },
 
   async register(params) {
     const epoch = bumpAuthEpoch();
     const response = await authApi.register(params);
     if (epoch !== authEpoch) return;
-    await storeTokens(response.accessToken, response.refreshToken, response.contractor);
+    const contractor = withLocale(response.contractor);
+    await storeTokens(response.accessToken, response.refreshToken, contractor);
     if (epoch !== authEpoch) return;
     set({
-      contractor: response.contractor,
+      contractor,
       accessToken: response.accessToken,
       refreshToken: response.refreshToken,
       isAuthenticated: true,
@@ -336,10 +347,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     trade?: string | null;
     hourlyRateCents?: number | null;
     markupPercent?: number | null;
+    currencyCode?: ContractorLocale['currencyCode'];
+    unitSystem?: ContractorLocale['unitSystem'];
+    vatPercent?: number;
   }): Promise<void> {
     const contractor = get().contractor;
     if (!contractor) return;
-    const updated: Contractor = {
+    const updated: Contractor = withLocale({
       ...contractor,
       trade: profile.trade !== undefined ? profile.trade : contractor.trade,
       hourlyRateCents:
@@ -350,7 +364,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         profile.markupPercent !== undefined
           ? profile.markupPercent
           : (contractor.markupPercent ?? null),
-    };
+      currencyCode: profile.currencyCode !== undefined ? profile.currencyCode : contractor.currencyCode,
+      unitSystem: profile.unitSystem !== undefined ? profile.unitSystem : contractor.unitSystem,
+      vatPercent: profile.vatPercent !== undefined ? profile.vatPercent : contractor.vatPercent,
+    });
     await SecureStore.setItemAsync(KEYS.CONTRACTOR, JSON.stringify(updated));
     set({ contractor: updated });
   },
@@ -363,7 +380,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     await SecureStore.setItemAsync(KEYS.ONBOARDING_COMPLETE, 'true');
     const contractor = get().contractor;
     if (contractor) {
-      const updated: Contractor = {
+      const updated: Contractor = withLocale({
         ...contractor,
         trade: profile.trade,
         hourlyRateCents:
@@ -374,7 +391,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           profile.markupPercent !== undefined
             ? profile.markupPercent
             : (contractor.markupPercent ?? null),
-      };
+      });
       await SecureStore.setItemAsync(KEYS.CONTRACTOR, JSON.stringify(updated));
       set({ onboardingComplete: true, contractor: updated });
     } else {

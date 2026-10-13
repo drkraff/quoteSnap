@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 12,
+  version: 13,
   tables: [
     tableSchema({
       name: 'quotes',
@@ -25,6 +25,13 @@ export const schema = appSchema({
         { name: 'private_note', type: 'string', isOptional: true },
         // Customer-facing scope / assumptions (design §8). Include on PDF/SMS.
         { name: 'client_sentence', type: 'string', isOptional: true },
+        // Customer name on the PDF. Optional. Synced like client_sentence.
+        { name: 'customer_name', type: 'string', isOptional: true },
+        // Customer-facing "Not included". Optional. Synced like client_sentence.
+        { name: 'exclusions', type: 'string', isOptional: true },
+        // Raw approval URL from POST /quotes/:id/send. Local only — the server
+        // stores a hash and will not reissue the token. Hydrate must not assign this.
+        { name: 'approval_url', type: 'string', isOptional: true },
         // Thin rooms/zones (design §6.1 / §8). JSON: [{id, name, privateNote?}].
         // Empty/null = single-memo / ungrouped. Line roomId lives in draft JSON.
         { name: 'rooms_json', type: 'string', isOptional: true },

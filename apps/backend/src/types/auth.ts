@@ -13,6 +13,9 @@ export interface ContractorPublic {
   trade: string | null;
   hourlyRateCents: number | null;
   markupPercent: number | null;
+  currencyCode: "ILS" | "USD";
+  unitSystem: "metric" | "imperial";
+  vatPercent: number;
 }
 
 export interface RegisterBody {

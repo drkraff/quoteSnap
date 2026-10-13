@@ -118,12 +118,26 @@ export function onboardingSeedEnqueueParams(
 
 export function onboardingProfileEnqueueParams(
   contractorId: string,
-  payload: { trade: Trade; hourlyRateCents: number; markupPercent: number | null },
+  payload: {
+    trade: Trade;
+    hourlyRateCents: number;
+    markupPercent: number | null;
+    currencyCode?: string;
+    unitSystem?: string;
+    vatPercent?: number;
+  },
 ): {
   entityType: 'onboarding';
   entityId: string;
   action: 'profile';
-  payload: { trade: Trade; hourlyRateCents: number; markupPercent: number | null };
+  payload: {
+    trade: Trade;
+    hourlyRateCents: number;
+    markupPercent: number | null;
+    currencyCode?: string;
+    unitSystem?: string;
+    vatPercent?: number;
+  };
 } {
   return {
     entityType: 'onboarding',
@@ -154,6 +168,9 @@ export async function syncQueuedOnboardingProfile(payload: {
   trade: Trade;
   hourlyRateCents: number;
   markupPercent: number | null;
+  currencyCode?: string;
+  unitSystem?: string;
+  vatPercent?: number;
 }): Promise<void> {
   await saveOnboardingProfile(payload);
 }

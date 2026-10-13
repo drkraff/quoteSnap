@@ -16,6 +16,7 @@ import { Quote } from '../db/models/quote';
 import { enqueue, type SyncEnqueueParams } from '../sync/sync-queue';
 import { Q } from '@nozbe/watermelondb';
 import { normalizeClientSentence } from './client-sentence';
+import { normalizeCustomerName, normalizeExclusions } from './customer-fields';
 import { normalizePrivateNote } from './private-notes';
 import { newRoomId, parseRoomsJson, sanitizeLineRooms, serializeRooms, type QuoteRoom } from './rooms';
 import { sanitizeOptionGroups } from './option-groups';
@@ -57,6 +58,8 @@ export type DuplicateQuoteSource = {
   isArchived?: boolean | null;
   privateNote?: string | null;
   clientSentence?: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   rooms?: QuoteRoom[] | null;
   roomsJson?: string | null;
   photos?: unknown;
@@ -84,6 +87,8 @@ export type DuplicateDraft = {
   aiFailureStage: null;
   privateNote: string | null;
   clientSentence: string | null;
+  customerName: string | null;
+  exclusions: string | null;
   rooms: QuoteRoom[];
   roomsJson: string;
   lineItems: LineItem[];
@@ -282,6 +287,8 @@ export function buildDuplicateDraft(
     aiFailureStage: null,
     privateNote: normalizePrivateNote(source.privateNote),
     clientSentence: normalizeClientSentence(source.clientSentence),
+    customerName: normalizeCustomerName(source.customerName),
+    exclusions: normalizeExclusions(source.exclusions),
     rooms,
     roomsJson,
     lineItems,
@@ -299,6 +306,8 @@ export type DuplicateLocalQuoteFields = {
   customerPhone: string | null;
   privateNote: string | null;
   clientSentence: string | null;
+  customerName: string | null;
+  exclusions: string | null;
   roomsJson: string | null;
   photosJson: string | null;
   serverId: string | null;
@@ -322,6 +331,8 @@ export function assignDuplicateQuoteRecord(
   record.customerPhone = draft.customerPhone;
   record.privateNote = draft.privateNote;
   record.clientSentence = draft.clientSentence;
+  record.customerName = draft.customerName;
+  record.exclusions = draft.exclusions;
   record.roomsJson = draft.roomsJson;
   record.photosJson = '[]';
   record.serverId = null;
@@ -349,6 +360,8 @@ export function duplicateQuoteEnqueuePlan(input: {
     totalCents: input.draft.totalCents,
     privateNote: input.draft.privateNote,
     clientSentence: input.draft.clientSentence,
+    customerName: input.draft.customerName,
+    exclusions: input.draft.exclusions,
   };
   if (input.draft.customerPhone) {
     payload.customerPhone = input.draft.customerPhone;
@@ -408,6 +421,8 @@ function quoteToSource(quote: Quote, lineItemsJson: string | null): DuplicateSou
     isArchived: quote.isArchived,
     privateNote: quote.privateNote,
     clientSentence: quote.clientSentence,
+    customerName: quote.customerName,
+    exclusions: quote.exclusions,
     roomsJson: quote.roomsJson,
     photosJson: quote.photosJson,
     followedUpAt: quote.followedUpAt,

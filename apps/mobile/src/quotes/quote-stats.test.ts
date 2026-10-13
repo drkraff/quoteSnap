@@ -334,7 +334,7 @@ describe('null totals', () => {
     const view = quoteStatsView(result);
     expect(view.empty).toBe(false);
     expect(view.rows.find((row) => row.label === QUOTE_STATS_LABELS.valueSent)?.value).toBe(
-      '$0.00',
+      '₪0.00',
     );
   });
 });
@@ -389,8 +389,8 @@ describe('approval rate gating', () => {
     expect(waiting.rows.map((row) => row.label)).not.toContain(QUOTE_STATS_LABELS.approvalRate);
     for (const row of waiting.rows) {
       const isCount = /^\d+$/.test(row.value);
-      const isDollars = row.value.startsWith('$');
-      expect(isCount || isDollars).toBe(true);
+      const isMoney = row.value.startsWith('₪');
+      expect(isCount || isMoney).toBe(true);
     }
 
     const answered = quoteStatsView(
@@ -406,7 +406,7 @@ describe('approval rate gating', () => {
       formatDollarAmount(69650),
     );
     expect(answered.rows.find((row) => row.label === QUOTE_STATS_LABELS.valueSent)?.value).toBe(
-      '$696.50',
+      '₪696.50',
     );
   });
 });

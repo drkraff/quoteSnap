@@ -156,7 +156,7 @@ Rules:
 - When it matches a catalog item, set catalogItemId to that exact UUID.
 - When it does not match, omit catalogItemId. Still return name, quantity, and unit from speech.
 - quantity is a number > 0. "14 linear feet" → quantity 14, unit foot. "half an hour" of labor → quantity 0.5, unit hour. Do not round a half hour up to 1.
-- unit must be one of: each, hour, foot, sqft, job.
+- unit must be one of: each, hour, meter, sqm, foot, sqft, job. Prefer meter or sqm unless they said feet or square feet.
 - A spoken lump such as "plus 150 for cable and materials" is its own line: name from the words after the amount, quantity 1, unit job, spokenUnitPriceCents 15000. Do not drop it and do not fold it into another line.
 - spokenUnitPriceCents is integer cents ONLY if the contractor stated a sell/charge price (example: "eight fifty a foot" → 850, "I'll charge 250 each" → 25000, "80 shekels each" → 8000). A spoken price overrides any saved rate. If they did not say a sell price, omit it or null. Do not put a supplier cost here.
 - spokenMaterialCostCents is integer cents ONLY if the contractor stated (or typed in notes) a supplier/material cost, not the sell price (example: "pipe cost me forty bucks" → 4000, "fittings were 85 at the supplier" → 8500). Omit or null if they did not name a cost. NEVER guess. NEVER copy catalog. NEVER treat a sell/charge price as cost.
@@ -202,8 +202,8 @@ Rules:
                       },
                       unit: {
                         type: 'string',
-                        enum: ['each', 'hour', 'foot', 'sqft', 'job'],
-                        description: 'Spoken unit. Linear feet → foot. Square feet → sqft.',
+                        enum: ['each', 'hour', 'meter', 'sqm', 'foot', 'sqft', 'job'],
+                        description: 'Spoken unit. Meters → meter. Square meters → sqm. Feet only if they said feet.',
                       },
                       spokenUnitPriceCents: {
                         type: ['integer', 'null'],

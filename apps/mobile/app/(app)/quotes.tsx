@@ -17,6 +17,7 @@ import { Quote } from '../../src/db/models/quote';
 import { Draft } from '../../src/db/models/draft';
 import { SyncQueueItem } from '../../src/db/models/sync-queue-item';
 import { enqueue } from '../../src/sync/sync-queue';
+import { useContractorLocale } from '../../src/money/use-contractor-locale';
 import { useAuthStore } from '../../src/store/auth-store';
 import { QuoteRow } from '../../src/components/quotes/quote-row';
 import { QuotesEmptyState } from '../../src/components/quotes/empty-state';
@@ -120,6 +121,7 @@ export default function QuotesScreen(): JSX.Element {
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const online = useIsOnline();
+  const locale = useContractorLocale();
   const showArchived = listMode === 'archived';
   const followUpMode = followUpOnly && !showArchived;
   const now = new Date();
@@ -557,12 +559,12 @@ export default function QuotesScreen(): JSX.Element {
         renderItem={({ item }) => {
           if (followUpMode) {
             const view = followUpRowView({
-              // No customer-name column on quotes. Do not invent one.
-              customerName: null,
+              customerName: item.customerName,
               customerPhone: item.customerPhone,
               totalCents: item.totalCents,
               sentAt: item.sentAt,
               now,
+              currency: locale.currencyCode,
             });
             if (!view) return null;
             return (

@@ -3,7 +3,7 @@ import { migrations } from '../db/migrations';
 
 describe('server revision schema', () => {
   it('stores the last observed server updatedAt on quotes at schema version 12', () => {
-    expect(schema.version).toBe(12);
+    expect(schema.version).toBe(13);
     const columns = schema.tables['quotes']?.columns;
     expect(columns?.['server_revision']).toMatchObject({
       name: 'server_revision',
@@ -15,7 +15,7 @@ describe('server revision schema', () => {
   });
 
   it('migrates an existing v10 database by adding the column', () => {
-    expect(migrations.maxVersion).toBe(12);
+    expect(migrations.maxVersion).toBe(13);
     const step = migrations.sortedMigrations.find((migration) => migration.toVersion === 11);
     expect(step?.steps).toHaveLength(1);
     expect(step?.steps[0]).toMatchObject({

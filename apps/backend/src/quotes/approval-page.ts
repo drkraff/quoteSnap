@@ -4,6 +4,9 @@
  * A second tap, or the opposite tap, does not flip approved/declined.
  */
 
+import { formatMoneyCents, type CurrencyCode } from "../money/currency.js";
+import { quoteVatTotals } from "../money/vat.js";
+import { capitalizeItemName } from "./customer-fields.js";
 import type { CustomerLineItemPayload, CustomerQuotePayload } from "./customer-payload.js";
 import { hashApprovalToken, isApprovalTokenShape } from "./approval-token.js";
 import type { SnapshotQueryFn } from "./quote-snapshot.js";
@@ -58,7 +61,12 @@ export type ApprovalPageModel = {
   contractorName: string | null;
   trade: string | null;
   clientSentence: string | null;
+  exclusions: string | null;
+  customerName: string | null;
   lines: ApprovalPageLine[];
+  subtotalLabel: string;
+  vatLabel: string | null;
+  vatPercent: number | null;
   totalLabel: string;
   token: string;
 };
@@ -102,15 +110,18 @@ export function escapeHtml(value: string): string {
 }
 
 /** Blank / unknown prices stay blank — never $0.00 on a line. */
-export function formatApprovalLineMoney(cents: number | null | undefined): string {
+export function formatApprovalLineMoney(
+  cents: number | null | undefined,
+  currency: CurrencyCode = "USD",
+): string {
   if (cents == null || cents === 0) {
     return "";
   }
-  return formatApprovalDollars(cents);
+  return formatMoneyCents(cents, currency);
 }
 
 export function formatApprovalDollars(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatMoneyCents(cents, "USD");
 }
 
 export function formatApprovalTrade(trade: string | null | undefined): string | null {
@@ -198,12 +209,27 @@ export function parseSnapshotPayload(value: unknown): CustomerQuotePayload | nul
         : null,
     });
   }
+  const vatPercent = typeof obj.vatPercent === "number" && Number.isInteger(obj.vatPercent)
+    && obj.vatPercent >= 0 && obj.vatPercent <= 100
+    ? obj.vatPercent
+    : null;
+  const currencyCode = obj.currencyCode === "ILS" || obj.currencyCode === "USD"
+    ? obj.currencyCode
+    : "USD";
   return {
     customerPhone: typeof obj.customerPhone === "string" ? obj.customerPhone : null,
+    customerName: typeof obj.customerName === "string" && obj.customerName.trim() !== ""
+      ? obj.customerName.trim()
+      : null,
     totalCents: obj.totalCents,
     clientSentence: typeof obj.clientSentence === "string" && obj.clientSentence.trim() !== ""
       ? obj.clientSentence
       : null,
+    exclusions: typeof obj.exclusions === "string" && obj.exclusions.trim() !== ""
+      ? obj.exclusions.trim()
+      : null,
+    currencyCode,
+    vatPercent,
     lineItems,
   };
 }
@@ -214,22 +240,32 @@ export function approvalPageModel(args: {
   contractorTrade: string | null;
   token: string;
 }): ApprovalPageModel {
+  const currency = args.payload.currencyCode === "ILS" ? "ILS" : "USD";
+  const totals = args.payload.vatPercent == null
+    ? null
+    : quoteVatTotals(args.payload.totalCents, args.payload.vatPercent);
   return {
     contractorName: formatApprovalDisplayName(args.contractorDisplayName),
     trade: formatApprovalTrade(args.contractorTrade),
     clientSentence: args.payload.clientSentence,
+    exclusions: args.payload.exclusions,
+    customerName: args.payload.customerName,
     lines: args.payload.lineItems.map((item) => ({
-      name: item.name,
+      name: capitalizeItemName(item.name),
       quantityLabel: quantityLabel(item.quantity, item.unit),
-      unitPriceLabel: formatApprovalLineMoney(item.unitPriceCents),
+      unitPriceLabel: formatApprovalLineMoney(item.unitPriceCents, currency),
       amountLabel: formatApprovalLineMoney(
         item.unitPriceCents == null || item.unitPriceCents === 0
           ? null
           : item.unitPriceCents * item.quantity,
+        currency,
       ),
       roomName: item.roomName,
     })),
-    totalLabel: formatApprovalDollars(args.payload.totalCents),
+    subtotalLabel: formatMoneyCents(args.payload.totalCents, currency),
+    vatPercent: totals ? totals.vatPercent : null,
+    vatLabel: totals ? formatMoneyCents(totals.vatCents, currency) : null,
+    totalLabel: formatMoneyCents(totals ? totals.totalCents : args.payload.totalCents, currency),
     token: args.token,
   };
 }
@@ -382,7 +418,13 @@ function renderQuoteBody(page: ApprovalPageModel, decisionHtml: string, actionsH
   const title = page.contractorName ?? "Quote";
   const trade = page.trade ? `<p class="trade">${escapeHtml(page.trade)}</p>` : "";
   const sentence = page.clientSentence
-    ? `<section class="assumptions"><h2>Assumptions</h2><p class="sentence">${escapeHtml(page.clientSentence)}</p></section>`
+    ? `<section class="assumptions"><h2>Note</h2><p class="sentence">${escapeHtml(page.clientSentence)}</p></section>`
+    : "";
+  const excluded = page.exclusions
+    ? `<section class="assumptions"><h2>Not included</h2><p class="sentence">${escapeHtml(page.exclusions)}</p></section>`
+    : "";
+  const vat = page.vatLabel != null && page.vatPercent != null
+    ? `<p class="total"><span>VAT ${page.vatPercent}%</span><span>${escapeHtml(page.vatLabel)}</span></p>`
     : "";
   const rows = groupApprovalLines(page.lines).map((section) => {
     const heading = section.heading
@@ -400,7 +442,10 @@ ${sentence}
 <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead>
 <tbody>${rows}</tbody>
 </table>
+${page.vatLabel != null ? `<p class="total"><span>Subtotal</span><span>${escapeHtml(page.subtotalLabel)}</span></p>` : ""}
+${vat}
 <p class="total"><span>Total</span><span>${escapeHtml(page.totalLabel)}</span></p>
+${excluded}
 ${actionsHtml}`,
   );
 }

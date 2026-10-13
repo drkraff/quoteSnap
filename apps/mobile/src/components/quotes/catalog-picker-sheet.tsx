@@ -13,7 +13,9 @@ import {
   Platform,
 } from 'react-native';
 import { dollarsToCents } from '../../onboarding/profile';
-import { VALID_UNITS } from '../../catalog/units';
+import { UNIT_LABELS, unitChoices } from '../../catalog/units';
+import { formatMoneyCents } from '../../money/currency';
+import { useContractorLocale } from '../../money/use-contractor-locale';
 import {
   ADD_LINE_LABEL,
   UNIT_PRICE_LABEL,
@@ -50,12 +52,14 @@ export function AddLineSheet({
   onSelectSuggestion,
   onDismiss,
 }: AddLineSheetProps): JSX.Element {
+  const locale = useContractorLocale();
   const screenHeight = Dimensions.get('window').height;
   const [name, setName] = useState('');
   const [qtyText, setQtyText] = useState('1');
   const [unit, setUnit] = useState<string | null>('each');
   const [priceText, setPriceText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const choices = unitChoices(locale.unitSystem, unit);
 
   useEffect(() => {
     if (visible) {
@@ -124,7 +128,7 @@ export function AddLineSheet({
             />
             <Text style={styles.fieldLabel}>Unit</Text>
             <View style={styles.units}>
-              {VALID_UNITS.map((choice) => {
+              {choices.map((choice) => {
                 const selected = unit === choice;
                 return (
                   <Pressable
@@ -133,10 +137,10 @@ export function AddLineSheet({
                     onPress={() => setUnit(choice)}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
-                    accessibilityLabel={choice}
+                    accessibilityLabel={UNIT_LABELS[choice]}
                   >
                     <Text style={[styles.unitChipText, selected && styles.unitChipTextSelected]}>
-                      {choice}
+                      {UNIT_LABELS[choice]}
                     </Text>
                   </Pressable>
                 );
@@ -169,7 +173,7 @@ export function AddLineSheet({
                   scrollEnabled={false}
                   keyExtractor={(item) => item.id}
                   renderItem={({ item }) => {
-                    const priceDisplay = `$${(item.unitPriceCents / 100).toFixed(2)}`;
+                    const priceDisplay = formatMoneyCents(item.unitPriceCents, locale.currencyCode);
                     return (
                       <Pressable
                         style={({ pressed }) => [styles.itemRow, pressed && styles.itemRowPressed]}

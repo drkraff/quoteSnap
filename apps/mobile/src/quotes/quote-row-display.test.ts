@@ -52,10 +52,10 @@ describe('quoteRowDisplay', () => {
     expect(view.isAiProcessing).toBe(false);
     expect(view.processingCaption).toBeNull();
     expect(view.statusLabel).toBe('Draft');
-    expect(view.totalDisplay).toBe('$695.00');
+    expect(view.totalDisplay).toBe('₪695.00');
     expect(view.phone).toBe('No phone');
     expect(view.accessibilityLabel).toBe(
-      'Quote status Draft, total $695.00. Double tap to open.',
+      'Quote status Draft, total ₪695.00. Double tap to open.',
     );
   });
 

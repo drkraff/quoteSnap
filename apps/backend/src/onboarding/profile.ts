@@ -1,3 +1,5 @@
+import type { CurrencyCode, UnitSystem } from "../money/currency.js";
+import { parseCurrencyCode, parseUnitSystem, parseVatPercent } from "../money/currency.js";
 import { parseTrade, type SeedQueryFn } from "./seed.js";
 import { contractorPublicFromRow, type ContractorRow } from "../auth/contractor-public.js";
 import type { ContractorPublic } from "../types/auth.js";
@@ -7,14 +9,21 @@ export const HOURLY_RATE_REQUIRED_ERROR =
   "hourlyRateCents must be a positive integer (cents)";
 
 export const MARKUP_PERCENT_ERROR = "markupPercent must be an integer from 0 to 100";
+export const LOCALE_ERROR = "currencyCode, unitSystem, or vatPercent is not valid";
 
 export const SELECT_CONTRACTOR_FOR_PROFILE_SQL =
   "SELECT id FROM contractors WHERE id = $1 FOR UPDATE";
 
 export const UPDATE_CONTRACTOR_PROFILE_SQL = `UPDATE contractors
-       SET trade = $1, hourly_rate_cents = $2, markup_percent = $3
+       SET trade = $1,
+           hourly_rate_cents = $2,
+           markup_percent = $3,
+           currency_code = COALESCE($5, currency_code),
+           unit_system = COALESCE($6, unit_system),
+           vat_percent = COALESCE($7, vat_percent)
        WHERE id = $4
-       RETURNING id, email, phone, display_name, trade, hourly_rate_cents, markup_percent`;
+       RETURNING id, email, phone, display_name, trade, hourly_rate_cents, markup_percent,
+                 currency_code, unit_system, vat_percent`;
 
 export type ParsedOnboardingProfile =
   | { ok: false; error: string }
@@ -23,6 +32,9 @@ export type ParsedOnboardingProfile =
       trade: Trade;
       hourlyRateCents: number;
       markupPercent: number | null;
+      currencyCode?: CurrencyCode;
+      unitSystem?: UnitSystem;
+      vatPercent?: number;
     };
 
 export type ProfileOutcome =
@@ -67,12 +79,39 @@ export function parseOnboardingProfileBody(body: unknown): ParsedOnboardingProfi
   if (!markup.ok) {
     return { ok: false, error: MARKUP_PERCENT_ERROR };
   }
+  const locale = parseOptionalLocale(record as Record<string, unknown>);
+  if (!locale.ok) {
+    return { ok: false, error: LOCALE_ERROR };
+  }
   return {
     ok: true,
     trade: trade.trade,
     hourlyRateCents,
     markupPercent: markup.value,
+    ...locale.value,
   };
+}
+
+function parseOptionalLocale(
+  record: Record<string, unknown>,
+): { ok: true; value: { currencyCode?: CurrencyCode; unitSystem?: UnitSystem; vatPercent?: number } } | { ok: false } {
+  const value: { currencyCode?: CurrencyCode; unitSystem?: UnitSystem; vatPercent?: number } = {};
+  if (record.currencyCode !== undefined && record.currencyCode !== null) {
+    const currency = parseCurrencyCode(record.currencyCode);
+    if (!currency) return { ok: false };
+    value.currencyCode = currency;
+  }
+  if (record.unitSystem !== undefined && record.unitSystem !== null) {
+    const system = parseUnitSystem(record.unitSystem);
+    if (!system) return { ok: false };
+    value.unitSystem = system;
+  }
+  if (record.vatPercent !== undefined && record.vatPercent !== null) {
+    const vat = parseVatPercent(record.vatPercent);
+    if (vat == null) return { ok: false };
+    value.vatPercent = vat;
+  }
+  return { ok: true, value };
 }
 
 /**
@@ -87,6 +126,9 @@ export async function applyOnboardingProfile(
     trade: Trade;
     hourlyRateCents: number;
     markupPercent: number | null;
+    currencyCode?: CurrencyCode;
+    unitSystem?: UnitSystem;
+    vatPercent?: number;
   },
 ): Promise<ProfileOutcome> {
   const locked = await queryFn(SELECT_CONTRACTOR_FOR_PROFILE_SQL, [args.contractorId]);
@@ -99,6 +141,9 @@ export async function applyOnboardingProfile(
     args.hourlyRateCents,
     args.markupPercent,
     args.contractorId,
+    args.currencyCode ?? null,
+    args.unitSystem ?? null,
+    args.vatPercent ?? null,
   ]);
   if (updated.rows.length === 0) {
     return { status: 404, json: { error: "Contractor not found" } };
