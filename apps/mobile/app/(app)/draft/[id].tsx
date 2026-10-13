@@ -182,6 +182,8 @@ import {
 } from '../../../src/quotes/photo-import';
 import { typedPriceSource } from '../../../src/utils/price-source';
 import { colors, spacing, typography } from '../../../src/theme/tokens';
+import { BuildingQuoteState } from '../../../src/components/quotes/building-quote-state';
+import { showBuildingQuote } from '../../../src/quotes/building-quote';
 import { RESUME_KIND_DRAFT } from '../../../src/quotes/resume-checkpoint';
 import {
   clearResumeCheckpoints,
@@ -409,6 +411,41 @@ function DraftScreen(): JSX.Element {
       cancelled = true;
     };
   }, [id, phoneSync]);
+
+  // The Quotes list poller writes the finished lines. This screen is already
+  // open, so follow the local row instead of waiting on another navigation.
+  useEffect(() => {
+    if (!showBuildingQuote({ status: quoteStatus, lineCount: lineItems.length })) return;
+    const quoteSub = database.get<Quote>('quotes').findAndObserve(id).subscribe({
+      next(record) {
+        setQuote(record);
+        setQuoteStatus(record.status);
+        setQuoteAiFailureStage(record.aiFailureStage ?? null);
+      },
+      error() {
+        // The load effect already reported a missing quote.
+      },
+    });
+    const draftSub = database
+      .get<Draft>('drafts')
+      .query(Q.where('quote_id', id))
+      .observeWithColumns(['line_items_json'])
+      .subscribe({
+        next(drafts) {
+          const loaded = drafts[0];
+          if (!loaded) return;
+          setDraft(loaded);
+          setLineItems(parseLineItems(loaded.lineItemsJson));
+        },
+        error() {
+          // Keep the skeleton until the next local write.
+        },
+      });
+    return () => {
+      quoteSub.unsubscribe();
+      draftSub.unsubscribe();
+    };
+  }, [id, quoteStatus, lineItems.length]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1292,6 +1329,10 @@ function DraftScreen(): JSX.Element {
         <Text style={styles.errorText}>{loadError || QUOTE_NOT_FOUND}</Text>
       </View>
     );
+  }
+
+  if (showBuildingQuote({ status: quoteStatus, lineCount: lineItems.length })) {
+    return <BuildingQuoteState />;
   }
 
   const sendEnabled = canSend(lineItems.length, phone) && !needsReview;

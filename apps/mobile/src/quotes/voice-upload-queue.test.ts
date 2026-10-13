@@ -132,7 +132,7 @@ describe('dead-letter audio quote recovery (FAIL-03 after SYNC-03)', () => {
       online: true,
       voiceJobId: null,
     });
-    expect(quotePressTarget('ai_processing')).toBe('none');
+    expect(quotePressTarget('ai_processing')).toBe('draft');
     expect(queued.processingCaption).toBe('Saved on phone - will sync when online');
 
     const plan = failQuoteAfterAudioDeadLetterPlan({

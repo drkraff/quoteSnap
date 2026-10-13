@@ -54,7 +54,7 @@ export class RootErrorBoundary extends Component<Props, State> {
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
+  fill: { flex: 1, backgroundColor: colors.dominant },
   screen: {
     flex: 1,
     justifyContent: 'center',

@@ -29,15 +29,13 @@ export function getQuoteStatusDisplay(status: string): QuoteStatusDisplay {
 }
 
 /**
- * List-row tap: processing is inert; drafts and failed voice quotes open
- * the editor (FAIL-04 retry + FAIL-05 manual fallback). failed_send stays
- * read-only until Phase 6.
+ * List-row tap: a voice take still processing opens the draft so the
+ * contractor sees "Building your quote..." instead of an inert row.
+ * Drafts and failed voice quotes open the editor (FAIL-04 retry + FAIL-05
+ * manual fallback). failed_send stays read-only until Phase 6.
  */
 export function quotePressTarget(status: string): QuotePressTarget {
-  if (status === 'ai_processing') {
-    return 'none';
-  }
-  if (status === 'draft_local' || status === 'ai_failed') {
+  if (status === 'ai_processing' || status === 'draft_local' || status === 'ai_failed') {
     return 'draft';
   }
   return 'detail';

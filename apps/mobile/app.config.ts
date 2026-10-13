@@ -23,6 +23,13 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'dark',
+  // Root view behind React. Same as the splash so a late first frame is not white.
+  backgroundColor: '#141414',
+  androidStatusBar: {
+    backgroundColor: '#141414',
+    barStyle: 'light-content',
+    translucent: false,
+  },
   // Explicitly off for the first device build — WatermelonDB 0.27 JSI is more
   // stable on the old architecture. Once confirmed working, flip to true and rebuild.
   newArchEnabled: false,

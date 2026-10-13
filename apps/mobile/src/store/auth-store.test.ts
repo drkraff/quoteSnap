@@ -393,6 +393,44 @@ describe('auth-store restore expired access token', () => {
     expect(SecureStore.deleteItemAsync).toHaveBeenCalled();
   });
 
+  it('paints the cached session before an expired access token finishes refreshing', async () => {
+    const expired = jwtWithExp(1_000);
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return expired;
+        case KEYS.REFRESH_TOKEN:
+          return 'valid-refresh';
+        case KEYS.CONTRACTOR:
+          return JSON.stringify(contractor);
+        case KEYS.ONBOARDING_COMPLETE:
+          return 'true';
+        default:
+          return null;
+      }
+    });
+    let releaseRefresh: (value: { accessToken: string; refreshToken: string }) => void = () => {};
+    const refreshGate = new Promise<{ accessToken: string; refreshToken: string }>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    jest.mocked(authApi.refresh).mockImplementation(() => refreshGate);
+
+    const pending = useAuthStore.getState().restoreSession();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(useAuthStore.getState().isLoading).toBe(false);
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(useAuthStore.getState().contractor?.id).toBe(contractor.id);
+    expect(hydrateFromServer).not.toHaveBeenCalled();
+
+    releaseRefresh({ accessToken: 'new-access', refreshToken: 'new-refresh' });
+    await pending;
+
+    expect(authApi.refresh).toHaveBeenCalledWith('valid-refresh');
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
+    expect(useAuthStore.getState().isLoading).toBe(false);
+  });
+
   it('keeps the local session when an expired access token cannot refresh offline', async () => {
     const expired = jwtWithExp(1_000);
     jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {

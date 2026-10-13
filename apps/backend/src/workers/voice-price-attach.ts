@@ -183,23 +183,29 @@ export async function attachVoiceLinePrices(
   hourlyRateCents: number | null = null,
   markupPercent: number | null = null,
 ): Promise<ValidatedLineItem[]> {
-  const priced: ValidatedLineItem[] = [];
-  for (const line of lines) {
-    let rateCardCents: number | null = null;
-    if (voiceLineNeedsRateCard(line) && line.unit) {
-      rateCardCents = (await lookupRateCard({
-        name: line.name,
-        unit: line.unit,
-        trade,
-      })) ?? null;
-    }
+  // Exact lookups are independent. Line order stays the input order even
+  // when a later line's query returns first. The trade-then-blank fallback
+  // inside one lookup stays sequential.
+  const rateCardCents = await Promise.all(
+    lines.map(async (line) => {
+      if (!voiceLineNeedsRateCard(line) || !line.unit) return null;
+      return (
+        (await lookupRateCard({
+          name: line.name,
+          unit: line.unit,
+          trade,
+        })) ?? null
+      );
+    }),
+  );
+  return lines.map((line, index) => {
     const attached = attachOneVoicePrice(
       line,
-      rateCardCents,
+      rateCardCents[index] ?? null,
       hourlyRateCents,
       markupPercent,
     );
-    priced.push({
+    return {
       catalogItemId: line.catalogItemId,
       name: line.name,
       quantity: line.quantity,
@@ -208,9 +214,8 @@ export async function attachVoiceLinePrices(
       priceSource: attached.priceSource,
       confidence: line.confidence,
       roomName: line.roomName,
-    });
-  }
-  return priced;
+    };
+  });
 }
 
 export function snapshotUnitPriceCents(unitPriceCents: number | null): number {

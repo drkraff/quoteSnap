@@ -39,6 +39,7 @@ import {
   VOICE_UPLOAD_RETRY_LABEL,
   shouldClearVoiceCheckpointOnLeave,
   shouldPersistRecordingOnBackground,
+  voiceAfterStopHref,
   voiceEnqueueFailureUx,
   voiceStopFailureUx,
 } from '../../src/quotes/voice-recording-session';
@@ -287,7 +288,8 @@ export default function VoiceRecordScreen(): JSX.Element {
         queued = false;
       }
 
-      if (voiceEnqueueFailureUx(queued) === 'retry_on_screen') {
+      const href = voiceAfterStopHref({ queued, quoteId: newQuoteId });
+      if (href == null || voiceEnqueueFailureUx(queued) === 'retry_on_screen') {
         rememberPending({ quoteId: newQuoteId, filePath: dest });
         setRecordingState('stopped');
         return;
@@ -301,7 +303,8 @@ export default function VoiceRecordScreen(): JSX.Element {
 
       rememberPending(null);
       setRecordingState('stopped');
-      router.back();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.replace(href as any);
     } catch {
       let granted = false;
       try {
@@ -339,7 +342,13 @@ export default function VoiceRecordScreen(): JSX.Element {
         await clearResumeCheckpoints(contractorId, RESUME_KIND_VOICE).catch(() => {});
       }
       rememberPending(null);
-      router.back();
+      const href = voiceAfterStopHref({ queued: true, quoteId: pending.quoteId });
+      if (href) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        router.replace(href as any);
+      } else {
+        router.back();
+      }
     } catch {
       // Stay on this screen so Try again is still there.
     }

@@ -26,6 +26,7 @@ export default function AppLayout(): JSX.Element {
         },
         tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.mutedText,
+        sceneStyle: { backgroundColor: colors.dominant },
         tabBarStyle: {
           backgroundColor: colors.dominant,
           borderTopWidth: 1,

@@ -116,17 +116,18 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
     // Audio stays in R2 until GPT + DB write succeed so pg-boss retries can
     // re-fetch it. Deleted after commit (see below).
 
-    // c) Fetch contractor's active catalog (IDs + names + units only — no prices)
-    const catalogResult = await query(
-      `SELECT id, name, unit FROM catalog_items WHERE contractor_id = $1 AND is_archived = false`,
-      [contractorId]
-    );
+    // c) Catalog names and the contractor's rate are independent reads.
+    const [catalogResult, tradeResult] = await Promise.all([
+      query(
+        `SELECT id, name, unit FROM catalog_items WHERE contractor_id = $1 AND is_archived = false`,
+        [contractorId]
+      ),
+      query(
+        `SELECT trade, hourly_rate_cents, markup_percent FROM contractors WHERE id = $1`,
+        [contractorId]
+      ),
+    ]);
     const catalogItems = catalogResult.rows as Array<{ id: string; name: string; unit: string }>;
-
-    const tradeResult = await query(
-      `SELECT trade, hourly_rate_cents, markup_percent FROM contractors WHERE id = $1`,
-      [contractorId]
-    );
     const contractorRow = tradeResult.rows[0] as
       | {
           trade?: string | null;
