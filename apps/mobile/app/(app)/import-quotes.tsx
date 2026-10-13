@@ -1,3 +1,4 @@
+import { colors } from '../../src/theme/tokens';
 import { SafeAreaView, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ImportOldQuotesForm } from '../../src/components/rate-card/import-old-quotes-form';
@@ -29,7 +30,7 @@ export default function ImportQuotesScreen(): JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.dominant,
   },
   scroll: {
     padding: 24,

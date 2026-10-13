@@ -8,7 +8,7 @@ import {
 export const QUOTES_EMPTY_HEADING = 'No quotes yet';
 
 export const QUOTES_EMPTY_BODY =
-  'Record a voice quote or create a manual quote to get started';
+  'Tap Record a quote to start. Recent quotes show up here.';
 
 /** Calm empty copy for Quotes / Archived. Does not invent a quote, price, or phone. */
 export function quotesEmptyCopy(mode: QuotesListMode): { heading: string; body: string } {

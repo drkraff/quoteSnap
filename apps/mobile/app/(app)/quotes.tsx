@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
+  View,
   Text,
   FlatList,
   Pressable,
@@ -25,11 +26,10 @@ import {
   FollowUpRow,
 } from '../../src/components/quotes/follow-up-list';
 import { QuotesListModeToggle } from '../../src/components/quotes/list-mode-toggle';
-import { DeadLetterBanner } from '../../src/components/sync/dead-letter-banner';
+import { SyncStatusLine } from '../../src/components/sync/sync-status-line';
 import { DraftReadyToast } from '../../src/components/voice/draft-ready-toast';
-import { useDeadLetterItems } from '../../src/sync/use-dead-letter-items';
 import { useIsOnline } from '../../src/sync/use-is-online';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { colors, radius, spacing, typography } from '../../src/theme/tokens';
 import { getVoiceStatus, getDraftLineItems } from '../../src/api/voice';
 import { fetchQuote } from '../../src/api/quotes';
 import { rememberServerRevision } from '../../src/sync/server-revision';
@@ -119,7 +119,6 @@ export default function QuotesScreen(): JSX.Element {
   const duplicateGuard = useRef(createDuplicateTapGuard()).current;
   const [readyDraftId, setReadyDraftId] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const deadLetterItems = useDeadLetterItems();
   const online = useIsOnline();
   const showArchived = listMode === 'archived';
   const followUpMode = followUpOnly && !showArchived;
@@ -598,24 +597,25 @@ export default function QuotesScreen(): JSX.Element {
         }}
         ListHeaderComponent={
           <>
-            <DeadLetterBanner
-              count={deadLetterItems.length}
-              onPress={() => {
+            <SyncStatusLine
+              onRetry={() => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 router.push('/sync-issues' as any);
               }}
             />
-            <Pressable
-              onPress={() => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                router.push('/stats' as any);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Stats"
-              style={styles.statsLink}
-            >
-              <Text style={styles.statsLinkText}>Stats</Text>
-            </Pressable>
+            <View style={styles.tools}>
+              <Pressable
+                onPress={() => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  router.push('/stats' as any);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Stats"
+                style={styles.statsLink}
+              >
+                <Text style={styles.statsLinkText}>Stats</Text>
+              </Pressable>
+            </View>
             <QuotesListModeToggle
               mode={listMode}
               onChange={(mode) => {
@@ -630,6 +630,9 @@ export default function QuotesScreen(): JSX.Element {
                 onPress={() => setFollowUpOnly((selected) => !selected)}
               />
             ) : null}
+            {!showArchived && !followUpMode ? (
+              <Text style={styles.recentLabel}>Recent</Text>
+            ) : null}
           </>
         }
         ListEmptyComponent={
@@ -639,53 +642,41 @@ export default function QuotesScreen(): JSX.Element {
           visibleQuotes.length === 0
             ? styles.emptyContent
             : {
-                paddingBottom: showArchived || followUpMode
-                  ? insets.bottom + TAB_BAR_HEIGHT + 16
-                  : insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm + 56 + 16,
+                paddingBottom: insets.bottom + TAB_BAR_HEIGHT + (showArchived || followUpMode ? spacing.lg : 88),
               }
         }
       />
+
+      {!showArchived && !followUpMode ? (
+        <View style={[styles.dock, { bottom: insets.bottom + TAB_BAR_HEIGHT + spacing.sm }]}>
+          <Pressable
+            style={[styles.pill, isCreating && styles.pillBusy]}
+            onPress={() => { void handleManualQuotePress(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Type a quote"
+            disabled={isCreating}
+          >
+            <Text style={styles.pillText}>Type a quote</Text>
+          </Pressable>
+          <Pressable
+            style={styles.mic}
+            onPress={() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              router.push('/voice-record' as any);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Record a quote"
+          >
+            <Ionicons name="mic" size={22} color={colors.text} />
+          </Pressable>
+        </View>
+      ) : null}
 
       <DraftReadyToast
         visible={readyDraftId !== null}
         draftId={readyDraftId}
         onDismiss={() => setReadyDraftId(null)}
       />
-
-      {!showArchived && !followUpMode && (
-        <>
-          {/* Manual Quote FAB — above voice FAB */}
-          <Pressable
-            style={[
-              styles.manualFab,
-              { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 + 56 + spacing.sm },
-              isCreating && styles.fabDisabled,
-            ]}
-            onPress={() => { void handleManualQuotePress(); }}
-            accessibilityLabel="Create manual quote"
-            accessibilityRole="button"
-            disabled={isCreating}
-          >
-            <Ionicons name="create-outline" size={24} color={colors.mutedText} />
-            <Text style={styles.manualFabLabel}>Manual Quote</Text>
-          </Pressable>
-
-          {/* Voice Quote FAB — bottom, primary */}
-          <Pressable
-            style={[
-              styles.voiceFab,
-              { bottom: insets.bottom + TAB_BAR_HEIGHT + 16 },
-            ]}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onPress={() => { router.push('/voice-record' as any); }}
-            accessibilityLabel="Start voice quote"
-            accessibilityRole="button"
-          >
-            <Ionicons name="mic-outline" size={24} color="#ffffff" />
-            <Text style={styles.voiceFabLabel}>Voice Quote</Text>
-          </Pressable>
-        </>
-      )}
     </SafeAreaView>
   );
 }
@@ -698,63 +689,59 @@ const styles = StyleSheet.create({
   emptyContent: {
     flex: 1,
   },
-  voiceFab: {
+  dock: {
     position: 'absolute',
+    left: spacing.md,
     right: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    height: 56,
-    paddingHorizontal: spacing.md,
-    borderRadius: 28,
-    backgroundColor: colors.accent,
-    elevation: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    gap: spacing.sm,
   },
-  voiceFabLabel: {
-    fontSize: typography.label.fontSize,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginLeft: spacing.sm,
-  },
-  manualFab: {
-    position: 'absolute',
-    right: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 56,
-    paddingHorizontal: spacing.md,
-    borderRadius: 28,
+  pill: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: radius.pill,
     backgroundColor: colors.secondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
-  manualFabLabel: {
-    fontSize: typography.label.fontSize,
-    fontWeight: '700',
-    color: colors.mutedText,
-    marginLeft: spacing.sm,
-  },
-  fabDisabled: {
+  pillBusy: {
     opacity: 0.6,
+  },
+  pillText: {
+    color: colors.mutedText,
+    fontSize: typography.body.fontSize,
+    lineHeight: typography.body.lineHeight,
+  },
+  mic: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recentLabel: {
+    fontSize: typography.label.fontSize,
+    fontWeight: typography.label.fontWeight,
+    lineHeight: typography.label.lineHeight,
+    color: colors.mutedText,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xs,
+  },
+  tools: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.md,
   },
   statsLink: {
     minHeight: 44,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   statsLinkText: {
-    color: colors.accent,
-    fontSize: typography.body.fontSize,
-    fontWeight: '600',
+    color: colors.mutedText,
+    fontSize: typography.label.fontSize,
   },
 });

@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   hint: {
     fontSize: typography.label.fontSize,
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     fontSize: typography.body.fontSize,
-    color: '#000000',
+    color: colors.text,
     textAlignVertical: 'top',
     backgroundColor: colors.secondary,
   },

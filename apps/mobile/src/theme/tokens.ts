@@ -1,3 +1,8 @@
+/**
+ * Dark theme. One warm accent, used only for the primary action.
+ * Page is near-black; cards and bubbles sit one step lighter.
+ */
+
 export const spacing = {
   xs: 4,
   sm: 8,
@@ -9,17 +14,24 @@ export const spacing = {
 } as const;
 
 export const colors = {
-  dominant: '#ffffff',
-  secondary: '#f5f5f5',
-  accent: '#0066cc',
-  destructive: '#dc2626',
-  destructivePressed: '#b91c1c',
-  warning: '#b45309',
-  mutedText: '#666666',
-  border: '#cccccc',
-  borderFocused: '#0066cc',
-  errorText: '#dc2626',
-  success: '#16a34a',
+  dominant: '#141414',
+  secondary: '#2a2a2a',
+  text: '#ffffff',
+  accent: '#ff6b2c',
+  destructive: '#e35d5d',
+  destructivePressed: '#c44b4b',
+  warning: '#d4a056',
+  mutedText: '#9a9a9a',
+  border: '#3a3a3a',
+  borderFocused: '#ff6b2c',
+  errorText: '#e35d5d',
+  success: '#7dcea0',
+} as const;
+
+export const radius = {
+  card: 22,
+  pill: 28,
+  icon: 22,
 } as const;
 
 export const typography = {

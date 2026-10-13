@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   duplicateButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.text,
   },
   duplicateHint: {
     marginHorizontal: spacing.md,

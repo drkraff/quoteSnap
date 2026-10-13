@@ -4,7 +4,7 @@ export const QUOTES_LIST_MODE_ACTIVE_LABEL = 'Quotes';
 export const QUOTES_LIST_MODE_ARCHIVED_LABEL = 'Archived';
 
 export const ARCHIVED_QUOTES_HEADER_TITLE = 'Archived';
-export const ACTIVE_QUOTES_HEADER_TITLE = 'Quote History';
+export const ACTIVE_QUOTES_HEADER_TITLE = 'Quotes';
 
 export const ARCHIVED_QUOTES_EMPTY_HEADING = 'No archived quotes';
 

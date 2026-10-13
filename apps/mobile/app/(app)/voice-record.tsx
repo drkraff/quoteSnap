@@ -418,7 +418,7 @@ export default function VoiceRecordScreen(): JSX.Element {
           <Ionicons
             name={isRecording ? 'stop-outline' : 'mic-outline'}
             size={32}
-            color="#ffffff"
+            color={colors.text}
           />
         </Pressable>
 
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
     fontSize: typography.heading.fontSize,
     fontWeight: typography.heading.fontWeight,
     lineHeight: typography.heading.lineHeight,
-    color: '#000000',
+    color: colors.text,
     textAlign: 'center',
     marginTop: MIN_TOUCH_TARGET + spacing.md,
     marginHorizontal: spacing.xl,
@@ -479,11 +479,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
   },
   micButtonRecording: {
     backgroundColor: colors.destructive,
@@ -517,7 +512,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   retryButtonText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: typography.body.fontSize,
     fontWeight: '600',
   },

@@ -34,7 +34,7 @@ export function DeadLetterRow({ item, retrying, onRetry, onDiscard }: DeadLetter
           accessibilityLabel={`${DEAD_LETTER_RETRY_LABEL} ${item.title}`}
         >
           {retrying ? (
-            <ActivityIndicator size="small" color="#ffffff" />
+            <ActivityIndicator size="small" color={colors.text} />
           ) : (
             <Text style={styles.retryLabel}>{DEAD_LETTER_RETRY_LABEL}</Text>
           )}
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: '700',
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   summary: {
     fontSize: typography.label.fontSize,
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   retryLabel: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.text,
   },
   actions: {
     gap: spacing.xs,

@@ -1,3 +1,4 @@
+import { colors } from '../theme/tokens';
 import { Component, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -59,20 +60,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.dominant,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
     lineHeight: 28,
     textAlign: 'center',
-    color: '#111111',
+    color: colors.text,
   },
   body: {
     fontSize: 16,
     lineHeight: 24,
     textAlign: 'center',
-    color: '#444444',
+    color: colors.mutedText,
     marginTop: 12,
   },
   button: {
@@ -81,12 +82,12 @@ const styles = StyleSheet.create({
     minWidth: 160,
     paddingHorizontal: 20,
     borderRadius: 8,
-    backgroundColor: '#0066cc',
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },

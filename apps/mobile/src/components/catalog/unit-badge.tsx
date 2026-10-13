@@ -26,6 +26,6 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
     lineHeight: typography.label.lineHeight,
-    color: '#333333',
+    color: colors.mutedText,
   },
 });

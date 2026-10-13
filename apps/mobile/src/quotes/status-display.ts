@@ -7,23 +7,21 @@ export type QuoteStatusDisplay = {
 export type QuotePressTarget = 'none' | 'draft' | 'detail';
 
 const STATUS_DISPLAY: Record<string, QuoteStatusDisplay> = {
-  ai_processing: { label: 'Processing', bg: '#e0f0ff', text: '#0066cc' },
-  draft_local: { label: 'Draft', bg: '#e0f0ff', text: '#0066cc' },
-  draft_queued: { label: 'Queued', bg: '#e0f0ff', text: '#0066cc' },
-  sent: { label: 'Sent', bg: '#f0f0f0', text: '#666666' },
-  approved: { label: 'Approved', bg: '#dcfce7', text: '#16a34a' },
-  declined: { label: 'Declined', bg: '#fee2e2', text: '#dc2626' },
-  expired: { label: 'Expired', bg: '#fee2e2', text: '#dc2626' },
-  // Phase 6 SMS — label only; no send-retry UI in this PR.
-  failed_send: { label: 'Send failed', bg: '#fee2e2', text: '#dc2626' },
-  // Voice pipeline — distinct from failed_send (CONTEXT invariant 10).
-  ai_failed: { label: "Couldn't process audio", bg: '#fee2e2', text: '#dc2626' },
+  ai_processing: { label: 'Processing', bg: '#2a2a2a', text: '#9a9a9a' },
+  draft_local: { label: 'Draft', bg: '#2a2a2a', text: '#ffffff' },
+  draft_queued: { label: 'On this phone', bg: '#2a2a2a', text: '#9a9a9a' },
+  sent: { label: 'Sent', bg: '#2a2a2a', text: '#9a9a9a' },
+  approved: { label: 'Approved', bg: '#2a2a2a', text: '#7dcea0' },
+  declined: { label: 'Declined', bg: '#2a2a2a', text: '#e35d5d' },
+  expired: { label: 'Expired', bg: '#2a2a2a', text: '#e35d5d' },
+  failed_send: { label: 'Send failed', bg: '#2a2a2a', text: '#e35d5d' },
+  ai_failed: { label: "Couldn't process audio", bg: '#2a2a2a', text: '#e35d5d' },
 };
 
 const FALLBACK: QuoteStatusDisplay = {
   label: 'Unknown',
-  bg: '#f0f0f0',
-  text: '#666666',
+  bg: '#2a2a2a',
+  text: '#9a9a9a',
 };
 
 export function getQuoteStatusDisplay(status: string): QuoteStatusDisplay {

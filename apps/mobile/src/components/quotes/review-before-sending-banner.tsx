@@ -40,9 +40,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: 8,
-    backgroundColor: '#fffbeb',
+    backgroundColor: colors.secondary,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: colors.warning,
     gap: spacing.sm,
   },
   title: {
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   buttonLabel: {
     fontSize: typography.label.fontSize,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.text,
   },
   pressed: {
     opacity: 0.85,

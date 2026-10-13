@@ -18,7 +18,7 @@ import {
   resolveDraftPriceEdit,
 } from '../../quotes/material-markup';
 import { draftPriceFlag, draftPriceSourceLabel, type PriceSource } from '../../utils/price-source';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
 
 export type PriceEditSave = {
   unitPriceCents: number | null;
@@ -246,9 +246,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: colors.dominant,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: colors.secondary,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
     padding: spacing.lg,
   },
   handle: {
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     fontSize: typography.heading.fontSize,
     fontWeight: typography.heading.fontWeight,
     lineHeight: typography.heading.lineHeight,
-    color: '#000000',
+    color: colors.text,
     marginBottom: spacing.md,
   },
   fieldLabel: {
@@ -276,13 +276,14 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.icon,
+    backgroundColor: colors.dominant,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
     marginBottom: spacing.sm,
   },
   inputFocused: {
@@ -336,6 +337,6 @@ const styles = StyleSheet.create({
   saveText: {
     fontSize: typography.body.fontSize,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.text,
   },
 });

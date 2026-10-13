@@ -4,7 +4,7 @@ import {
   QUOTES_LIST_MODE_ARCHIVED_LABEL,
   type QuotesListMode,
 } from '../../quotes/list-mode';
-import { colors, MIN_TOUCH_TARGET, spacing, typography } from '../../theme/tokens';
+import { colors, radius, MIN_TOUCH_TARGET, spacing, typography } from '../../theme/tokens';
 
 interface QuotesListModeToggleProps {
   mode: QuotesListMode;
@@ -62,12 +62,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: spacing.md,
     marginTop: spacing.sm,
-    marginBottom: spacing.sm,
     padding: 4,
-    borderRadius: 10,
+    borderRadius: radius.pill,
     backgroundColor: colors.secondary,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   tab: {
     flex: 1,
@@ -89,6 +86,6 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
   },
   labelSelected: {
-    color: colors.accent,
+    color: colors.text,
   },
 });

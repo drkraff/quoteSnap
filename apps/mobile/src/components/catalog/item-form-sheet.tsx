@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { VALID_UNITS, parseCatalogUnit, type CatalogUnit } from '../../catalog/units';
 import { CatalogItem } from '../../db/models/catalog-item';
-import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
+import { colors, radius, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 
 const UNITS = VALID_UNITS;
 type Unit = CatalogUnit;
@@ -138,7 +138,7 @@ export function ItemFormSheet({
                 accessibilityRole="button"
                 accessibilityLabel="Cancel"
               >
-                <Ionicons name="close" size={24} color="#333333" />
+                <Ionicons name="close" size={24} color={colors.mutedText} />
               </Pressable>
             </View>
 
@@ -266,9 +266,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: colors.dominant,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: colors.secondary,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
     paddingBottom: spacing['3xl'],
   },
   handle: {
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     fontSize: typography.heading.fontSize,
     fontWeight: typography.heading.fontWeight,
     lineHeight: typography.heading.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   closeButton: {
     padding: spacing.xs,
@@ -310,18 +310,19 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
     lineHeight: typography.label.lineHeight,
-    color: '#333333',
+    color: colors.mutedText,
     marginBottom: spacing.xs,
   },
   textInput: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.icon,
+    backgroundColor: colors.dominant,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
-    color: '#000000',
+    color: colors.text,
     minHeight: MIN_TOUCH_TARGET,
   },
   textInputFocused: {
@@ -342,7 +343,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   unitPill: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.dominant,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: 20,
@@ -351,22 +354,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   unitPillSelected: {
-    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   unitPillText: {
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
-    color: '#333333',
+    color: colors.mutedText,
   },
   unitPillTextSelected: {
-    color: '#ffffff',
+    color: colors.text,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.icon,
+    backgroundColor: colors.dominant,
     paddingHorizontal: spacing.md,
     minHeight: MIN_TOUCH_TARGET,
   },
@@ -379,14 +383,14 @@ const styles = StyleSheet.create({
   currencyPrefix: {
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
-    color: '#000000',
+    color: colors.text,
     marginRight: spacing.xs,
   },
   priceInput: {
     flex: 1,
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
-    color: '#000000',
+    color: colors.text,
     paddingVertical: spacing.sm,
   },
   saveButton: {
@@ -405,7 +409,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   saveButtonText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: typography.body.fontSize,
     fontWeight: '700',
   },

@@ -15,14 +15,15 @@ export function SectionHeader({ title }: SectionHeaderProps): JSX.Element {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.dominant,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xs,
   },
   text: {
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
     lineHeight: typography.label.lineHeight,
-    color: '#333333',
+    color: colors.mutedText,
   },
 });

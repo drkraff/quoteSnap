@@ -5,7 +5,7 @@ describe('getQuoteStatusDisplay', () => {
     expect(getQuoteStatusDisplay('ai_processing').label).toBe('Processing');
     expect(getQuoteStatusDisplay('ai_failed').label).toBe("Couldn't process audio");
     expect(getQuoteStatusDisplay('draft_local').label).toBe('Draft');
-    expect(getQuoteStatusDisplay('draft_queued').label).toBe('Queued');
+    expect(getQuoteStatusDisplay('draft_queued').label).toBe('On this phone');
     expect(getQuoteStatusDisplay('sent').label).toBe('Sent');
     expect(getQuoteStatusDisplay('approved').label).toBe('Approved');
     expect(getQuoteStatusDisplay('declined').label).toBe('Declined');

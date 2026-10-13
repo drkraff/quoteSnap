@@ -26,7 +26,7 @@ export function RateRow({ entry, onPress, onDelete }: RateRowProps): JSX.Element
         accessibilityRole="button"
         accessibilityLabel={`Remove ${entry.displayName}`}
       >
-        <Ionicons name="trash-outline" size={24} color="#ffffff" />
+        <Ionicons name="trash-outline" size={24} color={colors.text} />
       </Pressable>
     );
   }
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
     lineHeight: typography.body.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   meta: {
     fontSize: typography.label.fontSize,

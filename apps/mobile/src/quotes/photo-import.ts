@@ -12,6 +12,12 @@
 import type { LineItem } from '../utils/line-items';
 import { addPhoto, newPhotoId, type QuotePhoto } from './photos';
 
+/**
+ * PHOTO-01 Vision is not shipped. Import from photo stays off until a
+ * real caption/OCR path exists. The stub helpers below stay for tests.
+ */
+export const VISION_PHOTO_IMPORT_ENABLED = false;
+
 export const IMPORT_FROM_PHOTO_LABEL = 'Import from photo';
 export const IMPORTED_ITEM_FALLBACK_NAME = 'Imported item';
 export const PHOTO_IMPORT_BLANK_PRICE_HINT =

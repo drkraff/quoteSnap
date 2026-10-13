@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors, spacing, typography } from '../../theme/tokens';
+import { colors, radius, spacing, typography } from '../../theme/tokens';
 
 interface DraftReadyToastProps {
   visible: boolean;
@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
     bottom: 96,
     left: spacing.md,
     right: spacing.md,
-    backgroundColor: '#333333',
-    borderRadius: 8,
+    backgroundColor: colors.secondary,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     flexDirection: 'row',
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   message: {
     fontSize: typography.label.fontSize,
     fontWeight: typography.label.fontWeight,
-    color: '#ffffff',
+    color: colors.text,
   },
   action: {
     fontSize: typography.label.fontSize,

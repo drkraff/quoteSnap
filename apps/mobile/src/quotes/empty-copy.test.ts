@@ -16,7 +16,7 @@ describe('quotes empty copy (A-19)', () => {
   it('uses quote history language, not catalog Add Item copy', () => {
     expect(QUOTES_EMPTY_HEADING).toBe('No quotes yet');
     expect(QUOTES_EMPTY_BODY).toBe(
-      'Record a voice quote or create a manual quote to get started',
+      'Tap Record a quote to start. Recent quotes show up here.',
     );
     expect(quotesEmptyCopy('active')).toEqual({
       heading: QUOTES_EMPTY_HEADING,

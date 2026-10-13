@@ -1,8 +1,9 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AppHeaderRight } from '../../src/components/app/app-header-right';
+import { LogoutHeaderButton } from '../../src/components/app/logout-header-button';
 import { tabBarHref } from '../../src/navigation/app-tabs';
 import { SYNC_ISSUES_TITLE } from '../../src/sync/dead-letter';
+import { colors, typography } from '../../src/theme/tokens';
 
 /** Default tab is Quotes (A-12). Hidden index redirects to Quotes (A-19). */
 export const unstable_settings = {
@@ -14,17 +15,25 @@ export default function AppLayout(): JSX.Element {
     <Tabs
       screenOptions={{
         headerTitle: 'QuoteSnap',
-        headerRight: () => <AppHeaderRight />,
-        tabBarActiveTintColor: '#0066cc',
-        tabBarInactiveTintColor: '#666666',
+        headerRight: () => <LogoutHeaderButton />,
+        headerStyle: { backgroundColor: colors.dominant },
+        headerShadowVisible: false,
+        headerTintColor: colors.text,
+        headerTitleStyle: {
+          color: colors.text,
+          fontSize: typography.body.fontSize,
+          fontWeight: '700',
+        },
+        tabBarActiveTintColor: colors.text,
+        tabBarInactiveTintColor: colors.mutedText,
         tabBarStyle: {
-          backgroundColor: '#ffffff',
+          backgroundColor: colors.dominant,
           borderTopWidth: 1,
-          borderTopColor: '#cccccc',
+          borderTopColor: colors.border,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '400',
+          fontSize: typography.label.fontSize,
+          fontWeight: typography.label.fontWeight,
         },
       }}
     >
@@ -33,7 +42,7 @@ export default function AppLayout(): JSX.Element {
         options={{
           href: tabBarHref('quotes'),
           title: 'Quotes',
-          headerTitle: 'Quote History',
+          headerTitle: 'Quotes',
           tabBarIcon: ({ focused, color }) => (
             <Ionicons
               name={focused ? 'document-text' : 'document-text-outline'}

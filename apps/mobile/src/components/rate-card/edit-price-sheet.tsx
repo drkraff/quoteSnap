@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import type { RateCardEntryResponse } from '../../api/rate-card';
 import { parseCatalogUnit } from '../../catalog/units';
-import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
+import { colors, radius, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 
 interface EditRatePriceSheetProps {
   visible: boolean;
@@ -104,7 +104,7 @@ export function EditRatePriceSheet({
                 accessibilityRole="button"
                 accessibilityLabel="Cancel"
               >
-                <Ionicons name="close" size={24} color="#333333" />
+                <Ionicons name="close" size={24} color={colors.mutedText} />
               </Pressable>
             </View>
 
@@ -176,9 +176,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: colors.dominant,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: colors.secondary,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
     paddingBottom: spacing['3xl'],
   },
   handle: {
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     fontSize: typography.heading.fontSize,
     fontWeight: typography.heading.fontWeight,
     lineHeight: typography.heading.lineHeight,
-    color: '#000000',
+    color: colors.text,
   },
   closeButton: {
     padding: spacing.xs,
@@ -234,7 +234,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.icon,
+    backgroundColor: colors.dominant,
     paddingHorizontal: spacing.md,
     minHeight: MIN_TOUCH_TARGET,
   },
@@ -247,14 +248,14 @@ const styles = StyleSheet.create({
   currencyPrefix: {
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
-    color: '#000000',
+    color: colors.text,
     marginRight: spacing.xs,
   },
   priceInput: {
     flex: 1,
     fontSize: typography.body.fontSize,
     fontWeight: typography.body.fontWeight,
-    color: '#000000',
+    color: colors.text,
     paddingVertical: spacing.sm,
   },
   saveButton: {
@@ -273,7 +274,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   saveButtonText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: typography.body.fontSize,
     fontWeight: '700',
   },

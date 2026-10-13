@@ -165,7 +165,7 @@ export function ImportOldQuotesForm({
         accessibilityState={{ disabled: busy }}
       >
         {busy ? (
-          <ActivityIndicator color="#ffffff" accessibilityLabel="Importing" />
+          <ActivityIndicator color={colors.text} accessibilityLabel="Importing" />
         ) : (
           <Text style={styles.ctaText}>{IMPORT_CTA_LABEL}</Text>
         )}
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   ctaText: {
-    color: '#ffffff',
+    color: colors.text,
     fontSize: typography.body.fontSize,
     fontWeight: '600',
   },
@@ -288,8 +288,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   feedbackReview: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fde68a',
+    backgroundColor: colors.secondary,
+    borderColor: colors.warning,
   },
   feedbackHeading: {
     fontSize: typography.body.fontSize,
