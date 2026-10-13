@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { VALID_UNITS, type CatalogUnit } from '../../catalog/units';
+import { UNIT_LABELS, unitsForSystem, type CatalogUnit } from '../../catalog/units';
+import { useContractorLocale } from '../../money/use-contractor-locale';
 import {
   MY_RATES_UNIT_ALL_LABEL,
   MY_RATES_UNIT_FILTER_LABEL,
@@ -12,6 +13,7 @@ interface RatesUnitFilterProps {
 }
 
 export function RatesUnitFilter({ value, onChange }: RatesUnitFilterProps): JSX.Element {
+  const locale = useContractorLocale();
   const selected = value === '' ? null : value;
 
   return (
@@ -24,13 +26,13 @@ export function RatesUnitFilter({ value, onChange }: RatesUnitFilterProps): JSX.
           checked={selected === null}
           onPress={() => onChange('')}
         />
-        {VALID_UNITS.map((unit) => {
+        {unitsForSystem(locale.unitSystem).map((unit) => {
           const checked = selected === unit;
           return (
             <UnitPill
               key={unit}
-              label={unit}
-              accessibilityLabel={unit}
+              label={UNIT_LABELS[unit]}
+              accessibilityLabel={UNIT_LABELS[unit]}
               checked={checked}
               onPress={() => onChange(checked ? '' : unit)}
             />

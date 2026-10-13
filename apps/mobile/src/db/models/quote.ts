@@ -17,6 +17,10 @@ export class Quote extends Model {
   @field('is_archived') isArchived!: boolean | null;
   @text('private_note') privateNote!: string | null;
   @text('client_sentence') clientSentence!: string | null;
+  @text('customer_name') customerName!: string | null;
+  @text('exclusions') exclusions!: string | null;
+  // Raw approval link. Not a server column. Do not enqueue.
+  @text('approval_url') approvalUrl!: string | null;
   @text('rooms_json') roomsJson!: string | null;
   @text('photos_json') photosJson!: string | null;
   // Local follow-up reminder. Not a server column. Do not enqueue these.

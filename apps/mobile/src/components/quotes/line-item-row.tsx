@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
+import { useContractorLocale } from '../../money/use-contractor-locale';
 import { dollarsToCents } from '../../onboarding/profile';
 import { colors, radius, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 import {
@@ -45,11 +46,13 @@ export function LineItemRow({
   confidence,
   priceSource,
 }: LineItemRowProps): JSX.Element {
+  const locale = useContractorLocale();
+  const currency = locale.currencyCode;
   const [editing, setEditing] = useState<EditField | null>(null);
   const [draft, setDraft] = useState('');
   const priceUnknown = isUnknownUnitPrice(unitPriceCents);
   const totalCents = lineTotalCents({ quantity, unitPriceCents });
-  const mathLabel = formatQtyTimesUnitPrice(quantity, unitPriceCents, unit);
+  const mathLabel = formatQtyTimesUnitPrice(quantity, unitPriceCents, unit, currency);
   const flag = draftPriceFlag(priceSource, unitPriceCents);
   const sourceTag = draftPriceSourceTag(flag);
   const unknownFlag = flag === 'unknown';
@@ -103,13 +106,13 @@ export function LineItemRow({
         ? { borderLeftWidth: 4, borderLeftColor: colors.warning }
         : {};
 
-  const lineTotalText = priceUnknown ? '—' : formatMoneyCents(totalCents);
+  const lineTotalText = priceUnknown ? '—' : formatMoneyCents(totalCents, currency);
 
   return (
     <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
       <View
         style={[styles.row, tierBorderStyle]}
-        accessibilityLabel={`${name}. ${sourceTag ?? 'price set'}. ${mathLabel}. ${UNIT_PRICE_LABEL} ${formatUnitPriceLabel(unitPriceCents)}. ${LINE_TOTAL_LABEL} ${priceUnknown ? 'not set' : formatMoneyCents(totalCents)}`}
+        accessibilityLabel={`${name}. ${sourceTag ?? 'price set'}. ${mathLabel}. ${UNIT_PRICE_LABEL} ${formatUnitPriceLabel(unitPriceCents, currency)}. ${LINE_TOTAL_LABEL} ${priceUnknown ? 'not set' : formatMoneyCents(totalCents, currency)}`}
       >
         <View style={styles.nameRow}>
           <View style={styles.nameBlock}>
@@ -210,11 +213,11 @@ export function LineItemRow({
                 accessibilityLabel={
                   priceUnknown
                     ? `Edit ${UNIT_PRICE_LABEL}. Price needed`
-                    : `Edit ${UNIT_PRICE_LABEL} ${formatUnitPriceLabel(unitPriceCents)}`
+                    : `Edit ${UNIT_PRICE_LABEL} ${formatUnitPriceLabel(unitPriceCents, currency)}`
                 }
               >
                 <Text style={[styles.valueText, priceUnknown && styles.priceUnknown]}>
-                  {priceUnknown ? 'Price needed' : formatUnitPriceLabel(unitPriceCents)}
+                  {priceUnknown ? 'Price needed' : formatUnitPriceLabel(unitPriceCents, currency)}
                 </Text>
               </Pressable>
             )}

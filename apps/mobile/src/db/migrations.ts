@@ -128,5 +128,18 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      toVersion: 13,
+      steps: [
+        addColumns({
+          table: 'quotes',
+          columns: [
+            { name: 'customer_name', type: 'string', isOptional: true },
+            { name: 'exclusions', type: 'string', isOptional: true },
+            { name: 'approval_url', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });

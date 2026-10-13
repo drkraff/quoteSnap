@@ -1,3 +1,4 @@
+import { formatMoneyCents, type CurrencyCode } from '../money/currency';
 import { getQuoteStatusDisplay } from './status-display';
 import {
   voiceUploadQueuedAccessibility,
@@ -24,10 +25,11 @@ export function quoteRowDisplay(input: {
   customerPhone: string | null;
   online: boolean;
   voiceJobId?: string | null;
+  currency?: CurrencyCode;
 }): QuoteRowDisplay {
   const isAiProcessing = input.status === 'ai_processing';
   const phone = isAiProcessing ? 'New job' : (input.customerPhone || 'No phone');
-  const totalDisplay = `$${(input.totalCents / 100).toFixed(2)}`;
+  const totalDisplay = formatMoneyCents(input.totalCents, input.currency);
   const statusLabel = getQuoteStatusDisplay(input.status).label;
   const uploadQueued = voiceUploadStillQueued(input);
   const processingCaption = isAiProcessing

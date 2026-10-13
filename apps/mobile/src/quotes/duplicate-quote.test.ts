@@ -147,6 +147,8 @@ function blankRecord(): DuplicateLocalQuoteFields {
     customerPhone: '+1999',
     privateNote: 'old',
     clientSentence: 'old sentence',
+    customerName: 'old name',
+    exclusions: 'old exclusions',
     roomsJson: 'old',
     photosJson: 'old-photos',
     serverId: SERVER,
@@ -352,6 +354,8 @@ describe('duplicate quote sync plan', () => {
         totalCents: draft.totalCents,
         privateNote: 'gate code 1234',
         clientSentence: 'Copper only',
+        customerName: null,
+        exclusions: null,
         customerPhone: '+15551212',
       },
     });

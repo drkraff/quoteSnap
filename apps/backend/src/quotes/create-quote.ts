@@ -11,8 +11,8 @@ export type CreateQuoteQuery = (
   params?: unknown[],
 ) => Promise<{ rows: unknown[] }>;
 
-export const INSERT_QUOTE_SQL = `INSERT INTO quotes (contractor_id, status, customer_phone, total_cents, private_note, client_sentence, client_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+export const INSERT_QUOTE_SQL = `INSERT INTO quotes (contractor_id, status, customer_phone, total_cents, private_note, client_sentence, client_key, customer_name, exclusions)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (contractor_id, client_key) WHERE client_key IS NOT NULL
        DO NOTHING
        RETURNING ${QUOTE_COLUMNS}`;
@@ -55,6 +55,8 @@ export async function createQuote(
     parsed.privateNote,
     parsed.clientSentence,
     parsed.clientKey,
+    parsed.customerName,
+    parsed.exclusions,
   ];
 
   let inserted: QuoteRow | undefined;

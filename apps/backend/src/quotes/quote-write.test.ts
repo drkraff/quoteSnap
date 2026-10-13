@@ -347,6 +347,8 @@ describe("parseQuoteCreateBody", () => {
       privateNote: null,
       clientSentence: null,
       clientKey: null,
+      customerName: null,
+      exclusions: null,
     });
   });
 
@@ -392,6 +394,8 @@ describe("parseQuoteCreateBody", () => {
       privateNote: null,
       clientSentence: null,
       clientKey: null,
+      customerName: null,
+      exclusions: null,
     });
   });
 });
@@ -1738,7 +1742,7 @@ describe("POST /quotes skippable catalog", () => {
     const src = readFileSync(path.join(here, "create-quote.ts"), "utf8");
     assert.match(
       src,
-      /INSERT INTO quotes \(contractor_id, status, customer_phone, total_cents, private_note, client_sentence, client_key\)/,
+      /INSERT INTO quotes \(contractor_id, status, customer_phone, total_cents, private_note, client_sentence, client_key, customer_name, exclusions\)/,
     );
     assert.match(src, /ON CONFLICT \(contractor_id, client_key\) WHERE client_key IS NOT NULL/);
     assert.match(src, /DO NOTHING/);

@@ -71,6 +71,8 @@ describe("quoteRowToResponse", () => {
       isArchived: false,
       privateNote: null,
       clientSentence: null,
+      customerName: null,
+      exclusions: null,
       rooms: [],
     });
   });

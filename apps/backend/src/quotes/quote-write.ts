@@ -20,6 +20,7 @@ import {
 } from "./statuses.js";
 import { parseOptionalPrivateNote } from "./private-note.js";
 import { parseOptionalClientSentence } from "./client-sentence.js";
+import { parseOptionalCustomerName, parseOptionalExclusions } from "./customer-fields.js";
 import {
   inferSnapshotPriceSource,
   isSnapshotPriceSource,
@@ -116,6 +117,8 @@ export type ParsedQuotePutBody =
       totalCents?: number;
       privateNote?: string | null;
       clientSentence?: string | null;
+      customerName?: string | null;
+      exclusions?: string | null;
       rooms?: QuoteRoom[];
       lineItems?: ParsedLineItemInput[];
     };
@@ -129,6 +132,8 @@ export type ParsedQuoteCreateBody =
       totalCents: number;
       privateNote: string | null;
       clientSentence: string | null;
+      customerName: string | null;
+      exclusions: string | null;
       /** Null when omitted or blank. Older clients omit it and still insert. */
       clientKey: string | null;
     };
@@ -651,6 +656,24 @@ export function parseQuoteCreateBody(body: unknown): ParsedQuoteCreateBody {
     clientSentence = parsed.sentence;
   }
 
+  let customerName: string | null = null;
+  if (hasOwn(raw, "customerName")) {
+    const parsed = parseOptionalCustomerName(raw.customerName);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    customerName = parsed.name;
+  }
+
+  let exclusions: string | null = null;
+  if (hasOwn(raw, "exclusions")) {
+    const parsed = parseOptionalExclusions(raw.exclusions);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    exclusions = parsed.exclusions;
+  }
+
   let clientKey: string | null = null;
   if (hasOwn(raw, "clientKey")) {
     const parsedKey = parseOptionalClientKey(raw.clientKey);
@@ -667,6 +690,8 @@ export function parseQuoteCreateBody(body: unknown): ParsedQuoteCreateBody {
     totalCents,
     privateNote,
     clientSentence,
+    customerName,
+    exclusions,
     clientKey,
   };
 }
@@ -707,6 +732,22 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
     parsed.clientSentence = sentence.sentence;
   }
 
+  if (hasOwn(raw, "customerName")) {
+    const name = parseOptionalCustomerName(raw.customerName);
+    if (!name.ok) {
+      return name;
+    }
+    parsed.customerName = name.name;
+  }
+
+  if (hasOwn(raw, "exclusions")) {
+    const exclusions = parseOptionalExclusions(raw.exclusions);
+    if (!exclusions.ok) {
+      return exclusions;
+    }
+    parsed.exclusions = exclusions.exclusions;
+  }
+
   if (hasOwn(raw, "rooms")) {
     const rooms = parseOptionalRooms(raw.rooms);
     if (!rooms.ok) {
@@ -744,6 +785,8 @@ export function parseQuotePutBody(body: unknown): ParsedQuotePutBody {
     parsed.totalCents === undefined &&
     parsed.privateNote === undefined &&
     parsed.clientSentence === undefined &&
+    parsed.customerName === undefined &&
+    parsed.exclusions === undefined &&
     parsed.rooms === undefined &&
     parsed.lineItems === undefined
   ) {
@@ -869,6 +912,14 @@ export async function applyQuotePut(
   if (parsed.clientSentence !== undefined) {
     params.push(parsed.clientSentence);
     setClauses.push(`client_sentence = $${params.length}`);
+  }
+  if (parsed.customerName !== undefined) {
+    params.push(parsed.customerName);
+    setClauses.push(`customer_name = $${params.length}`);
+  }
+  if (parsed.exclusions !== undefined) {
+    params.push(parsed.exclusions);
+    setClauses.push(`exclusions = $${params.length}`);
   }
   if (parsed.rooms !== undefined) {
     params.push(JSON.stringify(parsed.rooms));

@@ -1,6 +1,10 @@
-export const VALID_UNITS = ["each", "hour", "foot", "sqft", "job"] as const;
+export const VALID_UNITS = ["each", "hour", "meter", "sqm", "foot", "sqft", "job"] as const;
 
 export type CatalogUnit = (typeof VALID_UNITS)[number];
+
+/** Chips for a new line. Imperial stays valid for rows already stored as foot / sq ft. */
+export const METRIC_UNITS = ["each", "hour", "meter", "sqm", "job"] as const;
+export const IMPERIAL_UNITS = ["each", "hour", "foot", "sqft", "job"] as const;
 
 /**
  * Display-style strings written by starter templates before POST/PUT

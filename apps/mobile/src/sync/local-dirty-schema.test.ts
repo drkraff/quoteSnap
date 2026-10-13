@@ -3,7 +3,7 @@ import { migrations } from '../db/migrations';
 
 describe('local dirty schema', () => {
   it('stores the dirty-field token map on quotes at schema version 12', () => {
-    expect(schema.version).toBe(12);
+    expect(schema.version).toBe(13);
     const columns = schema.tables['quotes']?.columns;
     expect(columns?.['local_dirty']).toMatchObject({
       name: 'local_dirty',
@@ -16,7 +16,7 @@ describe('local dirty schema', () => {
   });
 
   it('migrates an existing v11 database by adding the column', () => {
-    expect(migrations.maxVersion).toBe(12);
+    expect(migrations.maxVersion).toBe(13);
     const step = migrations.sortedMigrations.find((migration) => migration.toVersion === 12);
     expect(step?.steps).toHaveLength(1);
     expect(step?.steps[0]).toMatchObject({

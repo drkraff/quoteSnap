@@ -8,7 +8,15 @@
  * are a different object (design #9) and must never be copied here.
  */
 
+import {
+  DEFAULT_CURRENCY,
+  DEFAULT_VAT_PERCENT,
+  parseCurrencyCode,
+  parseVatPercent,
+  type CurrencyCode,
+} from "../money/currency.js";
 import { normalizeClientSentence } from "./client-sentence.js";
+import { normalizeCustomerName, normalizeExclusions } from "./customer-fields.js";
 
 export type CustomerLineItemPayload = {
   name: string;
@@ -21,18 +29,36 @@ export type CustomerLineItemPayload = {
 
 export type CustomerQuotePayload = {
   customerPhone: string | null;
+  customerName: string | null;
   totalCents: number;
   clientSentence: string | null;
+  exclusions: string | null;
+  currencyCode: CurrencyCode;
+  /** Null on a snapshot written before VAT was captured. Do not invent 18%. */
+  vatPercent: number | null;
   lineItems: CustomerLineItemPayload[];
 };
 
-const CUSTOMER_QUOTE_KEYS = ["customerPhone", "totalCents", "clientSentence", "lineItems"] as const;
+const CUSTOMER_QUOTE_KEYS = [
+  "customerPhone",
+  "customerName",
+  "totalCents",
+  "clientSentence",
+  "exclusions",
+  "currencyCode",
+  "vatPercent",
+  "lineItems",
+] as const;
 const CUSTOMER_LINE_KEYS = ["name", "quantity", "unitPriceCents", "unit", "roomName"] as const;
 
 export type CustomerQuoteSource = {
   customerPhone: string | null;
+  customerName?: string | null;
   totalCents: number;
   clientSentence?: string | null;
+  exclusions?: string | null;
+  currencyCode?: string | null;
+  vatPercent?: number | null;
   privateNote?: string | null;
   notes?: string | null;
   lineItems: Array<{
@@ -62,8 +88,12 @@ export type CustomerQuoteSource = {
 export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuotePayload {
   return {
     customerPhone: source.customerPhone,
+    customerName: normalizeCustomerName(source.customerName),
     totalCents: source.totalCents,
     clientSentence: normalizeClientSentence(source.clientSentence),
+    exclusions: normalizeExclusions(source.exclusions),
+    currencyCode: parseCurrencyCode(source.currencyCode) ?? DEFAULT_CURRENCY,
+    vatPercent: parseVatPercent(source.vatPercent) ?? DEFAULT_VAT_PERCENT,
     lineItems: source.lineItems
       .filter((item) => item.optionRole !== "alt")
       .map((item) => ({

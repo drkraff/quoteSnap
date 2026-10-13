@@ -44,6 +44,16 @@ import {
   isUnknownUnitPrice,
   selectOptionForTotal,
 } from '../../../src/utils/line-items';
+import { useContractorLocale } from '../../../src/money/use-contractor-locale';
+import { quoteVatTotals } from '../../../src/money/vat';
+import {
+  CUSTOMER_NAME_LABEL,
+  EXCLUSIONS_HINT,
+  EXCLUSIONS_LABEL,
+  EXCLUSIONS_PLACEHOLDER,
+  normalizeCustomerName,
+  normalizeExclusions,
+} from '../../../src/quotes/customer-fields';
 import { repairDraftLineItems } from '../../../src/quotes/repair-draft-ids';
 import { canSend } from '../../../src/utils/quote-validation';
 import { enqueue } from '../../../src/sync/sync-queue';
@@ -192,6 +202,9 @@ function DraftScreen(): JSX.Element {
   const [phone, setPhone] = useState('');
   const [privateNote, setPrivateNote] = useState('');
   const [clientSentence, setClientSentence] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [exclusions, setExclusions] = useState('');
+  const locale = useContractorLocale();
   const [rooms, setRooms] = useState<QuoteRoom[]>([]);
   const [photos, setPhotos] = useState<QuotePhoto[]>([]);
   const [newRoomName, setNewRoomName] = useState('');
@@ -262,6 +275,32 @@ function DraftScreen(): JSX.Element {
       }
     }, PHONE_SYNC_DEBOUNCE_MS),
   ).current;
+  const nameSync = useRef(
+    createLatestDebouncer(async (value: { quoteId: string; customerName: string | null; dirtyToken?: number }) => {
+      await enqueue({
+        entityType: 'quote',
+        entityId: value.quoteId,
+        action: 'update',
+        payload: { customerName: value.customerName },
+      });
+      if (value.dirtyToken != null) {
+        await clearDurableDirtyField(value.quoteId, 'customerName', value.dirtyToken);
+      }
+    }, PHONE_SYNC_DEBOUNCE_MS),
+  ).current;
+  const exclusionsSync = useRef(
+    createLatestDebouncer(async (value: { quoteId: string; exclusions: string | null; dirtyToken?: number }) => {
+      await enqueue({
+        entityType: 'quote',
+        entityId: value.quoteId,
+        action: 'update',
+        payload: { exclusions: value.exclusions },
+      });
+      if (value.dirtyToken != null) {
+        await clearDurableDirtyField(value.quoteId, 'exclusions', value.dirtyToken);
+      }
+    }, PHONE_SYNC_DEBOUNCE_MS),
+  ).current;
   const roomsSync = useRef(
     createLatestDebouncer(async (value: { quoteId: string; rooms: QuoteRoom[]; dirtyToken?: number }) => {
       await enqueue({
@@ -305,6 +344,8 @@ function DraftScreen(): JSX.Element {
         setPhone(q.customerPhone ?? '');
         setPrivateNote(privateNoteFieldValue(q.privateNote));
         setClientSentence(q.clientSentence ?? '');
+        setCustomerName(q.customerName ?? '');
+        setExclusions(q.exclusions ?? '');
         setRooms(parseRoomsJson(q.roomsJson));
         setPhotos(parsePhotosJson(q.photosJson));
         const draftCollection = database.get<Draft>('drafts');
@@ -345,6 +386,8 @@ function DraftScreen(): JSX.Element {
           customerPhone: q.customerPhone,
           privateNote: q.privateNote,
           clientSentence: q.clientSentence,
+          customerName: q.customerName,
+          exclusions: q.exclusions,
           roomsJson: q.roomsJson,
           draftId: loadedDraft.id,
           lineItemsJson: loadedDraft.lineItemsJson,
@@ -382,12 +425,12 @@ function DraftScreen(): JSX.Element {
         // FAIL-07 must not block editing.
       });
       return () => {
-        void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
+        void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, nameSync, exclusionsSync, roomsSync]);
         void clearResumeCheckpoints(contractorId, RESUME_KIND_DRAFT).catch(() => {
           // Leaving the editor must not throw.
         });
       };
-    }, [loading, loadError, quote, phoneSync, noteSync, sentenceSync, roomsSync]),
+    }, [loading, loadError, quote, phoneSync, noteSync, sentenceSync, nameSync, exclusionsSync, roomsSync]),
   );
 
   useEffect(() => {
@@ -485,16 +528,16 @@ function DraftScreen(): JSX.Element {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (next) => {
       if (!shouldFlushDraftFieldsOnAppState(next)) return;
-      void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
+      void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, nameSync, exclusionsSync, roomsSync]);
     });
     return () => {
       subscription.remove();
       if (undoTimerRef.current) {
         clearTimeout(undoTimerRef.current);
       }
-      void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
+      void flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, nameSync, exclusionsSync, roomsSync]);
     };
-  }, [phoneSync, noteSync, sentenceSync, roomsSync]);
+  }, [phoneSync, noteSync, sentenceSync, nameSync, exclusionsSync, roomsSync]);
 
   function rejectFrozenMoneyWrite(): boolean {
     const status = quote?.status ?? quoteStatus;
@@ -759,6 +802,30 @@ function DraftScreen(): JSX.Element {
       record.clientSentence = normalized;
     });
     sentenceSync.schedule({ quoteId: q.id, clientSentence: normalized, dirtyToken: token });
+  }
+
+  function handleCustomerNameChange(text: string): void {
+    setCustomerName(text);
+    const q = quoteRef.current;
+    if (!q) return;
+    const normalized = normalizeCustomerName(text);
+    const token = markDirtyField(q.id, 'customerName');
+    void stampQuoteField(q, 'customerName', token, (record) => {
+      record.customerName = normalized;
+    });
+    nameSync.schedule({ quoteId: q.id, customerName: normalized, dirtyToken: token });
+  }
+
+  function handleExclusionsChange(text: string): void {
+    setExclusions(text);
+    const q = quoteRef.current;
+    if (!q) return;
+    const normalized = normalizeExclusions(text);
+    const token = markDirtyField(q.id, 'exclusions');
+    void stampQuoteField(q, 'exclusions', token, (record) => {
+      record.exclusions = normalized;
+    });
+    exclusionsSync.schedule({ quoteId: q.id, exclusions: normalized, dirtyToken: token });
   }
 
   async function persistRooms(next: QuoteRoom[]): Promise<void> {
@@ -1105,13 +1172,19 @@ function DraftScreen(): JSX.Element {
       await phoneSync.flush();
       await noteSync.flush();
       await sentenceSync.flush();
+      await nameSync.flush();
+      await exclusionsSync.flush();
       await roomsSync.flush();
       const contractor = useAuthStore.getState().contractor;
       const { share, marked } = await shareCustomerQuoteAndMarkSent(
         {
           customerPhone: phone || null,
+          customerName: normalizeCustomerName(customerName),
           totalCents: recalculateTotal(lineItems),
           clientSentence: normalizeClientSentence(clientSentence),
+          exclusions: normalizeExclusions(exclusions),
+          currencyCode: locale.currencyCode,
+          vatPercent: locale.vatPercent,
           privateNote: normalizePrivateNote(privateNote),
           rooms,
           photos,
@@ -1121,6 +1194,11 @@ function DraftScreen(): JSX.Element {
         {
           displayName: contractor?.displayName,
           trade: contractor?.trade,
+          phone: contractor?.phone,
+          email: contractor?.email,
+          quoteId: quote?.id,
+          issuedAt: quote?.createdAt,
+          approvalUrl: quote?.approvalUrl,
         },
       );
       if (!share.ok) {
@@ -1139,7 +1217,7 @@ function DraftScreen(): JSX.Element {
   }
 
   async function handleSendPress(): Promise<void> {
-    await flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, roomsSync]);
+    await flushDraftFieldSyncs([phoneSync, noteSync, sentenceSync, nameSync, exclusionsSync, roomsSync]);
     if (!quote || !draft) {
       setValidationError('Draft not loaded — please go back and try again');
       return;
@@ -1190,6 +1268,8 @@ function DraftScreen(): JSX.Element {
         // SMS/PDF/approval MUST use toCustomerQuotePayload (allowlist).
         privateNote: normalizePrivateNote(privateNote),
         clientSentence: normalizeClientSentence(clientSentence),
+        customerName: normalizeCustomerName(customerName),
+        exclusions: normalizeExclusions(exclusions),
         rooms,
         lineItems: lineItems.map(toContractorLineItemSync),
       },
@@ -1215,7 +1295,16 @@ function DraftScreen(): JSX.Element {
   }
 
   const sendEnabled = canSend(lineItems.length, phone) && !needsReview;
-  const totalDisplay = formatMoneyCents(recalculateTotal(lineItems));
+  const subtotalCents = recalculateTotal(lineItems);
+  const vatTotals = quoteVatTotals(subtotalCents, locale.vatPercent);
+  const subtotalDisplay = formatMoneyCents(subtotalCents, locale.currencyCode);
+  const vatDisplay = vatTotals
+    ? formatMoneyCents(vatTotals.vatCents, locale.currencyCode)
+    : '—';
+  const totalDisplay = formatMoneyCents(
+    vatTotals?.totalCents ?? subtotalCents,
+    locale.currencyCode,
+  );
   const listRows = draftListRows(rooms, lineItems);
 
   return (
@@ -1487,6 +1576,30 @@ function DraftScreen(): JSX.Element {
               onChangeText={handleClientSentenceChange}
               onBlur={() => { void sentenceSync.flush(); }}
             />
+            <View style={styles.customerFields}>
+              <Text style={styles.customerLabel}>{CUSTOMER_NAME_LABEL}</Text>
+              <TextInput
+                style={styles.customerInput}
+                value={customerName}
+                onChangeText={handleCustomerNameChange}
+                onBlur={() => { void nameSync.flush(); }}
+                placeholder="Customer name"
+                placeholderTextColor={colors.mutedText}
+                accessibilityLabel={CUSTOMER_NAME_LABEL}
+              />
+              <Text style={styles.customerLabel}>{EXCLUSIONS_LABEL}</Text>
+              <Text style={styles.customerHint}>{EXCLUSIONS_HINT}</Text>
+              <TextInput
+                style={[styles.customerInput, styles.exclusionsInput]}
+                value={exclusions}
+                onChangeText={handleExclusionsChange}
+                onBlur={() => { void exclusionsSync.flush(); }}
+                placeholder={EXCLUSIONS_PLACEHOLDER}
+                placeholderTextColor={colors.mutedText}
+                multiline
+                accessibilityLabel={`${EXCLUSIONS_LABEL}. ${EXCLUSIONS_HINT}`}
+              />
+            </View>
             <PhotoStrip
               photos={photosForQuote(photos)}
               onAdd={() => { void handleAddPhoto({}); }}
@@ -1576,7 +1689,11 @@ function DraftScreen(): JSX.Element {
         )}
         <View style={styles.totalRow}>
           <Text style={styles.subtotalLabel}>{SUBTOTAL_LABEL}</Text>
-          <Text style={styles.subtotalAmount}>{totalDisplay}</Text>
+          <Text style={styles.subtotalAmount}>{subtotalDisplay}</Text>
+        </View>
+        <View style={styles.totalRow}>
+          <Text style={styles.subtotalLabel}>VAT {locale.vatPercent}%</Text>
+          <Text style={styles.subtotalAmount}>{vatDisplay}</Text>
         </View>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>{QUOTE_TOTAL_LABEL}</Text>
@@ -1913,6 +2030,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     gap: spacing.sm,
+  },
+  customerFields: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.xs,
+    backgroundColor: colors.dominant,
+  },
+  customerLabel: {
+    color: colors.text,
+    fontSize: typography.body.fontSize,
+    fontWeight: '700',
+    marginTop: spacing.sm,
+  },
+  customerHint: {
+    color: colors.mutedText,
+    fontSize: typography.label.fontSize,
+  },
+  customerInput: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    color: colors.text,
+    backgroundColor: colors.secondary,
+    fontSize: typography.body.fontSize,
+  },
+  exclusionsInput: {
+    minHeight: 88,
+    paddingVertical: spacing.sm,
+    textAlignVertical: 'top',
   },
   phoneInput: {
     borderWidth: 1,

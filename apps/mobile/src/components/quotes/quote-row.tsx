@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Quote } from '../../db/models/quote';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
+import { useContractorLocale } from '../../money/use-contractor-locale';
 import { quoteRowDisplay } from '../../quotes/quote-row-display';
 import { DUPLICATE_QUOTE_A11Y, DUPLICATE_QUOTE_LABEL } from '../../quotes/duplicate-quote';
 import type { QuoteRowSwipeAction } from '../../quotes/delete-local-quote';
@@ -38,6 +39,7 @@ export function QuoteRow({
   onDuplicate,
   duplicateDisabled = false,
 }: QuoteRowProps): JSX.Element {
+  const locale = useContractorLocale();
   const {
     isAiProcessing,
     phone,
@@ -51,6 +53,7 @@ export function QuoteRow({
     customerPhone: quote.customerPhone,
     voiceJobId: quote.voiceJobId,
     online,
+    currency: locale.currencyCode,
   });
   const relativeDate = formatRelativeDate(quote.createdAt);
   const subtitle = isAiProcessing

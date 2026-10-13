@@ -3,6 +3,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import type { RateCardEntryResponse } from '../../api/rate-card';
 import { UnitBadge } from '../catalog/unit-badge';
+import { useContractorLocale } from '../../money/use-contractor-locale';
 import { rateCardRowDisplay } from '../../rate-card/row-display';
 import { colors, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 
@@ -13,7 +14,8 @@ interface RateRowProps {
 }
 
 export function RateRow({ entry, onPress, onDelete }: RateRowProps): JSX.Element {
-  const display = rateCardRowDisplay(entry);
+  const locale = useContractorLocale();
+  const display = rateCardRowDisplay({ ...entry, currency: locale.currencyCode });
 
   function renderRightActions(): JSX.Element {
     return (

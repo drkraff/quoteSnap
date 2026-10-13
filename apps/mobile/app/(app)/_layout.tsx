@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LogoutHeaderButton } from '../../src/components/app/logout-header-button';
+import { AppHeaderActions } from '../../src/components/app/app-header-actions';
 import { tabBarHref } from '../../src/navigation/app-tabs';
 import { SYNC_ISSUES_TITLE } from '../../src/sync/dead-letter';
 import { colors, typography } from '../../src/theme/tokens';
@@ -15,7 +15,7 @@ export default function AppLayout(): JSX.Element {
     <Tabs
       screenOptions={{
         headerTitle: 'QuoteSnap',
-        headerRight: () => <LogoutHeaderButton />,
+        headerRight: () => <AppHeaderActions />,
         headerStyle: { backgroundColor: colors.dominant },
         headerShadowVisible: false,
         headerTintColor: colors.text,
@@ -110,6 +110,13 @@ export default function AppLayout(): JSX.Element {
         options={{
           href: tabBarHref('stats'),
           headerTitle: 'Stats',
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          href: tabBarHref('settings'),
+          headerTitle: 'Settings',
         }}
       />
     </Tabs>

@@ -135,12 +135,15 @@ describe("applyOnboardingProfile", () => {
       trade: "plumbing",
       hourlyRateCents: 7500,
       markupPercent: 20,
+      currencyCode: "ILS",
+      unitSystem: "metric",
+      vatPercent: 18,
     });
     assert.equal(calls.length, 2);
     assert.equal(calls[0]?.sql, SELECT_CONTRACTOR_FOR_PROFILE_SQL);
     assert.deepEqual(calls[0]?.params, [CONTRACTOR_ID]);
     assert.equal(calls[1]?.sql, UPDATE_CONTRACTOR_PROFILE_SQL);
-    assert.deepEqual(calls[1]?.params, ["plumbing", 7500, 20, CONTRACTOR_ID]);
+    assert.deepEqual(calls[1]?.params, ["plumbing", 7500, 20, CONTRACTOR_ID, null, null, null]);
     assert.equal(
       calls.some((c) => /INSERT INTO catalog_items/i.test(c.sql)),
       false,

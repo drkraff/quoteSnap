@@ -28,7 +28,7 @@
  * returned as those two integers — not a float.
  */
 
-import { formatDollarAmount } from './customer-document';
+import { formatMoneyCents, type CurrencyCode } from '../money/currency';
 
 export const QUOTE_STATS_WINDOWS = ['last_30_days', 'this_month', 'all_time'] as const;
 
@@ -247,7 +247,7 @@ export function computeQuoteStats(
 }
 
 /** Empty until this window has at least one quote that counts as sent. */
-export function quoteStatsView(stats: QuoteStats): QuoteStatsViewModel {
+export function quoteStatsView(stats: QuoteStats, currency?: CurrencyCode): QuoteStatsViewModel {
   if (stats.quotesSent === 0) {
     return {
       window: stats.window,
@@ -262,12 +262,12 @@ export function quoteStatsView(stats: QuoteStats): QuoteStatsViewModel {
     { label: QUOTE_STATS_LABELS.sent, value: String(stats.quotesSent) },
     {
       label: QUOTE_STATS_LABELS.valueSent,
-      value: formatDollarAmount(stats.totalValueSentCents),
+      value: formatMoneyCents(stats.totalValueSentCents, currency),
     },
     { label: QUOTE_STATS_LABELS.approved, value: String(stats.approvedCount) },
     {
       label: QUOTE_STATS_LABELS.approvedValue,
-      value: formatDollarAmount(stats.approvedValueCents),
+      value: formatMoneyCents(stats.approvedValueCents, currency),
     },
     { label: QUOTE_STATS_LABELS.declined, value: String(stats.declinedCount) },
     { label: QUOTE_STATS_LABELS.waiting, value: String(stats.stillWaitingCount) },

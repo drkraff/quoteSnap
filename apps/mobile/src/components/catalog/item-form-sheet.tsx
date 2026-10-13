@@ -12,11 +12,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { VALID_UNITS, parseCatalogUnit, type CatalogUnit } from '../../catalog/units';
+import { UNIT_LABELS, parseCatalogUnit, unitChoices, type CatalogUnit } from '../../catalog/units';
+import { useContractorLocale } from '../../money/use-contractor-locale';
 import { CatalogItem } from '../../db/models/catalog-item';
 import { colors, radius, spacing, typography, MIN_TOUCH_TARGET } from '../../theme/tokens';
 
-const UNITS = VALID_UNITS;
 type Unit = CatalogUnit;
 
 interface ItemFormSheetProps {
@@ -32,6 +32,7 @@ export function ItemFormSheet({
   onSave,
   onClose,
 }: ItemFormSheetProps): JSX.Element {
+  const locale = useContractorLocale();
   const [name, setName] = useState('');
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [priceDisplay, setPriceDisplay] = useState('');
@@ -175,7 +176,7 @@ export function ItemFormSheet({
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Unit</Text>
                 <View style={styles.unitRow}>
-                  {UNITS.map((unit) => {
+                  {unitChoices(locale.unitSystem, selectedUnit).map((unit) => {
                     const isSelected = selectedUnit === unit;
                     return (
                       <Pressable
@@ -187,7 +188,7 @@ export function ItemFormSheet({
                         onPress={() => setSelectedUnit(unit)}
                         accessibilityRole="radio"
                         accessibilityState={{ checked: isSelected }}
-                        accessibilityLabel={unit}
+                        accessibilityLabel={UNIT_LABELS[unit]}
                       >
                         <Text
                           style={[
@@ -195,7 +196,7 @@ export function ItemFormSheet({
                             isSelected && styles.unitPillTextSelected,
                           ]}
                         >
-                          {unit}
+                          {UNIT_LABELS[unit]}
                         </Text>
                       </Pressable>
                     );

@@ -312,6 +312,8 @@ export async function upsertQuotes(
           record.isArchived = quote.isArchived === true;
           record.privateNote = normalizePrivateNote(quote.privateNote);
           record.clientSentence = quote.clientSentence ?? null;
+          record.customerName = quote.customerName ?? null;
+          record.exclusions = quote.exclusions ?? null;
           record.roomsJson = serializeRooms((quote.rooms ?? []) as QuoteRoom[]);
           record.photosJson = serializePhotos(
             mergePhotosOnHydrate([], (quote.photos ?? []) as ServerQuotePhoto[]),

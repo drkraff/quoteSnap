@@ -1,4 +1,5 @@
 import { normalizeClientSentence } from '../quotes/client-sentence';
+import { normalizeCustomerName, normalizeExclusions } from '../quotes/customer-fields';
 import { normalizePrivateNote } from '../quotes/private-notes';
 import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
 
@@ -9,7 +10,15 @@ import { serializeRooms, type QuoteRoom } from '../quotes/rooms';
  * or discard clears that token.
  */
 
-export const DIRTY_FIELDS = ['lines', 'phone', 'privateNote', 'clientSentence', 'rooms'] as const;
+export const DIRTY_FIELDS = [
+  'lines',
+  'phone',
+  'privateNote',
+  'clientSentence',
+  'customerName',
+  'exclusions',
+  'rooms',
+] as const;
 
 export type DirtyField = (typeof DIRTY_FIELDS)[number];
 
@@ -177,6 +186,8 @@ export type QuoteDetailPreserve = {
   phone: boolean;
   privateNote: boolean;
   clientSentence: boolean;
+  customerName: boolean;
+  exclusions: boolean;
   rooms: boolean;
   lines: boolean;
 };
@@ -191,6 +202,8 @@ export function quoteDetailPreserve(input: {
     phone: fieldHeld(input.quoteId, input.localDirty, 'phone'),
     privateNote: fieldHeld(input.quoteId, input.localDirty, 'privateNote'),
     clientSentence: fieldHeld(input.quoteId, input.localDirty, 'clientSentence'),
+    customerName: fieldHeld(input.quoteId, input.localDirty, 'customerName'),
+    exclusions: fieldHeld(input.quoteId, input.localDirty, 'exclusions'),
     rooms: fieldHeld(input.quoteId, input.localDirty, 'rooms'),
     lines: unsyncedLinesProtected(input),
   };
@@ -210,6 +223,8 @@ export type PulledTextRecord = {
   customerPhone: string | null;
   privateNote?: string | null;
   clientSentence?: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   roomsJson?: string | null;
 };
 
@@ -217,6 +232,8 @@ export type PulledTextServer = {
   customerPhone: string | null;
   privateNote?: string | null;
   clientSentence?: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   rooms?: QuoteRoom[] | null;
 };
 
@@ -234,6 +251,12 @@ export function assignPulledQuoteTextFields(
   if (!fieldHeld(record.id, record.localDirty, 'clientSentence')) {
     record.clientSentence = server.clientSentence ?? null;
   }
+  if (!fieldHeld(record.id, record.localDirty, 'customerName')) {
+    record.customerName = normalizeCustomerName(server.customerName);
+  }
+  if (!fieldHeld(record.id, record.localDirty, 'exclusions')) {
+    record.exclusions = normalizeExclusions(server.exclusions);
+  }
   if (!fieldHeld(record.id, record.localDirty, 'rooms')) {
     record.roomsJson = serializeRooms((server.rooms ?? []) as QuoteRoom[]);
   }
@@ -243,6 +266,8 @@ export type DurableResumeAction =
   | { field: 'phone'; token: number; payload: { customerPhone: string } }
   | { field: 'privateNote'; token: number; payload: { privateNote: string | null } }
   | { field: 'clientSentence'; token: number; payload: { clientSentence: string | null } }
+  | { field: 'customerName'; token: number; payload: { customerName: string | null } }
+  | { field: 'exclusions'; token: number; payload: { exclusions: string | null } }
   | { field: 'rooms'; token: number; payload: { rooms: QuoteRoom[] } }
   | {
       field: 'lines';
@@ -262,6 +287,8 @@ export function durableDirtyResumePlan(input: {
   customerPhone: string | null;
   privateNote: string | null;
   clientSentence: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   roomsJson: string | null;
   draftId: string | null;
   lineItemsJson: string | null;
@@ -290,6 +317,20 @@ export function durableDirtyResumePlan(input: {
       field: 'clientSentence',
       token: dirty.clientSentence,
       payload: { clientSentence: input.clientSentence },
+    });
+  }
+  if (dirty.customerName != null && !isDirtyField(input.quoteId, 'customerName')) {
+    actions.push({
+      field: 'customerName',
+      token: dirty.customerName,
+      payload: { customerName: normalizeCustomerName(input.customerName) },
+    });
+  }
+  if (dirty.exclusions != null && !isDirtyField(input.quoteId, 'exclusions')) {
+    actions.push({
+      field: 'exclusions',
+      token: dirty.exclusions,
+      payload: { exclusions: normalizeExclusions(input.exclusions) },
     });
   }
   if (dirty.rooms != null && !isDirtyField(input.quoteId, 'rooms')) {
@@ -337,6 +378,8 @@ export function durableClearsForSuccessfulPush(input: {
   customerPhone: string | null;
   privateNote: string | null;
   clientSentence: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   roomsJson: string | null;
   lineItemsJson: string | null;
   payload: Record<string, unknown>;
@@ -364,6 +407,20 @@ export function durableClearsForSuccessfulPush(input: {
     && normalizeClientSentence(payload.clientSentence as string | null) === input.clientSentence
   ) {
     clears.push({ field: 'clientSentence', token: dirty.clientSentence });
+  }
+  if (
+    dirty.customerName != null
+    && Object.prototype.hasOwnProperty.call(payload, 'customerName')
+    && normalizeCustomerName(payload.customerName as string | null) === normalizeCustomerName(input.customerName)
+  ) {
+    clears.push({ field: 'customerName', token: dirty.customerName });
+  }
+  if (
+    dirty.exclusions != null
+    && Object.prototype.hasOwnProperty.call(payload, 'exclusions')
+    && normalizeExclusions(payload.exclusions as string | null) === normalizeExclusions(input.exclusions)
+  ) {
+    clears.push({ field: 'exclusions', token: dirty.exclusions });
   }
   if (dirty.rooms != null && Array.isArray(payload.rooms)) {
     const sent = serializeRooms(payload.rooms as QuoteRoom[]);

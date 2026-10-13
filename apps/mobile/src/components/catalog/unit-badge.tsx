@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { parseCatalogUnit } from '../../catalog/units';
+import { UNIT_LABELS, parseCatalogUnit } from '../../catalog/units';
 import { colors, typography } from '../../theme/tokens';
 
 interface UnitBadgeProps {
@@ -7,7 +7,8 @@ interface UnitBadgeProps {
 }
 
 export function UnitBadge({ unit }: UnitBadgeProps): JSX.Element {
-  const label = parseCatalogUnit(unit) ?? unit;
+  const parsed = parseCatalogUnit(unit);
+  const label = parsed ? UNIT_LABELS[parsed] : unit;
   return (
     <View style={styles.badge}>
       <Text style={styles.text}>{label}</Text>

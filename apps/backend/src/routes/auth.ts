@@ -89,7 +89,7 @@ router.post("/register", authLimiter, async (req: Request, res: Response): Promi
     const result = await query(
       `INSERT INTO contractors (email, phone, password_hash, display_name)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, phone, display_name, trade, hourly_rate_cents, markup_percent`,
+       RETURNING id, email, phone, display_name, trade, hourly_rate_cents, markup_percent, currency_code, unit_system, vat_percent`,
       [email || null, phone, passwordHash, displayName ?? null]
     );
 
@@ -149,14 +149,14 @@ router.post("/login", authLimiter, async (req: Request, res: Response): Promise<
     const result =
       identifier.field === "email"
         ? await query(
-            `SELECT id, email, phone, display_name, trade, hourly_rate_cents, markup_percent, password_hash
+            `SELECT id, email, phone, display_name, trade, hourly_rate_cents, markup_percent, currency_code, unit_system, vat_percent, password_hash
              FROM contractors
              WHERE email = $1
              LIMIT 1`,
             [identifier.value]
           )
         : await query(
-            `SELECT id, email, phone, display_name, trade, hourly_rate_cents, markup_percent, password_hash
+            `SELECT id, email, phone, display_name, trade, hourly_rate_cents, markup_percent, currency_code, unit_system, vat_percent, password_hash
              FROM contractors
              WHERE phone = $1
              LIMIT 1`,

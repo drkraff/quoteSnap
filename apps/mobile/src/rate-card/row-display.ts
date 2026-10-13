@@ -1,4 +1,5 @@
-import { parseCatalogUnit } from '../catalog/units';
+import { UNIT_LABELS, parseCatalogUnit } from '../catalog/units';
+import { formatMoneyCents, type CurrencyCode } from '../money/currency';
 import type { RateCardSource } from '../api/rate-card';
 
 export type RateCardRowDisplay = {
@@ -36,9 +37,11 @@ export function rateCardRowDisplay(entry: {
   unitPriceCents: number;
   useCount: number;
   source: RateCardSource | string;
+  currency?: CurrencyCode;
 }): RateCardRowDisplay {
-  const priceDisplay = `$${(entry.unitPriceCents / 100).toFixed(2)}`;
-  const unitLabel = parseCatalogUnit(entry.unit) ?? entry.unit;
+  const priceDisplay = formatMoneyCents(entry.unitPriceCents, entry.currency);
+  const parsed = parseCatalogUnit(entry.unit);
+  const unitLabel = parsed ? UNIT_LABELS[parsed] : entry.unit;
   const useCountLabel = rateCardUseCountLabel(entry.useCount);
   const sourceLabel = rateCardSourceLabel(entry.source);
   const sourceBit = sourceLabel ? `, ${sourceLabel.toLowerCase()}` : '';

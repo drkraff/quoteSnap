@@ -1,3 +1,11 @@
+import {
+  DEFAULT_CURRENCY,
+  DEFAULT_UNIT_SYSTEM,
+  DEFAULT_VAT_PERCENT,
+  parseCurrencyCode,
+  parseUnitSystem,
+  parseVatPercent,
+} from "../money/currency.js";
 import type { ContractorPublic } from "../types/auth.js";
 
 export type ContractorRow = {
@@ -8,6 +16,9 @@ export type ContractorRow = {
   trade: string | null;
   hourly_rate_cents?: number | null;
   markup_percent?: number | null;
+  currency_code?: string | null;
+  unit_system?: string | null;
+  vat_percent?: number | null;
 };
 
 function integerOrNull(value: unknown): number | null {
@@ -23,5 +34,8 @@ export function contractorPublicFromRow(row: ContractorRow): ContractorPublic {
     trade: row.trade,
     hourlyRateCents: integerOrNull(row.hourly_rate_cents),
     markupPercent: integerOrNull(row.markup_percent),
+    currencyCode: parseCurrencyCode(row.currency_code) ?? DEFAULT_CURRENCY,
+    unitSystem: parseUnitSystem(row.unit_system) ?? DEFAULT_UNIT_SYSTEM,
+    vatPercent: parseVatPercent(row.vat_percent) ?? DEFAULT_VAT_PERCENT,
   };
 }

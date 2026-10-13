@@ -35,6 +35,8 @@ export async function resumeDurableDirtyEdits(input: {
   customerPhone: string | null;
   privateNote: string | null;
   clientSentence: string | null;
+  customerName?: string | null;
+  exclusions?: string | null;
   roomsJson: string | null;
   draftId: string | null;
   lineItemsJson: string | null;
