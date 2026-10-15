@@ -20,7 +20,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 export default function RootLayout(): JSX.Element {
-  const { isLoading, contractor, accessToken, onboardingComplete, restoreSession } =
+  const { isLoading, isAuthenticated, contractor, accessToken, onboardingComplete, restoreSession } =
     useAuthStore();
   const segments = useSegments();
   const router = useRouter();
@@ -58,16 +58,19 @@ export default function RootLayout(): JSX.Element {
   useEffect(() => {
     if (isLoading) return;
 
-    const isAuthenticated = contractor !== null && accessToken !== null;
+    // A cold refresh can time out before a new access token arrives. The
+    // cached contractor is enough to show the on-device quotes; the token
+    // refresh keeps retrying in the background.
+    const sessionReady = isAuthenticated && contractor !== null;
     const href = resolveSessionRedirect({
-      isAuthenticated,
+      isAuthenticated: sessionReady,
       onboardingComplete,
       segments,
     });
     if (href !== null) {
       router.replace(href);
     }
-  }, [isLoading, contractor, accessToken, onboardingComplete, segments, router]);
+  }, [isLoading, isAuthenticated, contractor, accessToken, onboardingComplete, segments, router]);
 
   // useEffect runs after the unlocked tree commits, so the splash covers the
   // dark root until Quotes or login is in the tree. onLayout on the root view

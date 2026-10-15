@@ -21,6 +21,7 @@ import {
   type AiFailureStage,
 } from '../voice/ai-failure.js';
 import { replaceVoiceQuoteLines } from '../voice/commit-voice-result.js';
+import { readVoiceJobGate, reopenCurrentVoiceAttempt } from '../voice/voice-job-guard.js';
 import {
   joinAssumptionsToClientSentence,
   sanitizeClientFacingSentence,
@@ -62,16 +63,30 @@ async function processVoiceJobs(jobs: Job<VoiceJobData>[]): Promise<void> {
 
 async function commitVoiceQuote(args: {
   quoteId: string;
+  jobId: string;
   lineItems: Array<ValidatedLineItem & { roomId?: string | null }>;
   status: 'draft_local' | 'ai_failed';
   totalCents: number;
   failureStage: AiFailureStage | null;
   clientSentence?: string | null;
   roomsJson?: string | null;
-}): Promise<void> {
-  await withTransaction(async (tx) => {
-    await replaceVoiceQuoteLines({ query: tx }, args);
+}): Promise<boolean> {
+  return withTransaction(async (tx) => {
+    return replaceVoiceQuoteLines({ query: tx }, args);
   });
+}
+
+async function deleteVoiceAudio(r2Key: string, quoteId: string, jobId: string): Promise<void> {
+  try {
+    await deleteFromR2(r2Key);
+  } catch (deleteErr) {
+    log('error', {
+      msg: 'voice_audio_delete_failed',
+      quoteId,
+      jobId,
+      error: errorSummary(deleteErr),
+    });
+  }
 }
 
 async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
@@ -85,6 +100,17 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
   let mappingResponse: unknown = null;
 
   try {
+    // Drop a re-record's previous job, or a job whose quote already left the
+    // voice pipeline, before spending a Whisper call. voice_job_id is the
+    // request generation. Unassigned means the id is not stored yet.
+    const gate = await readVoiceJobGate(query, quoteId, job.id);
+    if (gate === 'stale') {
+      log('info', { msg: 'voice_result_discarded', quoteId, jobId: job.id });
+      await deleteVoiceAudio(r2Key, quoteId, job.id);
+      return;
+    }
+    await reopenCurrentVoiceAttempt(query, quoteId, job.id);
+
     // a) Fetch audio from R2
     const audioBuffer = await getFromR2(r2Key);
     // Use the OpenAI SDK's toFile() rather than the global File constructor:
@@ -323,8 +349,9 @@ Rules:
     builtRoomsJson =
       attached.rooms.length > 0 ? JSON.stringify(attached.rooms) : null;
 
-    await commitVoiceQuote({
+    const committed = await commitVoiceQuote({
       quoteId,
+      jobId: job.id,
       lineItems: attached.lines,
       status: 'draft_local',
       totalCents,
@@ -332,18 +359,14 @@ Rules:
       clientSentence,
       roomsJson: builtRoomsJson,
     });
+    if (!committed) {
+      log('info', { msg: 'voice_result_discarded', quoteId, jobId: job.id });
+      await deleteVoiceAudio(r2Key, quoteId, job.id);
+      return;
+    }
 
     // PII: delete audio only after a durable success so retries still have the object.
-    try {
-      await deleteFromR2(r2Key);
-    } catch (deleteErr) {
-      log('error', {
-        msg: 'voice_audio_delete_failed',
-        quoteId,
-        jobId: job.id,
-        error: errorSummary(deleteErr),
-      });
-    }
+    await deleteVoiceAudio(r2Key, quoteId, job.id);
   } catch (err) {
     log('error', {
       msg: 'voice_process_failed',
@@ -353,12 +376,15 @@ Rules:
     });
 
     // AI failure is not an SMS send failure (failed_send).
+    // A stale job must not mark the newer draft failed, and must not be retried.
+    let stale = false;
     try {
       if (stage === 'mapping' && builtLineItems && builtLineItems.length > 0) {
         const flagged = flagPartialMappingLines(builtLineItems);
         try {
-          await commitVoiceQuote({
+          const partial = await commitVoiceQuote({
             quoteId,
+            jobId: job.id,
             lineItems: flagged,
             status: 'ai_failed',
             totalCents: builtTotalCents,
@@ -366,6 +392,7 @@ Rules:
             clientSentence,
             roomsJson: builtRoomsJson,
           });
+          if (!partial) stale = true;
         } catch (partialErr) {
           log('error', {
             msg: 'voice_partial_draft_failed',
@@ -373,10 +400,12 @@ Rules:
             jobId: job.id,
             error: errorSummary(partialErr),
           });
-          await markQuoteAiFailed(query, quoteId, 'mapping');
+          const marked = await markQuoteAiFailed(query, quoteId, 'mapping', job.id);
+          if (!marked) stale = true;
         }
       } else {
-        await markQuoteAiFailed(query, quoteId, stage);
+        const marked = await markQuoteAiFailed(query, quoteId, stage, job.id);
+        if (!marked) stale = true;
       }
     } catch (updateErr) {
       log('error', {
@@ -387,6 +416,10 @@ Rules:
       });
     }
 
+    if (stale) {
+      log('info', { msg: 'voice_result_discarded', quoteId, jobId: job.id });
+      return;
+    }
     throw err;
   } finally {
     log('info', buildVoiceCostLog({

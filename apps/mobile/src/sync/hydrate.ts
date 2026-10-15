@@ -41,6 +41,7 @@ import {
   shouldArchiveLocalQuoteOnHydrate,
 } from '../quotes/archive-quote';
 import { isDeadLetterAudioUpload } from '../quotes/voice-upload-queue';
+import { isOutstandingSentMark, shouldHoldLocalSentQuote } from './sent-mark-hold';
 
 export { toDraftLineItems } from './draft-line-items';
 
@@ -246,6 +247,12 @@ export async function upsertQuotes(
       blockedQuoteIds.add(item.entityId);
     }
   }
+  const sentMarkHoldIds = new Set<string>();
+  for (const item of queueItems) {
+    if (isOutstandingSentMark(item)) {
+      sentMarkHoldIds.add(item.entityId);
+    }
+  }
 
   await database.write(async () => {
     const existingQuotes = await quoteCollection
@@ -323,6 +330,10 @@ export async function upsertQuotes(
         quoteByServerId.set(quote.id, local);
       }
       const localQuote = local;
+      const holdSent = shouldHoldLocalSentQuote({
+        outstandingSentMark: sentMarkHoldIds.has(localQuote.id),
+        serverStatus: quote.status,
+      });
 
       const serverLineItems = toDraftLineItems(quote.lineItems ?? [], localCatalogIds);
       const lineItemsJson = serializeLineItems(serverLineItems);
@@ -335,7 +346,8 @@ export async function upsertQuotes(
         || (draft != null && blockedDraftIds.has(draft.id))
         || linesHeld;
       const forked =
-        !linesHeld
+        !holdSent
+        && !linesHeld
         && !deadLetterLines
         && draft != null
         && shouldApplyHydrateDraftConflict({
@@ -364,20 +376,27 @@ export async function upsertQuotes(
       const draftDirty =
         (draft != null && blockedDraftIds.has(draft.id))
         || (deadLetterLines && !frozen)
-        || holdLocalLines;
+        || holdLocalLines
+        || holdSent;
 
       if (!blockedQuoteIds.has(localQuote.id) || frozen) {
         await localQuote.update((record) => {
           // followed_up_at and follow_up_dismissed are local-only. Do not
           // assign them from the server — login must not clear a snooze.
-          record.status = quote.status;
+          // A sent mark that is still retrying or dead-lettered stays locked.
+          // Copying the server draft here would make the quote editable again.
+          if (holdSent) {
+            record.status = 'sent';
+          } else {
+            record.status = quote.status;
+            record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
+          }
           assignPulledQuoteTextFields(record, quote);
           // Line-item edits queue a draft row, not a quote row. The total
           // lives on the quote and must survive until that draft syncs.
           if (!draftDirty || frozen) {
             record.totalCents = quote.totalCents;
           }
-          record.sentAt = quote.sentAt ? parseMs(quote.sentAt) : null;
           record.voiceJobId = quote.voiceJobId;
           record.photosJson = serializePhotos(
             mergeStoredPhotosWithServer(
@@ -404,14 +423,24 @@ export async function upsertQuotes(
             record.serverRevision = quote.updatedAt;
           }
         });
-      } else if (!holdLocalLines) {
+      } else if (holdSent || !holdLocalLines) {
         await localQuote.update((record) => {
-          record.serverRevision = quote.updatedAt;
+          if (holdSent) {
+            record.status = 'sent';
+          }
+          if (!holdLocalLines) {
+            record.serverRevision = quote.updatedAt;
+          }
         });
       }
       if (draft) {
         if (
-          (!blockedDraftIds.has(draft.id) && !holdLocalLines && !(deadLetterLines && !frozen))
+          (
+            !blockedDraftIds.has(draft.id)
+            && !holdLocalLines
+            && !(deadLetterLines && !frozen)
+            && !holdSent
+          )
           || frozen
         ) {
           await draft.update((record) => {
@@ -492,6 +521,10 @@ async function hydrateOnce(contractorId: string): Promise<void> {
  * `needs_review` (SYNC-05). The same revision keeps the unpushed local lines
  * and total. A dead-letter draft update keeps local lines and total until
  * the contractor retries or discards it, and does not by itself open a fork.
+ * A quote update with `status: sent` that is still pending or dead-lettered
+ * does not let an older server draft unlock the local quote. The queue row
+ * stays so the sent mark can be retried. A server quote that is already sent
+ * still wins.
  * Frozen post-send quotes (SYNC-06) always take the server snapshot,
  * even if a draft PUT is queued or dead-lettered.
  * Hydrate pulls

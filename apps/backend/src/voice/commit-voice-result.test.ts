@@ -3,12 +3,27 @@ import assert from "node:assert/strict";
 import {
   DELETE_VOICE_LINE_ITEMS_SQL,
   INSERT_VOICE_LINE_ITEM_SQL,
+  LOCK_CURRENT_VOICE_JOB_SQL,
   replaceVoiceQuoteLines,
   UPDATE_VOICE_QUOTE_RESULT_SQL,
 } from "./commit-voice-result.js";
 
 const CLIENT_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const JOB_ID = "job-current";
+
+function recordingClient(calls: Array<{ sql: string; params: unknown[] | undefined }>) {
+  return {
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql === LOCK_CURRENT_VOICE_JOB_SQL) {
+        return { rows: [{ id: params?.[0] }] };
+      }
+      return { rows: [] };
+    },
+  };
+}
 
 function assertInsertParams(actual: unknown[] | undefined, expectedPrefix: unknown[]): void {
   assert.ok(actual);
@@ -20,13 +35,10 @@ describe("replaceVoiceQuoteLines", () => {
   it("deletes existing lines then inserts and sets draft_local without a failure stage", async () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     await replaceVoiceQuoteLines(
-      {
-        query: async (sql, params) => {
-          calls.push({ sql, params });
-        },
-      },
+      recordingClient(calls),
       {
         quoteId: "quote-1",
+        jobId: JOB_ID,
         status: "draft_local",
         totalCents: 1500,
         failureStage: "mapping",
@@ -44,10 +56,12 @@ describe("replaceVoiceQuoteLines", () => {
       },
     );
 
-    assert.equal(calls[0]!.sql, DELETE_VOICE_LINE_ITEMS_SQL);
-    assert.deepEqual(calls[0]!.params, ["quote-1"]);
-    assert.equal(calls[1]!.sql, INSERT_VOICE_LINE_ITEM_SQL);
-    assertInsertParams(calls[1]!.params, [
+    assert.equal(calls[0]!.sql, LOCK_CURRENT_VOICE_JOB_SQL);
+    assert.deepEqual(calls[0]!.params, ["quote-1", JOB_ID]);
+    assert.equal(calls[1]!.sql, DELETE_VOICE_LINE_ITEMS_SQL);
+    assert.deepEqual(calls[1]!.params, ["quote-1"]);
+    assert.equal(calls[2]!.sql, INSERT_VOICE_LINE_ITEM_SQL);
+    assertInsertParams(calls[2]!.params, [
       "quote-1",
       "cat-1",
       "Pipe",
@@ -58,20 +72,20 @@ describe("replaceVoiceQuoteLines", () => {
       "catalog",
       null,
     ]);
-    assert.equal(calls[2]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
-    assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, null, null, "quote-1"]);
+    assert.equal(calls[3]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
+    assert.deepEqual(calls[3]!.params, ["draft_local", 1500, null, null, null, "quote-1", JOB_ID]);
+    assert.match(UPDATE_VOICE_QUOTE_RESULT_SQL, /status = 'ai_processing'/);
+    assert.equal(UPDATE_VOICE_QUOTE_RESULT_SQL.includes("draft_local'"), false);
+    assert.equal(UPDATE_VOICE_QUOTE_RESULT_SQL.includes("'sent'"), false);
   });
 
   it("writes ai_failed + mapping stage for a partial FAIL-05 draft and stores 0 cents for blank prices", async () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     await replaceVoiceQuoteLines(
-      {
-        query: async (sql, params) => {
-          calls.push({ sql, params });
-        },
-      },
+      recordingClient(calls),
       {
         quoteId: "quote-2",
+        jobId: JOB_ID,
         status: "ai_failed",
         totalCents: 0,
         failureStage: "mapping",
@@ -89,7 +103,7 @@ describe("replaceVoiceQuoteLines", () => {
       },
     );
 
-    assertInsertParams(calls[1]!.params, [
+    assertInsertParams(calls[2]!.params, [
       "quote-2",
       null,
       "Mystery work",
@@ -100,19 +114,16 @@ describe("replaceVoiceQuoteLines", () => {
       "unknown",
       null,
     ]);
-    assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", null, null, "quote-2"]);
+    assert.deepEqual(calls[3]!.params, ["ai_failed", 0, "mapping", null, null, "quote-2", JOB_ID]);
   });
 
   it("writes joined extract assumptions into client_sentence", async () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     await replaceVoiceQuoteLines(
-      {
-        query: async (sql, params) => {
-          calls.push({ sql, params });
-        },
-      },
+      recordingClient(calls),
       {
         quoteId: "quote-3",
+        jobId: JOB_ID,
         status: "draft_local",
         totalCents: 0,
         failureStage: null,
@@ -120,15 +131,16 @@ describe("replaceVoiceQuoteLines", () => {
         lineItems: [],
       },
     );
-    assert.equal(calls[0]!.sql, DELETE_VOICE_LINE_ITEMS_SQL);
-    assert.equal(calls[1]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
-    assert.deepEqual(calls[1]!.params, [
+    assert.equal(calls[1]!.sql, DELETE_VOICE_LINE_ITEMS_SQL);
+    assert.equal(calls[2]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
+    assert.deepEqual(calls[2]!.params, [
       "draft_local",
       0,
       null,
       "appliances not included",
       null,
       "quote-3",
+      JOB_ID,
     ]);
   });
 
@@ -137,13 +149,10 @@ describe("replaceVoiceQuoteLines", () => {
     const roomsJson = JSON.stringify([{ id: kitchenId, name: "Kitchen", privateNote: null }]);
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     await replaceVoiceQuoteLines(
-      {
-        query: async (sql, params) => {
-          calls.push({ sql, params });
-        },
-      },
+      recordingClient(calls),
       {
         quoteId: "quote-4",
+        jobId: JOB_ID,
         status: "draft_local",
         totalCents: 0,
         failureStage: null,
@@ -162,7 +171,7 @@ describe("replaceVoiceQuoteLines", () => {
         ],
       },
     );
-    assertInsertParams(calls[1]!.params, [
+    assertInsertParams(calls[2]!.params, [
       "quote-4",
       null,
       "Cabinets",
@@ -173,26 +182,24 @@ describe("replaceVoiceQuoteLines", () => {
       "unknown",
       kitchenId,
     ]);
-    assert.deepEqual(calls[2]!.params, [
+    assert.deepEqual(calls[3]!.params, [
       "draft_local",
       0,
       null,
       null,
       roomsJson,
       "quote-4",
+      JOB_ID,
     ]);
   });
 
   it("persists attach price_source on adhoc lines (spoken, learned, computed, unknown)", async () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     await replaceVoiceQuoteLines(
-      {
-        query: async (sql, params) => {
-          calls.push({ sql, params });
-        },
-      },
+      recordingClient(calls),
       {
         quoteId: "quote-5",
+        jobId: JOB_ID,
         status: "draft_local",
         totalCents: 2535900,
         failureStage: null,
@@ -253,5 +260,62 @@ describe("replaceVoiceQuoteLines", () => {
         { catalogItemId: null, name: "Mystery assembly", cents: 0, priceSource: "unknown" },
       ],
     );
+  });
+
+  it("discards a stale job without deleting the newer draft's lines", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    const committed = await replaceVoiceQuoteLines(
+      {
+        query: async (sql, params) => {
+          calls.push({ sql, params });
+          return { rows: [] };
+        },
+      },
+      {
+        quoteId: "quote-sent",
+        jobId: "job-old",
+        status: "draft_local",
+        totalCents: 8000,
+        failureStage: null,
+        lineItems: [
+          {
+            catalogItemId: null,
+            name: "Outlet",
+            quantity: 1,
+            unit: "each",
+            unitPriceCents: 8000,
+            confidence: 0.9,
+          },
+        ],
+      },
+    );
+
+    assert.equal(committed, false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.sql, LOCK_CURRENT_VOICE_JOB_SQL);
+    assert.deepEqual(calls[0]!.params, ["quote-sent", "job-old"]);
+    assert.equal(calls.some((call) => call.sql === DELETE_VOICE_LINE_ITEMS_SQL), false);
+  });
+
+  it("discards a blank job id without touching the quote", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    const committed = await replaceVoiceQuoteLines(
+      {
+        query: async (sql, params) => {
+          calls.push({ sql, params });
+          return { rows: [{ id: "quote-1" }] };
+        },
+      },
+      {
+        quoteId: "quote-1",
+        jobId: "   ",
+        status: "draft_local",
+        totalCents: 0,
+        failureStage: null,
+        lineItems: [],
+      },
+    );
+    assert.equal(committed, false);
+    assert.equal(calls.length, 0);
   });
 });

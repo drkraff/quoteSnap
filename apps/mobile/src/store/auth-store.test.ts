@@ -139,6 +139,39 @@ describe('auth-store refreshSession', () => {
     expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
   });
 
+  it('restoreSession shows the local session when refresh times out on a cold API', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
+      switch (key) {
+        case KEYS.ACCESS_TOKEN:
+          return null;
+        case KEYS.REFRESH_TOKEN:
+          return 'valid-refresh';
+        case KEYS.CONTRACTOR:
+          return JSON.stringify(contractor);
+        case KEYS.ONBOARDING_COMPLETE:
+          return 'true';
+        default:
+          return null;
+      }
+    });
+    jest.mocked(authApi.refresh).mockRejectedValue({
+      status: 408,
+      error: 'The server is taking too long to respond. Try again in a moment.',
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(authApi.logout).not.toHaveBeenCalled();
+    expect(useAuthStore.getState()).toMatchObject({
+      contractor,
+      refreshToken: 'valid-refresh',
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    expect(hydrateFromServer).toHaveBeenCalledWith(contractor.id);
+  });
+
   it('restoreSession keeps the local session when refresh fails over the network', async () => {
     jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key: string) => {
       switch (key) {

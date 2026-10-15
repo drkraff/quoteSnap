@@ -28,6 +28,14 @@ export const DELETE_VOICE_LINE_ITEMS_SQL = `DELETE FROM quote_line_items WHERE q
 
 export const INSERT_VOICE_LINE_ITEM_SQL = `INSERT INTO quote_line_items (quote_id, catalog_item_id, name, quantity, unit_price_cents, confidence, unit, price_source, room_id, client_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
 
+/**
+ * Per-draft request version. `voice_job_id` is the generation: a re-record
+ * stores a new id, and a commit from the previous id must not run.
+ * Only the voice pipeline may be written. `sent` and `draft_local` are not
+ * in this list, so a late job cannot unlock a sent quote or replace a newer draft.
+ */
+export const LOCK_CURRENT_VOICE_JOB_SQL = `SELECT id FROM quotes WHERE id = $1 AND voice_job_id = $2 AND status = 'ai_processing' FOR UPDATE`;
+
 function commitPriceSource(item: VoiceCommitLine): SnapshotPriceSource {
   const cents = snapshotUnitPriceCents(item.unitPriceCents);
   if (isSnapshotPriceSource(item.priceSource)) {
@@ -36,16 +44,25 @@ function commitPriceSource(item: VoiceCommitLine): SnapshotPriceSource {
   return inferSnapshotPriceSource(cents);
 }
 
-export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3, client_sentence = COALESCE($4, client_sentence), rooms = COALESCE($5::jsonb, rooms) WHERE id = $6`;
+export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3, client_sentence = COALESCE($4, client_sentence), rooms = COALESCE($5::jsonb, rooms) WHERE id = $6 AND voice_job_id = $7 AND status = 'ai_processing'`;
+
+type VoiceLockResult = { rows?: unknown[] };
 
 /**
  * Replace line items and set quote status in the caller's transaction.
  * Used for a successful draft_local commit and for FAIL-05 partial ai_failed.
+ *
+ * Returns false when this job is no longer the stored voice job, or the quote
+ * is no longer `ai_processing`. The caller must not delete lines in that case.
+ * The lock and the update share the same predicate so a re-record that commits
+ * first cannot lose its lines to this job.
  */
 export async function replaceVoiceQuoteLines(
   client: VoiceCommitClient,
   args: {
     quoteId: string;
+    /** pg-boss id stored on the quote. This is the request generation. */
+    jobId: string;
     lineItems: VoiceCommitLine[];
     status: "draft_local" | "ai_failed";
     totalCents: number;
@@ -55,7 +72,14 @@ export async function replaceVoiceQuoteLines(
     /** Extracted rooms. Null leaves the existing column. */
     roomsJson?: string | null;
   },
-): Promise<void> {
+): Promise<boolean> {
+  const jobId = args.jobId.trim();
+  if (jobId === "") return false;
+  const locked = (await client.query(LOCK_CURRENT_VOICE_JOB_SQL, [args.quoteId, jobId])) as
+    | VoiceLockResult
+    | undefined;
+  const lockedRows = locked && Array.isArray(locked.rows) ? locked.rows : [];
+  if (lockedRows.length === 0) return false;
   await client.query(DELETE_VOICE_LINE_ITEMS_SQL, [args.quoteId]);
   for (const item of args.lineItems) {
     await client.query(INSERT_VOICE_LINE_ITEM_SQL, [
@@ -78,5 +102,7 @@ export async function replaceVoiceQuoteLines(
     args.clientSentence ?? null,
     args.roomsJson ?? null,
     args.quoteId,
+    jobId,
   ]);
+  return true;
 }

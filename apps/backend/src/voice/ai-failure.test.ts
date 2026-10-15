@@ -110,19 +110,33 @@ describe("flagPartialMappingLines", () => {
 describe("markQuoteAiFailed", () => {
   it("parameterizes quote id and stage and only updates ai_processing", async () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
-    await markQuoteAiFailed(
+    const marked = await markQuoteAiFailed(
       async (sql, params) => {
         calls.push({ sql, params });
-        return { rows: [] };
+        return { rows: [{ id: "quote-1" }] };
       },
       "quote-1",
       "asr",
+      "job-current",
     );
+    assert.equal(marked, true);
     assert.equal(calls.length, 1);
     assert.equal(calls[0]!.sql, MARK_QUOTE_AI_FAILED_SQL);
-    assert.deepEqual(calls[0]!.params, ["quote-1", "asr"]);
+    assert.deepEqual(calls[0]!.params, ["quote-1", "asr", "job-current"]);
     assert.match(MARK_QUOTE_AI_FAILED_SQL, /status = 'ai_processing'/);
+    assert.match(MARK_QUOTE_AI_FAILED_SQL, /voice_job_id = \$3/);
     assert.match(MARK_QUOTE_AI_FAILED_SQL, /ai_failure_stage = \$2/);
     assert.equal(MARK_QUOTE_AI_FAILED_SQL.includes("failed_send"), false);
+  });
+
+  it("does not mark a newer job's quote when this job id no longer matches", async () => {
+    const marked = await markQuoteAiFailed(
+      async () => ({ rows: [] }),
+      "quote-1",
+      "mapping",
+      "job-old",
+    );
+    assert.equal(marked, false);
+    assert.equal(await markQuoteAiFailed(async () => ({ rows: [{ id: "quote-1" }] }), "quote-1", "asr", "  "), false);
   });
 });

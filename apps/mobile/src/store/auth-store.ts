@@ -155,8 +155,8 @@ async function restoreSessionOnce(
 
     // A stored access token (even an expired one) plus the cached contractor
     // is enough to paint Quotes from WatermelonDB. Refresh and hydrate follow.
-    // With no access token at all, keep the splash until refresh settles so
-    // the root gate (it requires an access token) does not bounce through login.
+    // With no access token at all, wait for refresh, but a cold-API timeout
+    // still opens Quotes from the on-device database.
     if (epoch !== authEpoch) return;
     if (hasAccessToken) {
       set({

@@ -17,7 +17,13 @@ import { archiveQuote, createQuoteOnServer, unarchiveQuote, updateQuoteOnServer,
 import { upsertRateCardEntry, deleteRateCardEntry } from '../api/rate-card';
 import { Quote } from '../db/models/quote';
 import { Draft } from '../db/models/draft';
-import { applyFailureSchedule, isQueueItemDue, soonestFutureRetryMs } from './sync-retry';
+import {
+  applyFailureSchedule,
+  applySentMarkFailureSchedule,
+  isQueueItemDue,
+  soonestFutureRetryMs,
+} from './sync-retry';
+import { payloadMarksQuoteSent } from './sent-mark-hold';
 import { createSingleFlight } from './single-flight';
 import { resolveAudioQuoteServerId, quoteServerIdFromUploadError } from './audio-parent';
 import { syncQueuedOnboardingProfile, syncQueuedOnboardingSeed } from './offline-onboarding-seed';
@@ -710,10 +716,16 @@ async function deferParentNotReady(item: SyncQueueItem, message: string): Promis
   });
 }
 
+function isSentMarkRetry(item: SyncQueueItem): boolean {
+  return item.entityType === 'quote' && item.action === 'update' && payloadMarksQuoteSent(item.payloadJson);
+}
+
 async function scheduleRetry(item: SyncQueueItem, error: unknown): Promise<void> {
   const errorMessage = queueFailureMessage(error);
   const nextCount = item.retryCount + 1;
-  const schedule = applyFailureSchedule(nextCount, Date.now());
+  const schedule = isSentMarkRetry(item)
+    ? applySentMarkFailureSchedule(nextCount, Date.now())
+    : applyFailureSchedule(nextCount, Date.now());
   await database.write(async () => {
     await item.update((record) => {
       record.retryCount = nextCount;

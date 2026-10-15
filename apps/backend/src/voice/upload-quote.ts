@@ -24,8 +24,19 @@ export type ParseQuoteServerIdResult =
   | { ok: false; error: string };
 
 export type ResolveVoiceUploadQuoteResult =
-  | { ok: true; quoteId: string; created: boolean; replayJobId?: string }
+  | {
+      ok: true;
+      quoteId: string;
+      created: boolean;
+      replayJobId?: string;
+      /** Previous pg-boss id cleared by this upload. The route cancels it. */
+      supersededJobId?: string;
+    }
   | { ok: false; status: 404 | 400; error: string };
+
+function storedJobId(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 const CLIENT_KEY_MAX_LENGTH = 64;
 const CLIENT_KEY_ERROR = `clientKey must be a string of at most ${CLIENT_KEY_MAX_LENGTH} characters`;
@@ -105,7 +116,7 @@ export async function resolveVoiceUploadQuote(
       );
       const row = existing.rows[0] as { id: string; status: string; voice_job_id: string | null } | undefined;
       if (row?.id) {
-        const jobId = typeof row.voice_job_id === "string" ? row.voice_job_id.trim() : "";
+        const jobId = storedJobId(row.voice_job_id);
         if (jobId !== "" && row.status !== "ai_failed") {
           return { ok: true, quoteId: row.id, created: false, replayJobId: jobId };
         }
@@ -113,7 +124,12 @@ export async function resolveVoiceUploadQuote(
           `UPDATE quotes SET status = 'ai_processing', ai_failure_stage = NULL, voice_job_id = NULL WHERE id = $1 AND contractor_id = $2`,
           [row.id, contractorId],
         );
-        return { ok: true, quoteId: row.id, created: false };
+        return {
+          ok: true,
+          quoteId: row.id,
+          created: false,
+          ...(jobId !== "" ? { supersededJobId: jobId } : {}),
+        };
       }
     }
 
@@ -148,7 +164,7 @@ export async function resolveVoiceUploadQuote(
     if (!racedRow?.id) {
       throw new Error("quote client_key conflict did not return the existing row");
     }
-    const racedJob = typeof racedRow.voice_job_id === "string" ? racedRow.voice_job_id.trim() : "";
+    const racedJob = storedJobId(racedRow.voice_job_id);
     if (racedJob !== "" && racedRow.status !== "ai_failed") {
       return { ok: true, quoteId: racedRow.id, created: false, replayJobId: racedJob };
     }
@@ -156,17 +172,24 @@ export async function resolveVoiceUploadQuote(
   }
 
   const existing = await runQuery(
-    `SELECT id FROM quotes WHERE id = $1 AND contractor_id = $2`,
+    `SELECT id, voice_job_id FROM quotes WHERE id = $1 AND contractor_id = $2`,
     [quoteServerId, contractorId],
   );
-  if (existing.rows.length === 0) {
+  const row = existing.rows[0] as { id: string; voice_job_id?: string | null } | undefined;
+  if (!row) {
     return { ok: false, status: 404, error: "Quote not found" };
   }
 
+  const previousJobId = storedJobId(row.voice_job_id);
   await runQuery(
     `UPDATE quotes SET status = 'ai_processing', ai_failure_stage = NULL, voice_job_id = NULL WHERE id = $1 AND contractor_id = $2`,
     [quoteServerId, contractorId],
   );
 
-  return { ok: true, quoteId: quoteServerId, created: false };
+  return {
+    ok: true,
+    quoteId: quoteServerId,
+    created: false,
+    ...(previousJobId !== "" ? { supersededJobId: previousJobId } : {}),
+  };
 }

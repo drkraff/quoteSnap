@@ -317,6 +317,34 @@ describe('processQueue', () => {
     expect(item.nextRetryAt).toBeNull();
   });
 
+  it('keeps a failed sent mark pending after the 15m attempt so it retries', async () => {
+    const quote = makeQuote({
+      id: 'q1',
+      status: 'sent',
+      serverId: 'srv-q1',
+      sentAt: new Date('2026-09-15T12:00:00.000Z'),
+    });
+    quotes = [quote];
+    const item = makeQueueItem({
+      entityType: 'quote',
+      entityId: 'q1',
+      action: 'update',
+      retryCount: 5,
+      payloadJson: JSON.stringify({ status: 'sent' }),
+    });
+    queueItems = [item];
+    mockedUpdateQuoteOnServer.mockRejectedValue(new Error('network down'));
+    const before = Date.now();
+
+    await processQueue();
+
+    expect(item.status).toBe('pending');
+    expect(item.retryCount).toBe(6);
+    expect(item.nextRetryAt).toBeInstanceOf(Date);
+    expect(item.nextRetryAt!.getTime()).toBeGreaterThanOrEqual(before + 15 * 60_000);
+    expect(quote.status).toBe('sent');
+  });
+
   it('re-queues a dead-letter item and processes it (SYNC-04 retry)', async () => {
     const item = makeQueueItem({
       status: 'dead_letter',
