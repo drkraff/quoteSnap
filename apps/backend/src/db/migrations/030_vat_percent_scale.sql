@@ -1,4 +1,4 @@
--- Sales tax can be 8.25. Migration 026 stored vat_percent as INTEGER,
+-- 030. Sales tax can be 8.25. Migration 026 stored vat_percent as INTEGER,
 -- so a fractional percent could not be saved.
 --
 -- This only widens the column to numeric(6, 3). It does not rewrite any
