@@ -11,7 +11,9 @@ import { customerUnitLabel } from '../catalog/units';
 import {
   DEFAULT_CURRENCY,
   formatMoneyCents,
+  formatVatPercent,
   taxLabelForCountry,
+  vatPercentForCountry,
   type CurrencyCode,
 } from '../money/currency';
 import { quoteVatTotals } from '../money/vat';
@@ -208,7 +210,8 @@ export function customerQuoteToDocument(
   const clientSentence = normalizeClientSentence(payload.clientSentence);
   const exclusions = normalizeExclusions(payload.exclusions);
   const currency = payload.currencyCode ?? DEFAULT_CURRENCY;
-  const vatPercent = payload.vatPercent ?? 18;
+  const vatPercent = vatPercentForCountry(payload.countryCode, payload.vatPercent);
+  const vatRateLabel = formatVatPercent(vatPercent);
   const taxLabel = taxLabelForCountry(payload.countryCode);
   const sections = groupCustomerLines(payload.lineItems, currency);
   const totals = quoteVatTotals(payload.totalCents, vatPercent);
@@ -239,6 +242,7 @@ export function customerQuoteToDocument(
     sections,
     subtotalLabel,
     vatPercent,
+    vatRateLabel,
     taxLabel,
     vatLabel,
     totalLabel,
@@ -275,6 +279,7 @@ type DocumentView = {
   sections: CustomerDocumentSection[];
   subtotalLabel: string;
   vatPercent: number;
+  vatRateLabel: string;
   taxLabel: string;
   vatLabel: string;
   totalLabel: string;
@@ -314,7 +319,7 @@ function renderCustomerQuoteText(doc: DocumentView): string {
   }
   lines.push(`Subtotal  ${doc.subtotalLabel}`);
   if (doc.vatLabel !== '') {
-    lines.push(`${doc.taxLabel} ${doc.vatPercent}%  ${doc.vatLabel}`);
+    lines.push(`${doc.taxLabel} ${doc.vatRateLabel}%  ${doc.vatLabel}`);
   }
   lines.push(`Total  ${doc.totalLabel}`);
   if (doc.exclusions) {
@@ -378,7 +383,7 @@ function renderCustomerQuoteHtml(doc: DocumentView): string {
     })
     .join('\n');
   const vatRow = doc.vatLabel !== ''
-    ? `<div class="money"><span>${escapeHtml(doc.taxLabel)} ${doc.vatPercent}%</span><span>${escapeHtml(doc.vatLabel)}</span></div>`
+    ? `<div class="money"><span>${escapeHtml(doc.taxLabel)} ${escapeHtml(doc.vatRateLabel)}%</span><span>${escapeHtml(doc.vatLabel)}</span></div>`
     : '';
 
   return `<!DOCTYPE html>

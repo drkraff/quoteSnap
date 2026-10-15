@@ -10,10 +10,9 @@
 
 import {
   DEFAULT_CURRENCY,
-  DEFAULT_VAT_PERCENT,
   parseCountryCode,
   parseCurrencyCode,
-  parseVatPercent,
+  vatPercentForCountry,
   type CountryCode,
   type CurrencyCode,
 } from '../money/currency';
@@ -85,6 +84,7 @@ export type CustomerQuoteSource = {
 };
 
 export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuotePayload {
+  const countryCode = parseCountryCode(source.countryCode);
   return {
     customerPhone: source.customerPhone,
     customerName: normalizeCustomerName(source.customerName),
@@ -92,8 +92,8 @@ export function toCustomerQuotePayload(source: CustomerQuoteSource): CustomerQuo
     clientSentence: normalizeClientSentence(source.clientSentence),
     exclusions: normalizeExclusions(source.exclusions),
     currencyCode: parseCurrencyCode(source.currencyCode) ?? DEFAULT_CURRENCY,
-    vatPercent: parseVatPercent(source.vatPercent) ?? DEFAULT_VAT_PERCENT,
-    countryCode: parseCountryCode(source.countryCode),
+    vatPercent: vatPercentForCountry(countryCode, source.vatPercent),
+    countryCode,
     lineItems: source.lineItems
       .filter((item) => item.optionRole !== 'alt')
       .map((item) => ({

@@ -74,9 +74,9 @@ export function LocaleStep({
         style={styles.input}
         value={vatText}
         onChangeText={onChangeVat}
-        keyboardType="number-pad"
+        keyboardType="decimal-pad"
         accessibilityLabel={`${taxLabel} percent`}
-        maxLength={3}
+        maxLength={7}
       />
 
       <Pressable

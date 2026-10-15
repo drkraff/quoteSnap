@@ -44,7 +44,7 @@ import {
   isUnknownUnitPrice,
   selectOptionForTotal,
 } from '../../../src/utils/line-items';
-import { taxLabelForCountry } from '../../../src/money/currency';
+import { formatVatPercent, taxLabelForCountry } from '../../../src/money/currency';
 import { useContractorLocale } from '../../../src/money/use-contractor-locale';
 import { quoteVatTotals } from '../../../src/money/vat';
 import {
@@ -1735,7 +1735,7 @@ function DraftScreen(): JSX.Element {
           <Text style={styles.subtotalAmount}>{subtotalDisplay}</Text>
         </View>
         <View style={styles.totalRow}>
-          <Text style={styles.subtotalLabel}>{taxLabelForCountry(locale.countryCode)} {locale.vatPercent}%</Text>
+          <Text style={styles.subtotalLabel}>{taxLabelForCountry(locale.countryCode)} {formatVatPercent(locale.vatPercent)}%</Text>
           <Text style={styles.subtotalAmount}>{vatDisplay}</Text>
         </View>
         <View style={styles.totalRow}>

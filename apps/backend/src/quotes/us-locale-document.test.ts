@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { approvalPageModel, renderApprovalView } from "./approval-page.js";
+import { approvalPageModel, parseSnapshotPayload, renderApprovalView } from "./approval-page.js";
 import { toCustomerQuotePayload } from "./customer-payload.js";
 
 describe("US approval page", () => {
@@ -34,6 +34,47 @@ describe("US approval page", () => {
     assert.match(html, /\$195\.00/);
     assert.equal(html.includes("VAT"), false);
     assert.equal(html.includes("₪"), false);
+  });
+
+  it("uses 0 when a US snapshot is missing its tax percent", () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 112500,
+      currencyCode: "USD",
+      countryCode: "US",
+      lineItems: [
+        { name: "panel", quantity: 1, unitPriceCents: 112500, unit: "each" },
+      ],
+    });
+    assert.equal(payload.vatPercent, 0);
+    assert.equal(payload.countryCode, "US");
+  });
+
+  it("shows 8.25% of $1,125.00 as $92.81 on the approval page", () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 112500,
+      currencyCode: "USD",
+      vatPercent: 8.25,
+      countryCode: "US",
+      lineItems: [
+        { name: "panel", quantity: 1, unitPriceCents: 112500, unit: "each" },
+      ],
+    });
+    assert.equal(payload.vatPercent, 8.25);
+    const stored = parseSnapshotPayload(payload);
+    assert.equal(stored?.vatPercent, 8.25);
+    const page = approvalPageModel({
+      payload,
+      contractorDisplayName: "Ada Electric",
+      contractorTrade: "electrical",
+      token: "tok",
+    });
+    const html = renderApprovalView({ kind: "open", page }).html;
+    assert.match(html, /Sales tax 8\.25%/);
+    assert.match(html, /\$92\.81/);
+    assert.match(html, /\$1,?217\.81|\$1217\.81/);
+    assert.equal(html.includes("VAT"), false);
   });
 
   it("keeps VAT on a snapshot that has no country", () => {

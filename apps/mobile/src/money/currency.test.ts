@@ -3,10 +3,12 @@ import {
   ONBOARDING_COUNTRIES,
   countryChoiceForStoredLocale,
   formatMoneyCents,
+  formatVatPercent,
   localeFromUnknown,
   parseCurrencyCode,
   parseVatPercent,
   taxLabelForCountry,
+  vatPercentForCountry,
 } from './currency';
 
 describe('currency', () => {
@@ -61,7 +63,36 @@ describe('currency', () => {
     expect(parseCurrencyCode('eur')).toBeNull();
     expect(parseVatPercent(18)).toBe(18);
     expect(parseVatPercent(0)).toBe(0);
-    expect(parseVatPercent(18.5)).toBeNull();
+    expect(parseVatPercent(8.25)).toBe(8.25);
+    expect(parseVatPercent('8.250')).toBe(8.25);
+    expect(parseVatPercent('18.000')).toBe(18);
+    expect(parseVatPercent(18.5)).toBe(18.5);
+    expect(parseVatPercent(8.125)).toBe(8.125);
+    expect(formatVatPercent(8.25)).toBe('8.25');
+    expect(formatVatPercent(18)).toBe('18');
+    expect(parseVatPercent(8.2555)).toBeNull();
+    expect(parseVatPercent('8.2555')).toBeNull();
+    expect(parseVatPercent(100.001)).toBeNull();
     expect(parseVatPercent(101)).toBeNull();
+    expect(parseVatPercent(-1)).toBeNull();
+  });
+
+  it('uses 0 when a US account is missing its tax percent and keeps Israel at 18', () => {
+    expect(localeFromUnknown({ countryCode: 'US' })).toMatchObject({
+      countryCode: 'US',
+      vatPercent: 0,
+    });
+    expect(localeFromUnknown({ countryCode: 'US', currencyCode: 'USD', vatPercent: null })).toEqual({
+      countryCode: 'US',
+      currencyCode: 'USD',
+      unitSystem: 'metric',
+      vatPercent: 0,
+    });
+    expect(localeFromUnknown({ countryCode: 'US', vatPercent: 8.25 }).vatPercent).toBe(8.25);
+    expect(localeFromUnknown({ countryCode: 'US', vatPercent: 18 }).vatPercent).toBe(18);
+    expect(localeFromUnknown({ countryCode: 'IL' }).vatPercent).toBe(18);
+    expect(localeFromUnknown({ countryCode: 'IL', vatPercent: 18 }).vatPercent).toBe(18);
+    expect(vatPercentForCountry('IL', '18.000')).toBe(18);
+    expect(vatPercentForCountry(null, undefined)).toBe(18);
   });
 });

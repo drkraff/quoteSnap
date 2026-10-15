@@ -7,7 +7,9 @@
 import { customerUnitLabel } from "../catalog/units.js";
 import {
   formatMoneyCents,
+  formatVatPercent,
   parseCountryCode,
+  parseVatPercent,
   taxLabelForCountry,
   type CurrencyCode,
 } from "../money/currency.js";
@@ -218,10 +220,7 @@ export function parseSnapshotPayload(value: unknown): CustomerQuotePayload | nul
         : null,
     });
   }
-  const vatPercent = typeof obj.vatPercent === "number" && Number.isInteger(obj.vatPercent)
-    && obj.vatPercent >= 0 && obj.vatPercent <= 100
-    ? obj.vatPercent
-    : null;
+  const vatPercent = parseVatPercent(obj.vatPercent);
   const currencyCode = obj.currencyCode === "ILS" || obj.currencyCode === "USD"
     ? obj.currencyCode
     : "USD";
@@ -435,7 +434,7 @@ function renderQuoteBody(page: ApprovalPageModel, decisionHtml: string, actionsH
     ? `<section class="assumptions"><h2>Not included</h2><p class="sentence">${escapeHtml(page.exclusions)}</p></section>`
     : "";
   const vat = page.vatLabel != null && page.vatPercent != null
-    ? `<p class="total"><span>${escapeHtml(page.taxLabel)} ${page.vatPercent}%</span><span>${escapeHtml(page.vatLabel)}</span></p>`
+    ? `<p class="total"><span>${escapeHtml(page.taxLabel)} ${formatVatPercent(page.vatPercent)}%</span><span>${escapeHtml(page.vatLabel)}</span></p>`
     : "";
   const rows = groupApprovalLines(page.lines).map((section) => {
     const heading = section.heading

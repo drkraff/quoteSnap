@@ -1,11 +1,10 @@
 import {
   DEFAULT_CURRENCY,
   DEFAULT_UNIT_SYSTEM,
-  DEFAULT_VAT_PERCENT,
   parseCountryCode,
   parseCurrencyCode,
   parseUnitSystem,
-  parseVatPercent,
+  vatPercentForCountry,
 } from "../money/currency.js";
 import type { ContractorPublic } from "../types/auth.js";
 
@@ -19,7 +18,8 @@ export type ContractorRow = {
   markup_percent?: number | null;
   currency_code?: string | null;
   unit_system?: string | null;
-  vat_percent?: number | null;
+  /** pg numeric arrives as a string ("8.250", "18.000"). */
+  vat_percent?: number | string | null;
   country_code?: string | null;
 };
 
@@ -28,6 +28,7 @@ function integerOrNull(value: unknown): number | null {
 }
 
 export function contractorPublicFromRow(row: ContractorRow): ContractorPublic {
+  const countryCode = parseCountryCode(row.country_code);
   return {
     id: row.id,
     email: row.email,
@@ -38,7 +39,7 @@ export function contractorPublicFromRow(row: ContractorRow): ContractorPublic {
     markupPercent: integerOrNull(row.markup_percent),
     currencyCode: parseCurrencyCode(row.currency_code) ?? DEFAULT_CURRENCY,
     unitSystem: parseUnitSystem(row.unit_system) ?? DEFAULT_UNIT_SYSTEM,
-    vatPercent: parseVatPercent(row.vat_percent) ?? DEFAULT_VAT_PERCENT,
-    countryCode: parseCountryCode(row.country_code),
+    vatPercent: vatPercentForCountry(countryCode, row.vat_percent),
+    countryCode,
   };
 }
