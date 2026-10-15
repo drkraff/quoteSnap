@@ -1,6 +1,7 @@
 import "dotenv/config";
 import type { Server } from "node:http";
 import express, { Request, Response } from "express";
+import { jsonBodyParser } from "./http/json-body.js";
 import { router as authRouter } from "./routes/auth.js";
 import { router as onboardingRouter } from "./routes/onboarding.js";
 import { router as catalogRouter } from "./routes/catalog.js";
@@ -8,6 +9,7 @@ import { router as quotesRouter } from "./routes/quotes.js";
 import { router as rateCardRouter } from "./routes/rate-card.js";
 import { router as voiceRouter } from "./routes/voice.js";
 import { router as approvalRouter } from "./routes/approval.js";
+import { router as feedbackRouter } from "./routes/feedback.js";
 import { boss, initBoss } from "./workers/voice-processor.js";
 import pool from "./db/connection.js";
 import { errorHandler, requestIdMiddleware } from "./log/http.js";
@@ -25,7 +27,7 @@ const PORT = process.env["PORT"] ? parseInt(process.env["PORT"], 10) : 3000;
 
 app.use(requestIdMiddleware);
 applyApiHardening(app);
-app.use(express.json());
+app.use(jsonBodyParser);
 
 // Auth routes
 app.use("/auth", authRouter);
@@ -47,6 +49,9 @@ app.use("/voice", voiceRouter);
 
 // Public customer approval page (snapshot HTML; no app, no session)
 app.use("/q", approvalRouter);
+
+// Beta tester notes. POST is the contractor. GET is ADMIN_TOKEN only.
+app.use("/feedback", feedbackRouter);
 
 // /health is liveness (no database). /ready checks the pool.
 mountHealth(app, {

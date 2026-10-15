@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text } from 'react-native';
+import { SEND_FEEDBACK_LABEL } from '../../src/feedback/copy';
+import { useFeedback } from '../../src/feedback/feedback-context';
 import { LocaleStep } from '../../src/components/onboarding/locale-step';
 import { saveOnboardingProfile, type Trade } from '../../src/api/onboarding';
 import {
@@ -18,6 +20,7 @@ const TRADES = new Set<string>(['plumbing', 'electrical', 'hvac']);
 
 export default function SettingsScreen(): JSX.Element {
   const locale = useContractorLocale();
+  const { open } = useFeedback();
   const [countryCode, setCountryCode] = useState<CountryCode>(countryChoiceForStoredLocale(locale));
   const [vatText, setVatText] = useState(String(locale.vatPercent));
   const [message, setMessage] = useState<string | null>(null);
@@ -81,6 +84,16 @@ export default function SettingsScreen(): JSX.Element {
           continueLabel={saving ? 'Saving…' : 'Save'}
         />
         {message ? <Text style={styles.message}>{message}</Text> : null}
+        <Pressable
+          onPress={() => {
+            void open();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={SEND_FEEDBACK_LABEL}
+          style={styles.feedback}
+        >
+          <Text style={styles.feedbackText}>{SEND_FEEDBACK_LABEL}</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -100,5 +113,15 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: typography.body.fontSize,
     textAlign: 'center',
+  },
+  feedback: {
+    marginTop: spacing.lg,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackText: {
+    color: colors.mutedText,
+    fontSize: typography.body.fontSize,
   },
 });

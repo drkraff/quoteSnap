@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { colors, MIN_TOUCH_TARGET } from '../../theme/tokens';
+import { SendFeedbackHeaderButton } from '../feedback/send-feedback-header-button';
+import { colors, MIN_TOUCH_TARGET, spacing } from '../../theme/tokens';
 import { LogoutHeaderButton } from './logout-header-button';
 
 export const SETTINGS_HEADER_LABEL = 'Settings';
@@ -10,6 +11,7 @@ export function AppHeaderActions(): JSX.Element {
   const router = useRouter();
   return (
     <View style={styles.row}>
+      <SendFeedbackHeaderButton />
       <Pressable
         onPress={() => {
           router.push('/(app)/settings');
@@ -29,6 +31,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
   },
   button: {
     width: MIN_TOUCH_TARGET,
