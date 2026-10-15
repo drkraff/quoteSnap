@@ -1,4 +1,4 @@
-import { parseCatalogUnit } from "../catalog/units.js";
+import { parseCatalogUnit, type CatalogUnit } from "../catalog/units.js";
 import { displayRateCardName } from "../rate-card/normalize.js";
 import {
   isStorableHours,
@@ -127,6 +127,46 @@ function parseVoiceConfidence(value: unknown): number {
   return value;
 }
 
+/**
+ * The transcript named a length in feet or ft and did not say square.
+ * "sq ft" / "sqft" / "square feet" are area, so this stays false.
+ */
+export function transcriptSaysLinearFeet(transcript: string | null | undefined): boolean {
+  if (typeof transcript !== "string" || transcript.trim() === "") {
+    return false;
+  }
+  const lower = transcript.toLowerCase();
+  if (/\bsquare\b|\bsq\.?\s*ft\b|\bsqft\b|\bsq\s*feet\b/.test(lower)) {
+    return false;
+  }
+  return /\b(?:linear\s+)?(?:feet|foot)\b|\bft\b|\d\s*ft\b/.test(lower);
+}
+
+/**
+ * Spoken feet stay feet. An unmatched sqft line becomes foot when the
+ * transcript said feet and not square. A square-foot catalog row does not
+ * replace a spoken foot unit, or a linear-feet line the model also called sqft.
+ */
+export function resolveVoiceUnit(
+  spokenUnit: CatalogUnit | null,
+  catalogUnit: CatalogUnit | null,
+  linearFeet: boolean,
+): CatalogUnit | null {
+  if (spokenUnit === "foot" && catalogUnit === "sqft") {
+    return "foot";
+  }
+  const spokenIsLength = spokenUnit === "foot" || spokenUnit === "sqft";
+  if (linearFeet) {
+    if (catalogUnit == null && spokenIsLength) {
+      return "foot";
+    }
+    if (catalogUnit === "sqft" && (spokenIsLength || spokenUnit == null)) {
+      return "foot";
+    }
+  }
+  return catalogUnit ?? spokenUnit;
+}
+
 function parseVoiceName(value: unknown): string {
   if (typeof value !== "string") {
     return "";
@@ -143,7 +183,9 @@ function parseVoiceName(value: unknown): string {
 export function buildVoiceLineItems(
   aiItems: AILineItem[],
   validCatalogItems: CatalogItemRow[],
+  transcript?: string | null,
 ): BuiltVoiceLine[] {
+  const linearFeet = transcriptSaysLinearFeet(transcript);
   const validCatalogMap = new Map<string, CatalogItemRow>(
     validCatalogItems.map((item) => [item.id, item]),
   );
@@ -163,12 +205,13 @@ export function buildVoiceLineItems(
 
     const catalogUnit = catalogItem ? parseCatalogUnit(catalogItem.unit) : null;
     const spokenUnit = parseCatalogUnit(item.unit);
+    const unit = resolveVoiceUnit(spokenUnit, catalogUnit, linearFeet);
 
     lines.push({
       catalogItemId: catalogId,
       name,
-      quantity: parseVoiceQuantity(item.quantity, catalogUnit ?? spokenUnit),
-      unit: catalogUnit ?? spokenUnit,
+      quantity: parseVoiceQuantity(item.quantity, unit),
+      unit,
       spokenUnitPriceCents: parseSpokenUnitPriceCents(item.spokenUnitPriceCents),
       spokenMaterialCostCents: parseSpokenUnitPriceCents(item.spokenMaterialCostCents),
       catalogUnitPriceCents: catalogItem?.unit_price_cents ?? null,
@@ -218,10 +261,11 @@ export function validateAndBuildLineItems(
     hourlyRateCents?: number | null;
     markupPercent?: number | null;
     spokenHours?: number | null;
+    transcript?: string | null;
   },
 ): { lineItems: ValidatedLineItem[]; totalCents: number } {
   const built = ensureLaborLineFromSpokenHours(
-    buildVoiceLineItems(aiItems, validCatalogItems),
+    buildVoiceLineItems(aiItems, validCatalogItems, options?.transcript),
     options?.spokenHours ?? null,
   );
   const lookup = options?.lookupRateCard;
@@ -252,10 +296,11 @@ export async function validateAndBuildLineItemsAsync(
     hourlyRateCents?: number | null;
     markupPercent?: number | null;
     spokenHours?: number | null;
+    transcript?: string | null;
   },
 ): Promise<{ lineItems: ValidatedLineItem[]; totalCents: number }> {
   const built = ensureLaborLineFromSpokenHours(
-    buildVoiceLineItems(aiItems, validCatalogItems),
+    buildVoiceLineItems(aiItems, validCatalogItems, options?.transcript),
     options?.spokenHours ?? null,
   );
   const lookup = options?.lookupRateCard ?? (() => null);

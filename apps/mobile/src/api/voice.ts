@@ -43,6 +43,8 @@ export interface DraftLineItemsResponse {
   quoteId: string;
   totalCents: number;
   clientSentence?: string | null;
+  /** Spoken "not included" lines. The customer page shows these under Not included. */
+  exclusions?: string | null;
   rooms?: {
     id: string;
     name: string;

@@ -154,6 +154,7 @@ describe('pollOneAiProcessingQuote', () => {
       ]),
       null,
       null,
+      null,
     );
   });
 
@@ -225,7 +226,33 @@ describe('pollOneAiProcessingQuote', () => {
     const row = quote({ voiceJobId: 'job-1' });
 
     await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('draft_ready');
-    expect(api.markDraftReady).toHaveBeenCalledWith(row, '[]', 'appliances not included', null);
+    expect(api.markDraftReady).toHaveBeenCalledWith(row, '[]', 'appliances not included', null, null);
+  });
+
+  it('puts spoken exclusions on the draft for Not included', async () => {
+    const api = deps({
+      getVoiceStatus: jest.fn(async () => ({
+        status: 'complete' as const,
+        draftId: 'srv-1',
+      })),
+      getDraftLineItems: jest.fn(async () => ({
+        quoteId: 'srv-1',
+        totalCents: 8000,
+        clientSentence: 'Replace the outlet.',
+        exclusions: 'permit not included',
+        lineItems: [],
+      })),
+    });
+    const row = quote({ voiceJobId: 'job-1' });
+
+    await expect(pollOneAiProcessingQuote(row, api)).resolves.toBe('draft_ready');
+    expect(api.markDraftReady).toHaveBeenCalledWith(
+      row,
+      '[]',
+      'Replace the outlet.',
+      null,
+      'permit not included',
+    );
   });
 
   it('with serverId and no voiceJobId stays processing when the server has no job yet', async () => {
@@ -342,6 +369,7 @@ describe('pollOneAiProcessingQuote', () => {
       null,
       null,
       'mapping',
+      null,
     );
     expect(api.markDraftReady).not.toHaveBeenCalled();
   });
@@ -497,6 +525,7 @@ describe('pollOneAiProcessingQuote', () => {
       JSON.stringify(nested),
       'appliances not included',
       JSON.stringify([{ id: 'room-1', name: 'Kitchen' }]),
+      null,
     );
     expect(JSON.stringify(api.markDraftReady.mock.calls[0])).not.toMatch(/\$/);
     expect(api.markFailed).not.toHaveBeenCalled();

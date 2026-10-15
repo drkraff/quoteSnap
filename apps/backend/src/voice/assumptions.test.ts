@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { CLIENT_SENTENCE_MAX_LENGTH } from "../quotes/client-sentence.js";
-import { joinAssumptionsToClientSentence } from "./assumptions.js";
+import { joinAssumptionsToClientSentence, splitVoiceCustomerCopy } from "./assumptions.js";
 
 describe("joinAssumptionsToClientSentence", () => {
   it("joins extract assumptions into one editable quote-level string", () => {
@@ -50,6 +50,34 @@ describe("joinAssumptionsToClientSentence", () => {
   it("caps length so a transcript cannot dump into the column", () => {
     const tooLong = "x".repeat(CLIENT_SENTENCE_MAX_LENGTH + 8);
     expectLength(joinAssumptionsToClientSentence([tooLong]), CLIENT_SENTENCE_MAX_LENGTH);
+  });
+});
+
+describe("splitVoiceCustomerCopy", () => {
+  it("keeps the sentence as the note and puts spoken exclusions in Not included", () => {
+    const both = splitVoiceCustomerCopy(
+      {
+        clientSentence: "Replace the kitchen outlet.",
+        assumptions: ["permit not included"],
+      },
+      "Replace the kitchen outlet. Permit not included.",
+    );
+    assert.equal(both.clientSentence, "Replace the kitchen outlet.");
+    assert.equal(both.exclusions, "permit not included");
+
+    const spokenOnly = splitVoiceCustomerCopy(
+      { clientSentence: null, assumptions: [] },
+      "outlet install, permit not included",
+    );
+    assert.equal(spokenOnly.clientSentence, null);
+    assert.equal(spokenOnly.exclusions, "permit not included");
+
+    const none = splitVoiceCustomerCopy(
+      { clientSentence: "Replace the outlet.", assumptions: [] },
+      "Replace the outlet.",
+    );
+    assert.equal(none.clientSentence, "Replace the outlet.");
+    assert.equal(none.exclusions, null);
   });
 });
 

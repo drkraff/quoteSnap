@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { customerUnitLabel } from '../catalog/units.js';
 import {
   buildVoiceLineItems,
   filterUuidCatalogIds,
@@ -403,6 +404,86 @@ describe('validateAndBuildLineItemsAsync', () => {
     assert.equal(lineItems[0]!.unitPriceCents, null);
     assert.equal(lineItems[0]!.priceSource, 'unknown');
     assert.equal(totalCents, 0);
+  });
+});
+
+describe('linear feet stay feet', () => {
+  const sqftCable: CatalogItemRow = {
+    id: 'cat-sq',
+    name: 'Cable',
+    unit_price_cents: 900,
+    unit: 'sqft',
+  };
+
+  it('keeps 14 feet of cable in ft when the model says sqft', () => {
+    const { lineItems } = validateAndBuildLineItems(
+      [{ name: 'Cable', quantity: 14, unit: 'sqft', spokenUnitPriceCents: 450, confidence: 0.8 }],
+      [],
+      {
+        transcript: '14 feet of cable at $4.50 a foot',
+        lookupRateCard: () => 1200,
+      },
+    );
+    assert.equal(lineItems[0]!.quantity, 14);
+    assert.equal(lineItems[0]!.unit, 'foot');
+    assert.equal(customerUnitLabel(lineItems[0]!.unit), 'ft');
+    assert.equal(lineItems[0]!.unitPriceCents, 450);
+    assert.equal(lineItems[0]!.priceSource, 'spoken');
+  });
+
+  it('does not let a square-foot catalog row replace a spoken foot unit', () => {
+    const spokenFoot = validateAndBuildLineItems(
+      [{
+        catalogItemId: 'cat-sq',
+        name: 'Cable',
+        quantity: 14,
+        unit: 'foot',
+        spokenUnitPriceCents: 450,
+        confidence: 0.9,
+      }],
+      [sqftCable],
+      { transcript: '14 feet of cable', lookupRateCard: () => 1200 },
+    );
+    assert.equal(spokenFoot.lineItems[0]!.catalogItemId, 'cat-sq');
+    assert.equal(spokenFoot.lineItems[0]!.unit, 'foot');
+    assert.equal(customerUnitLabel(spokenFoot.lineItems[0]!.unit), 'ft');
+    assert.equal(spokenFoot.lineItems[0]!.unitPriceCents, 450);
+    assert.equal(spokenFoot.lineItems[0]!.priceSource, 'spoken');
+
+    const modelSqft = validateAndBuildLineItems(
+      [{
+        catalogItemId: 'cat-sq',
+        name: 'Cable',
+        quantity: 14,
+        unit: 'sqft',
+        confidence: 0.8,
+      }],
+      [sqftCable],
+      { transcript: '14 ft of cable' },
+    );
+    assert.equal(modelSqft.lineItems[0]!.unit, 'foot');
+    assert.equal(customerUnitLabel(modelSqft.lineItems[0]!.unit), 'ft');
+  });
+
+  it('leaves a real square-foot line alone and does not retag each', () => {
+    const flooring = validateAndBuildLineItems(
+      [{ name: 'Flooring', quantity: 200, unit: 'sqft', confidence: 0.8 }],
+      [],
+      { transcript: '200 square feet of flooring' },
+    );
+    assert.equal(flooring.lineItems[0]!.unit, 'sqft');
+    assert.equal(customerUnitLabel(flooring.lineItems[0]!.unit), 'sq ft');
+
+    const mixed = buildVoiceLineItems(
+      [
+        { name: 'Cable', quantity: 14, unit: 'sqft', confidence: 0.8 },
+        { name: 'Outlet', quantity: 1, unit: 'each', confidence: 0.8 },
+      ],
+      [],
+      '14 feet of cable and one outlet',
+    );
+    assert.equal(mixed[0]!.unit, 'foot');
+    assert.equal(mixed[1]!.unit, 'each');
   });
 });
 

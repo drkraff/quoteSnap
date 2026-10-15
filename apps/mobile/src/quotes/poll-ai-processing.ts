@@ -30,6 +30,7 @@ export type RemoteQuoteForPoll = {
     status: string;
     voiceJobId: string | null;
     clientSentence?: string | null;
+    exclusions?: string | null;
     rooms?: unknown;
     failureStage?: AiFailureStage;
   };
@@ -45,6 +46,7 @@ export type PollAiProcessingDeps = {
     lineItemsJson: string,
     clientSentence?: string | null,
     roomsJson?: string | null,
+    exclusions?: string | null,
   ) => Promise<void>;
   markFailed: (
     quote: PollableAiQuote,
@@ -52,6 +54,7 @@ export type PollAiProcessingDeps = {
     clientSentence?: string | null,
     roomsJson?: string | null,
     failureStage?: AiFailureStage | null,
+    exclusions?: string | null,
   ) => Promise<void>;
   stampVoiceJobId: (quote: PollableAiQuote, jobId: string) => Promise<void>;
 };
@@ -76,6 +79,7 @@ function roomsJsonFromUnknown(rooms: unknown): string | null {
 type CompleteDraftSeed = {
   lineItems?: RemoteQuoteLineItem[];
   clientSentence?: string | null;
+  exclusions?: string | null;
   rooms?: unknown;
 };
 
@@ -120,6 +124,7 @@ async function applyComplete(
       lineItemsJsonFromUnknown(draftData.lineItems),
       draftData.clientSentence ?? null,
       roomsJsonFromUnknown(draftData.rooms),
+      draftData.exclusions ?? null,
     );
     return 'draft_ready';
   } catch {
@@ -134,6 +139,7 @@ async function applyComplete(
         lineItemsJsonFromUnknown(seed.lineItems),
         seed.clientSentence ?? null,
         roomsJsonFromUnknown(seed.rooms),
+        seed.exclusions ?? null,
       );
       return 'draft_ready';
     }
@@ -148,22 +154,24 @@ async function markFailedFromSeed(
   seed: {
     clientSentence?: string | null;
     roomsJson?: string | null;
+    exclusions?: string | null;
     failureStage?: unknown;
   } = {},
 ): Promise<void> {
   const failureStage = parseAiFailureStage(seed.failureStage);
-  if (seed.clientSentence !== undefined || seed.roomsJson !== undefined) {
-    if (failureStage) {
-      await deps.markFailed(
-        quote,
-        lineItemsJson,
-        seed.clientSentence,
-        seed.roomsJson,
-        failureStage,
-      );
-      return;
-    }
-    await deps.markFailed(quote, lineItemsJson, seed.clientSentence, seed.roomsJson);
+  if (
+    seed.clientSentence !== undefined
+    || seed.roomsJson !== undefined
+    || seed.exclusions !== undefined
+  ) {
+    await deps.markFailed(
+      quote,
+      lineItemsJson,
+      seed.clientSentence,
+      seed.roomsJson,
+      failureStage ?? undefined,
+      seed.exclusions,
+    );
     return;
   }
   if (failureStage) {
@@ -209,6 +217,7 @@ async function applyFailed(
         {
           clientSentence: draftData.clientSentence ?? null,
           roomsJson: roomsJsonFromUnknown(draftData.rooms),
+          exclusions: draftData.exclusions ?? null,
           failureStage: seed.failureStage,
         },
       );
@@ -288,6 +297,7 @@ export async function pollOneAiProcessingQuote(
     return applyComplete(quote, quote.serverId, deps, {
       lineItems: remote.lineItems,
       clientSentence: remote.quote.clientSentence ?? null,
+      exclusions: remote.quote.exclusions ?? null,
       rooms: remote.quote.rooms,
     });
   }

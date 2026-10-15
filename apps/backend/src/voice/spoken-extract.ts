@@ -74,22 +74,66 @@ function setSpokenPrice(item: AILineItem, cents: number): void {
   item.spokenUnitPriceCents = cents;
 }
 
+const HOUR_WORD =
+  "\\d+(?:\\.\\d+)?|twelve|eleven|ten|nine|eight|seven|six|five|four|three|two|one|an|a";
+
+const HOUR_WORD_VALUES: Record<string, number> = {
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+};
+
+function hoursFromToken(token: string): number | null {
+  const word = HOUR_WORD_VALUES[token];
+  if (word != null) {
+    return word;
+  }
+  const amount = Number(token);
+  return Number.isFinite(amount) ? amount : null;
+}
+
 /**
- * Explicit hour phrases only. "half an hour" is 0.5. A digit hour
- * ("3h", "3 hours") wins when both appear. No phrase → null (do not guess).
+ * Explicit hour phrases only. "half an hour" is 0.5. "N and a half hours"
+ * and "an hour and a half" are N+0.5 and are read before the bare half-hour
+ * rule, so they are not collapsed to 0.5. A digit hour ("3h", "3 hours")
+ * wins when no "and a half" phrase is present. No phrase → null (do not guess).
  */
 export function spokenHoursFromTranscript(transcript: string): number | null {
   const lower = transcript.toLowerCase();
+  const andHalf = new RegExp(
+    String.raw`\b(${HOUR_WORD})\s+and\s+a\s+half\s+hours?\b|\b(${HOUR_WORD})\s+hours?\s+and\s+a\s+half\b`,
+    "i",
+  ).exec(lower);
+  if (andHalf) {
+    const base = hoursFromToken(andHalf[1] ?? andHalf[2] ?? "");
+    if (base != null) {
+      const hours = parseSpokenHours(base + 0.5);
+      if (hours != null) {
+        return hours;
+      }
+    }
+  }
   const explicit = [...lower.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/g)];
-  const half = /\b(?:a\s+)?half(?:\s+an)?\s+hours?\b|\bhalf\s+an\s+hr\b|\b30\s+minutes?\b/.test(
-    lower,
-  );
   if (explicit.length > 0) {
     const hours = parseSpokenHours(Number(explicit[0]![1]));
     if (hours != null) {
       return hours;
     }
   }
+  const half = /\b(?:a\s+)?half(?:\s+an)?\s+hours?\b|\bhalf\s+an\s+hr\b|\b30\s+minutes?\b/.test(
+    lower,
+  );
   if (half) {
     return 0.5;
   }
@@ -129,6 +173,54 @@ function lineForPhrase(items: AILineItem[], phrase: string): AILineItem | null {
   return null;
 }
 
+function unitHintFromTail(tail: string): "foot" | null {
+  if (/^\s*(?:a|per)\s+(?:linear\s+)?(?:foot|feet|ft)\b/i.test(tail)) {
+    return "foot";
+  }
+  return null;
+}
+
+/** "$4.50 a foot" belongs on the one length line, even if the model said sqft. */
+function lineForSpokenPrice(
+  items: AILineItem[],
+  phrase: string,
+  unitHint: "foot" | null,
+): AILineItem | null {
+  if (unitHint === "foot") {
+    const lengthLines = materialLines(items).filter((item) => {
+      const unit = parseCatalogUnit(item.unit);
+      return unit === "foot" || unit === "sqft";
+    });
+    if (lengthLines.length === 1) {
+      return lengthLines[0]!;
+    }
+  }
+  return lineForPhrase(items, phrase);
+}
+
+function phraseAroundAmount(text: string, start: number, end: number): string {
+  const after = text.slice(end, Math.min(text.length, end + 48));
+  const named = after.match(/^\s*(?:for|on)\s+([^,]+)/i);
+  if (named?.[1]) {
+    return (named[1].split(/\band\b/i)[0] ?? named[1]).trim();
+  }
+  return text.slice(Math.max(0, start - 48), start);
+}
+
+function attachSpokenAmount(
+  items: AILineItem[],
+  text: string,
+  start: number,
+  end: number,
+  cents: number,
+): void {
+  const tail = text.slice(end, Math.min(text.length, end + 24));
+  const line = lineForSpokenPrice(items, phraseAroundAmount(text, start, end), unitHintFromTail(tail));
+  if (line && line.spokenUnitPriceCents == null) {
+    setSpokenPrice(line, cents);
+  }
+}
+
 function alreadyHasLump(items: AILineItem[], name: string, cents: number): boolean {
   return items.some((item) => {
     if (!namesMatch(item.name ?? "", name) && !namesMatch(name, item.name ?? "")) {
@@ -153,7 +245,7 @@ export function supplementSpokenExtract(
   const consumed: Span[] = [];
 
   const eachRe = new RegExp(
-    String.raw`([a-z][a-z0-9\s]{0,40}?)?\s*(\d+(?:\.\d+)?)\s*${CURRENCY}?\s*each\b`,
+    String.raw`([a-z][a-z0-9\s]{0,40}?)?\s*\$?\s*(\d+(?:\.\d+)?)\s*${CURRENCY}?\s*each\b`,
     "gi",
   );
   for (const match of text.matchAll(eachRe)) {
@@ -204,6 +296,22 @@ export function supplementSpokenExtract(
     });
   }
 
+  // "$80" and "$4.50 a foot" put the dollar sign before the amount.
+  const dollarRe = /\$\s*(\d+(?:\.\d+)?)(?!\d)/gi;
+  for (const match of text.matchAll(dollarRe)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (overlaps(consumed, start, end)) {
+      continue;
+    }
+    const cents = centsFromAmount(match[1] ?? "");
+    if (cents == null) {
+      continue;
+    }
+    consumed.push({ start, end });
+    attachSpokenAmount(next, text, start, end, cents);
+  }
+
   const bareRe = new RegExp(String.raw`\b(\d+(?:\.\d+)?)\s*${CURRENCY}\b`, "gi");
   for (const match of text.matchAll(bareRe)) {
     const start = match.index ?? 0;
@@ -215,12 +323,8 @@ export function supplementSpokenExtract(
     if (cents == null) {
       continue;
     }
-    const windowStart = Math.max(0, start - 40);
-    const phrase = text.slice(windowStart, start);
-    const line = lineForPhrase(next, phrase);
-    if (line && line.spokenUnitPriceCents == null) {
-      setSpokenPrice(line, cents);
-    }
+    consumed.push({ start, end });
+    attachSpokenAmount(next, text, start, end, cents);
   }
 
   const fromTranscript = spokenHoursFromTranscript(transcript);

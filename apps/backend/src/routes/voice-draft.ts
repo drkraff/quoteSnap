@@ -22,7 +22,7 @@ export function createVoiceDraftHandler(runQuery: QuotesRouteQuery): RequestHand
       }
 
       const quoteResult = await runQuery(
-        `SELECT id, status, total_cents, client_sentence, rooms FROM quotes WHERE id = $1 AND contractor_id = $2`,
+        `SELECT id, status, total_cents, client_sentence, exclusions, rooms FROM quotes WHERE id = $1 AND contractor_id = $2`,
         [quoteId, contractorId],
       );
 
@@ -36,6 +36,7 @@ export function createVoiceDraftHandler(runQuery: QuotesRouteQuery): RequestHand
         status: string;
         total_cents: number;
         client_sentence: string | null;
+        exclusions: string | null;
         rooms: unknown;
       };
 
@@ -85,6 +86,7 @@ export function createVoiceDraftHandler(runQuery: QuotesRouteQuery): RequestHand
         quoteId,
         totalCents: quoteRow.total_cents,
         clientSentence: quoteRow.client_sentence ?? null,
+        exclusions: quoteRow.exclusions ?? null,
         rooms: roomsFromDb(quoteRow.rooms),
         lineItems,
       });
