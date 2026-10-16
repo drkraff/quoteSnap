@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { INVALID_TRADE_ERROR } from "./seed.js";
 import {
   HOURLY_RATE_REQUIRED_ERROR,
+  LOCALE_ERROR,
   MARKUP_PERCENT_ERROR,
   SELECT_CONTRACTOR_FOR_PROFILE_SQL,
   UPDATE_CONTRACTOR_PROFILE_SQL,
@@ -88,6 +89,29 @@ describe("parseOnboardingProfileBody", () => {
       countryCode: "FR",
     });
     assert.equal(rejected.ok, false);
+  });
+
+  it("accepts a sales-tax percent with up to 3 decimal places", () => {
+    const parsed = parseOnboardingProfileBody({
+      trade: "electrical",
+      hourlyRateCents: 8500,
+      countryCode: "US",
+      currencyCode: "USD",
+      unitSystem: "imperial",
+      vatPercent: 8.25,
+    });
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) assert.equal(parsed.vatPercent, 8.25);
+
+    for (const vatPercent of [8.2555, 100.001, -1, 101]) {
+      const rejected = parseOnboardingProfileBody({
+        trade: "electrical",
+        hourlyRateCents: 8500,
+        vatPercent,
+      });
+      assert.equal(rejected.ok, false);
+      if (!rejected.ok) assert.equal(rejected.error, LOCALE_ERROR);
+    }
   });
 
   it("rejects markup outside 0-100 integers", () => {

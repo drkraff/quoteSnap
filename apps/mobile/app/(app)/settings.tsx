@@ -7,6 +7,7 @@ import { saveOnboardingProfile, type Trade } from '../../src/api/onboarding';
 import {
   COUNTRY_PRESETS,
   countryChoiceForStoredLocale,
+  formatVatPercent,
   parseVatPercent,
   type CountryCode,
 } from '../../src/money/currency';
@@ -22,14 +23,14 @@ export default function SettingsScreen(): JSX.Element {
   const locale = useContractorLocale();
   const { open } = useFeedback();
   const [countryCode, setCountryCode] = useState<CountryCode>(countryChoiceForStoredLocale(locale));
-  const [vatText, setVatText] = useState(String(locale.vatPercent));
+  const [vatText, setVatText] = useState(formatVatPercent(locale.vatPercent));
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const vatPercent = parseVatPercent(Number(vatText));
+  const vatPercent = parseVatPercent(vatText);
 
   function selectCountry(next: CountryCode): void {
     setCountryCode(next);
-    setVatText(String(COUNTRY_PRESETS[next].vatPercent));
+    setVatText(formatVatPercent(COUNTRY_PRESETS[next].vatPercent));
   }
 
   async function handleSave(): Promise<void> {

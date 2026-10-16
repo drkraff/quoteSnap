@@ -368,6 +368,42 @@ describe('US customer page', () => {
     expect(payload.countryCode).toBe('US');
   });
 
+  it('prints 8.25% of $1,125.00 as $92.81', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 112500,
+      currencyCode: 'USD',
+      vatPercent: 8.25,
+      countryCode: 'US',
+      lineItems: [
+        { name: 'panel', quantity: 1, unitPriceCents: 112500, unit: 'each' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload);
+    expect(payload.vatPercent).toBe(8.25);
+    expect(doc.html).toContain('Sales tax 8.25%');
+    expect(doc.html).toContain('$92.81');
+    expect(doc.totalLabel).toBe('$1217.81');
+    expect(doc.text).toContain('Sales tax 8.25%  $92.81');
+    expect(doc.html).not.toContain('VAT');
+  });
+
+  it('uses 0 when a US quote is missing its tax percent', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 4500,
+      currencyCode: 'USD',
+      countryCode: 'US',
+      lineItems: [
+        { name: 'cable', quantity: 10, unitPriceCents: 450, unit: 'foot' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload);
+    expect(payload.vatPercent).toBe(0);
+    expect(doc.html).toContain('Sales tax 0%');
+    expect(doc.html).not.toContain('18%');
+  });
+
   it('prints a zero sales-tax line instead of inventing a rate', () => {
     const payload = toCustomerQuotePayload({
       customerPhone: null,
