@@ -174,6 +174,18 @@ function quantityLabel(quantity: number, unit: string | null): string {
   return label ? `${quantity} ${label}` : `${quantity} ${unit}`;
 }
 
+/**
+ * Postgres numeric quantities are strings in JSON ("10.00", "0.50").
+ * A number is kept. Anything else is not a quantity.
+ */
+function parseSnapshotQuantity(value: unknown): number | null {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) {
+    return null;
+  }
+  return Math.round(n * 100) / 100;
+}
+
 export function parseSnapshotPayload(value: unknown): CustomerQuotePayload | null {
   let raw = value;
   if (typeof raw === "string") {
@@ -199,7 +211,8 @@ export function parseSnapshotPayload(value: unknown): CustomerQuotePayload | nul
       return null;
     }
     const line = entry as Record<string, unknown>;
-    if (typeof line.name !== "string" || typeof line.quantity !== "number") {
+    const quantity = parseSnapshotQuantity(line.quantity);
+    if (typeof line.name !== "string" || quantity == null) {
       return null;
     }
     let unitPriceCents: number | null;
@@ -212,7 +225,7 @@ export function parseSnapshotPayload(value: unknown): CustomerQuotePayload | nul
     }
     lineItems.push({
       name: line.name,
-      quantity: line.quantity,
+      quantity,
       unitPriceCents,
       unit: typeof line.unit === "string" ? line.unit : null,
       roomName: typeof line.roomName === "string" && line.roomName.trim() !== ""

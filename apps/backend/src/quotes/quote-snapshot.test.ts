@@ -8,6 +8,7 @@ import {
   customerPayloadHasPrivateNoteKey,
   customerQuotePayloadKeys,
 } from "./customer-payload.js";
+import { parseSnapshotPayload } from "./approval-page.js";
 import {
   INSERT_QUOTE_SNAPSHOT_SQL,
   SELECT_SNAPSHOT_FOR_QUOTE_SQL,
@@ -121,6 +122,52 @@ describe("buildQuoteSnapshotPayload", () => {
     assert.equal(payload.lineItems[0]!.unitPriceCents, null);
     assert.equal(payload.totalCents, 0);
     assert.equal(payload.clientSentence, null);
+  });
+
+  it("stores a number when Postgres returns a numeric quantity as a string", () => {
+    const payload = buildQuoteSnapshotPayload({
+      quote: quote({ total_cents: 19500 }),
+      lineItems: [
+        line({
+          name: "12/2 cable",
+          quantity: "10.00" as unknown as number,
+          unit_price_cents: 450,
+          unit: "foot",
+          room_id: null,
+          catalog_item_id: null,
+        }),
+        line({
+          id: "66666666-6666-4666-8666-666666666666",
+          name: "Labor",
+          quantity: "0.50" as unknown as number,
+          unit_price_cents: 7500,
+          unit: "hour",
+          room_id: null,
+          catalog_item_id: null,
+        }),
+      ],
+    });
+    assert.equal(payload.lineItems[0]!.quantity, 10);
+    assert.equal(payload.lineItems[1]!.quantity, 0.5);
+
+    const fromStoredString = parseSnapshotPayload({
+      customerPhone: null,
+      totalCents: 19500,
+      currencyCode: "USD",
+      vatPercent: 0,
+      countryCode: "US",
+      lineItems: [
+        { name: "12/2 cable", quantity: "10.00", unitPriceCents: 450, unit: "foot", roomName: null },
+        { name: "Labor", quantity: "0.50", unitPriceCents: 7500, unit: "hour", roomName: null },
+      ],
+    });
+    assert.ok(fromStoredString);
+    assert.equal(fromStoredString.lineItems[0]!.quantity, 10);
+    assert.equal(fromStoredString.lineItems[1]!.quantity, 0.5);
+    assert.equal(parseSnapshotPayload({
+      totalCents: 1,
+      lineItems: [{ name: "Cable", quantity: "nope", unitPriceCents: 1 }],
+    }), null);
   });
 });
 

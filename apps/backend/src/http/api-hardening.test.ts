@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
@@ -36,7 +37,33 @@ async function post(
   return { status: res.status, body: await res.json() as { ok?: boolean; ip?: string } };
 }
 
+function proxyAddrVersion(): string {
+  const require = createRequire(import.meta.url);
+  const pkg = require("proxy-addr/package.json") as { version: string };
+  return pkg.version;
+}
+
+/** 2.0.8 fixes GHSA-jqcg-44mw-7w3h. Later 2.x and 3+ stay acceptable. */
+function isPatchedProxyAddr(version: string): boolean {
+  const parts = version.split(".").map((part) => Number(part));
+  const major = parts[0] ?? 0;
+  const minor = parts[1] ?? 0;
+  const patch = parts[2] ?? 0;
+  if (major > 2) return true;
+  if (major < 2) return false;
+  if (minor > 0) return true;
+  return patch >= 8;
+}
+
 describe("applyApiHardening", () => {
+  it("trusts one hop and loads a patched proxy-addr", () => {
+    const app = express();
+    applyApiHardening(app);
+    assert.equal(app.get("trust proxy"), 1);
+    const version = proxyAddrVersion();
+    assert.equal(isPatchedProxyAddr(version), true, version);
+  });
+
   it("keys the production auth limiter on each forwarded client and sets API headers", async () => {
     const app = express();
     applyApiHardening(app);
@@ -58,6 +85,13 @@ describe("applyApiHardening", () => {
       assert.equal(probe.headers.get("x-frame-options"), "DENY");
       assert.equal(probe.headers.get("referrer-policy"), "no-referrer");
       assert.equal(probe.headers.get("x-powered-by"), null);
+
+      const spoofed = await post(
+        `${server.url}/auth/register`,
+        "198.51.100.8, 203.0.113.50",
+      );
+      assert.equal(spoofed.status, 201);
+      assert.equal(spoofed.body.ip, "203.0.113.50");
     } finally {
       await server.close();
     }
