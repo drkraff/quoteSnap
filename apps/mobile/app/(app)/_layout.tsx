@@ -14,7 +14,7 @@ export default function AppLayout(): JSX.Element {
   return (
     <Tabs
       screenOptions={{
-        headerTitle: 'QuoteSnap',
+        headerTitle: 'Vela',
         headerRight: () => <AppHeaderActions />,
         headerStyle: { backgroundColor: colors.dominant },
         headerShadowVisible: false,

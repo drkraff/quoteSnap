@@ -84,7 +84,7 @@ describe('shareCustomerQuote', () => {
     expect(html).not.toContain('priceSource');
     expect(html).not.toContain('price_source');
     expect(deps.shareFile).toHaveBeenCalledWith(
-      'file:///cache/QuoteSnap-quote.pdf',
+      'file:///cache/Vela-quote.pdf',
       expect.objectContaining({ mimeType: 'application/pdf' }),
     );
   });
@@ -175,7 +175,7 @@ describe('shareCustomerQuote', () => {
     expect(html).not.toContain(SECRET_JOB);
     expect(html).not.toContain(SECRET_LINE);
     expect(deps.shareFile).toHaveBeenCalledWith(
-      'file:///cache/QuoteSnap-quote.html',
+      'file:///cache/Vela-quote.html',
       expect.objectContaining({ mimeType: 'text/html' }),
     );
   });

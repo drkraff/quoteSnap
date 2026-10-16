@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 export const ROOT_ERROR_TITLE = 'Something went wrong';
 
 export const ROOT_ERROR_BODY =
-  'QuoteSnap could not show this screen. Your quotes are still on this phone.';
+  'Vela could not show this screen. Your quotes are still on this phone.';
 
 export const ROOT_ERROR_RETRY = 'Try again';
 

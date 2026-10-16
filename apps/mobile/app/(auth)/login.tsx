@@ -46,7 +46,7 @@ export default function Login(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>QuoteSnap</Text>
+      <Text style={styles.title}>Vela</Text>
       <Text style={styles.subtitle}>Log in to your account</Text>
 
       <TextInput

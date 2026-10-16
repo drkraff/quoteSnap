@@ -48,7 +48,7 @@ describe('customerQuoteToDocument', () => {
     expect(doc.text).toContain('Plumbing');
     expect(doc.text).toContain(CUSTOMER_ASSUMPTIONS_HEADING);
     expect(doc.text).toContain('Appliances and decorative lighting not included.');
-    expect(doc.filename).toBe('QuoteSnap-quote.pdf');
+    expect(doc.filename).toBe('Vela-quote.pdf');
   });
 
   it('omits an empty client sentence and does not invent job-scope copy', () => {
