@@ -68,10 +68,70 @@ export function parseUnitSystem(value: unknown): UnitSystem | null {
   return (UNIT_SYSTEMS as readonly string[]).includes(system) ? (system as UnitSystem) : null;
 }
 
+/** Thousandths of a percent. 8.25% is 8250. 100% is 100000. */
+export const VAT_PERCENT_MILLI_SCALE = 1000;
+
+const VAT_PERCENT_MILLI_MAX = 100 * VAT_PERCENT_MILLI_SCALE;
+
+/**
+ * Integer thousandths of a percent, or null when the value is not a rate
+ * from 0 to 100 with at most 3 decimal places.
+ * pg `numeric` arrives as a string ("8.250", "18.000").
+ */
+export function vatPercentMilli(value: unknown): number | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    const scaled = value * VAT_PERCENT_MILLI_SCALE;
+    const milli = Math.round(scaled);
+    if (Math.abs(scaled - milli) > 1e-6) return null;
+    if (milli < 0 || milli > VAT_PERCENT_MILLI_MAX) return null;
+    return milli;
+  }
+  if (typeof value === "string") return milliFromDecimalText(value);
+  return null;
+}
+
+function milliFromDecimalText(text: string): number | null {
+  const match = /^(\d{1,3})(?:\.(\d+))?$/.exec(text.trim());
+  if (!match) return null;
+  const whole = Number(match[1]);
+  const frac = match[2] ?? "";
+  if (frac.length > 3 && /[^0]/.test(frac.slice(3))) return null;
+  const fracMilli = Number((frac + "000").slice(0, 3));
+  if (!Number.isInteger(whole) || !Number.isInteger(fracMilli)) return null;
+  const milli = whole * VAT_PERCENT_MILLI_SCALE + fracMilli;
+  if (milli < 0 || milli > VAT_PERCENT_MILLI_MAX) return null;
+  return milli;
+}
+
+/** 0–100 with at most 3 decimal places. 8.25 and the pg string "8.250" are 8.25. */
 export function parseVatPercent(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isInteger(value)) return null;
-  if (value < 0 || value > 100) return null;
-  return value;
+  const milli = vatPercentMilli(value);
+  if (milli == null) return null;
+  return milli / VAT_PERCENT_MILLI_SCALE;
+}
+
+/** "8.25", "18", "0". Empty when the value is not a stored rate. */
+export function formatVatPercent(value: number): string {
+  const milli = vatPercentMilli(value);
+  if (milli == null) return "";
+  const whole = Math.trunc(milli / VAT_PERCENT_MILLI_SCALE);
+  const frac = milli % VAT_PERCENT_MILLI_SCALE;
+  if (frac === 0) return String(whole);
+  return `${whole}.${String(frac).padStart(3, "0").replace(/0+$/, "")}`;
+}
+
+/**
+ * A missing percent on a US account is 0. Israel, and a country that has
+ * not been chosen yet, stay at 18. A stored percent is kept either way.
+ */
+export function vatPercentForCountry(
+  country: CountryCode | null | undefined,
+  value: unknown,
+): number {
+  const parsed = parseVatPercent(value);
+  if (parsed != null) return parsed;
+  return country === "US" ? 0 : DEFAULT_VAT_PERCENT;
 }
 
 export function parseCountryCode(value: unknown): CountryCode | null {

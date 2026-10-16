@@ -23,7 +23,7 @@ import {
   type SnapshotQueryFn,
 } from "./quote-snapshot.js";
 import type { SmsSender } from "./sms-sender.js";
-import { parseCountryCode } from "../money/currency.js";
+import { parseCountryCode, parseVatPercent } from "../money/currency.js";
 
 export const SEND_PHONE_REQUIRED_ERROR = "A customer phone number is required to send";
 export const SEND_PHONE_INVALID_ERROR =
@@ -200,7 +200,7 @@ export async function sendQuoteForApproval(
     display_name: string | null;
     trade: string | null;
     currency_code?: string | null;
-    vat_percent?: number | null;
+    vat_percent?: number | string | null;
     country_code?: string | null;
   };
   const brand = normalizeSnapshotBrand(brandRow.display_name, brandRow.trade);
@@ -208,7 +208,7 @@ export async function sendQuoteForApproval(
     quote,
     lineItems: lineResult.rows as QuoteLineItemRow[],
     currencyCode: brandRow.currency_code === "USD" ? "USD" : brandRow.currency_code === "ILS" ? "ILS" : undefined,
-    vatPercent: typeof brandRow.vat_percent === "number" ? brandRow.vat_percent : undefined,
+    vatPercent: parseVatPercent(brandRow.vat_percent) ?? undefined,
     countryCode: parseCountryCode(brandRow.country_code),
   });
   if (payload.lineItems.length === 0) {

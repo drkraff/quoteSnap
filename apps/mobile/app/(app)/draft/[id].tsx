@@ -44,7 +44,7 @@ import {
   isUnknownUnitPrice,
   selectOptionForTotal,
 } from '../../../src/utils/line-items';
-import { taxLabelForCountry } from '../../../src/money/currency';
+import { formatVatPercent, taxLabelForCountry } from '../../../src/money/currency';
 import { useContractorLocale } from '../../../src/money/use-contractor-locale';
 import { quoteVatTotals } from '../../../src/money/vat';
 import {
@@ -93,6 +93,7 @@ import { ClientSentenceField } from '../../../src/components/quotes/client-sente
 import { PrivateNoteSheet } from '../../../src/components/quotes/private-note-sheet';
 import { PhotoStrip } from '../../../src/components/quotes/photo-strip';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
+import { FeedbackFab } from '../../../src/components/feedback/feedback-fab';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
 import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review-before-sending-banner';
 import {
@@ -987,7 +988,7 @@ function DraftScreen(): JSX.Element {
       if (!permission.granted) {
         Alert.alert(
           'Photo access needed',
-          'QuoteSnap needs camera or library access to attach job photos.',
+          'Vela needs camera or library access to attach job photos.',
           [
             { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
             { text: 'Cancel', style: 'cancel' },
@@ -1735,7 +1736,7 @@ function DraftScreen(): JSX.Element {
           <Text style={styles.subtotalAmount}>{subtotalDisplay}</Text>
         </View>
         <View style={styles.totalRow}>
-          <Text style={styles.subtotalLabel}>{taxLabelForCountry(locale.countryCode)} {locale.vatPercent}%</Text>
+          <Text style={styles.subtotalLabel}>{taxLabelForCountry(locale.countryCode)} {formatVatPercent(locale.vatPercent)}%</Text>
           <Text style={styles.subtotalAmount}>{vatDisplay}</Text>
         </View>
         <View style={styles.totalRow}>
@@ -1843,6 +1844,7 @@ function DraftScreen(): JSX.Element {
           setUndoItem(null);
         }}
       />
+      <FeedbackFab edge="top" offset={12} quoteId={quote.serverId || id} />
     </KeyboardAvoidingView>
   );
 }

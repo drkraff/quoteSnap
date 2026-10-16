@@ -1,6 +1,6 @@
 # EAS Android preview builds
 
-Install QuoteSnap on a physical Android phone **without USB debugging or Metro**. The `preview` profile builds a standalone internal APK that already contains JS and talks to your **Railway HTTPS API**.
+Install Vela on a physical Android phone **without USB debugging or Metro**. The `preview` profile builds a standalone internal APK that already contains JS and talks to your **Railway HTTPS API**.
 
 This is config and docs only. Nobody in CI logs into Expo or submits a store build. There is still **no live demo claim** — you create the Expo project and run the build on your PC.
 
@@ -106,7 +106,7 @@ npx eas-cli env:list --environment preview
 
 No USB. No Metro. A new JS change needs a **new preview build**.
 
-Wipe local data the same as a fresh install: Android Settings → Apps → QuoteSnap → Storage → Clear data (there is no `adb` requirement).
+Wipe local data the same as a fresh install: Android Settings → Apps → Vela → Storage → Clear data (there is no `adb` requirement).
 
 ---
 

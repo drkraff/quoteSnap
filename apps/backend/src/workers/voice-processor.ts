@@ -22,10 +22,7 @@ import {
 } from '../voice/ai-failure.js';
 import { replaceVoiceQuoteLines } from '../voice/commit-voice-result.js';
 import { readVoiceJobGate, reopenCurrentVoiceAttempt } from '../voice/voice-job-guard.js';
-import {
-  joinAssumptionsToClientSentence,
-  sanitizeClientFacingSentence,
-} from '../voice/assumptions.js';
+import { splitVoiceCustomerCopy } from '../voice/assumptions.js';
 import { supplementSpokenExtract } from '../voice/spoken-extract.js';
 import { attachVoiceRooms } from '../quotes/rooms.js';
 import { randomUUID } from 'node:crypto';
@@ -69,6 +66,7 @@ async function commitVoiceQuote(args: {
   totalCents: number;
   failureStage: AiFailureStage | null;
   clientSentence?: string | null;
+  exclusions?: string | null;
   roomsJson?: string | null;
 }): Promise<boolean> {
   return withTransaction(async (tx) => {
@@ -95,6 +93,7 @@ async function processVoiceJob(job: Job<VoiceJobData>): Promise<void> {
   let builtLineItems: (ValidatedLineItem & { roomId?: string | null })[] | null = null;
   let builtTotalCents = 0;
   let clientSentence: string | null = null;
+  let exclusions: string | null = null;
   let builtRoomsJson: string | null = null;
   let transcriptionResponse: unknown = null;
   let mappingResponse: unknown = null;
@@ -191,7 +190,7 @@ Rules:
 - spokenUnitPriceCents is integer cents ONLY if the contractor stated a sell/charge price (example: "eight fifty a foot" → 850, "I'll charge 250 each" → 25000, "80 shekels each" → 8000). A spoken price overrides any saved rate. If they did not say a sell price, omit it or null. Do not put a supplier cost here.
 - spokenMaterialCostCents is integer cents ONLY if the contractor stated (or typed in notes) a supplier/material cost, not the sell price (example: "pipe cost me forty bucks" → 4000, "fittings were 85 at the supplier" → 8500). Omit or null if they did not name a cost. NEVER guess. NEVER copy catalog. NEVER treat a sell/charge price as cost.
 - spokenHours is the labor time they stated, and it may be fractional (example: "call it two hours" → 2, "half an hour" → 0.5). Omit or null if they did not say hours. Do not guess duration. Do not round 0.5 up to 1.
-- assumptions: client-facing scope sentences they said (what is not included). Example: "appliances not included". Empty array if they said none. Do not invent exclusions, private notes, or prices. Never put the transcript or a price in assumptions.
+- assumptions: client-facing scope sentences they said (what is not included). Example: "permit not included". Empty array if they said none. These are the Not included section, kept separate from clientSentence. Do not invent exclusions, private notes, or prices. Never put the transcript or a price in assumptions.
 - clientSentence: one short customer-facing description of the job, with no prices, currency, or quote of their speech. Null if you cannot say it without copying the transcript or a price. Empty is better than a fragment.
 - room: the room or zone they named for that line (kitchen, bath, living room). Omit or null if they did not name a room. Never invent a room.
 - NEVER invent a price, SKU, catalog ID, typical trade rate, or room. Never copy a price from the catalog; prices are attached later.
@@ -303,9 +302,12 @@ Rules:
     const supplemented = supplementSpokenExtract(transcript, extractedItems, parsedHours);
     const aiItems = supplemented.items;
     const spokenHours = supplemented.spokenHours;
-    clientSentence =
-      sanitizeClientFacingSentence(parsed.clientSentence)
-      ?? joinAssumptionsToClientSentence(parsed.assumptions);
+    const customerCopy = splitVoiceCustomerCopy(
+      { clientSentence: parsed.clientSentence, assumptions: parsed.assumptions },
+      transcript,
+    );
+    clientSentence = customerCopy.clientSentence;
+    exclusions = customerCopy.exclusions;
 
     // g) Validate catalog IDs — only UUID-shaped values may hit the uuid column.
     const aiItemIds = filterUuidCatalogIds(
@@ -333,6 +335,7 @@ Rules:
         hourlyRateCents,
         markupPercent,
         spokenHours,
+        transcript,
         lookupRateCard: ({ name, unit, trade }) =>
           lookupExactRateCardCents(query, {
             contractorId,
@@ -357,6 +360,7 @@ Rules:
       totalCents,
       failureStage: null,
       clientSentence,
+      exclusions,
       roomsJson: builtRoomsJson,
     });
     if (!committed) {
@@ -390,6 +394,7 @@ Rules:
             totalCents: builtTotalCents,
             failureStage: 'mapping',
             clientSentence,
+            exclusions,
             roomsJson: builtRoomsJson,
           });
           if (!partial) stale = true;

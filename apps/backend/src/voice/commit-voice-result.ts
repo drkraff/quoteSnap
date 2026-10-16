@@ -44,7 +44,7 @@ function commitPriceSource(item: VoiceCommitLine): SnapshotPriceSource {
   return inferSnapshotPriceSource(cents);
 }
 
-export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3, client_sentence = COALESCE($4, client_sentence), rooms = COALESCE($5::jsonb, rooms) WHERE id = $6 AND voice_job_id = $7 AND status = 'ai_processing'`;
+export const UPDATE_VOICE_QUOTE_RESULT_SQL = `UPDATE quotes SET status = $1, total_cents = $2, ai_failure_stage = $3, client_sentence = COALESCE($4, client_sentence), exclusions = COALESCE($5, exclusions), rooms = COALESCE($6::jsonb, rooms) WHERE id = $7 AND voice_job_id = $8 AND status = 'ai_processing'`;
 
 type VoiceLockResult = { rows?: unknown[] };
 
@@ -67,8 +67,10 @@ export async function replaceVoiceQuoteLines(
     status: "draft_local" | "ai_failed";
     totalCents: number;
     failureStage: AiFailureStage | null;
-    /** Joined extract assumptions. Null leaves the existing column. */
+    /** Job description. Null leaves the existing note. */
     clientSentence?: string | null;
+    /** Spoken exclusions for Not included. Null leaves the existing column. */
+    exclusions?: string | null;
     /** Extracted rooms. Null leaves the existing column. */
     roomsJson?: string | null;
   },
@@ -100,6 +102,7 @@ export async function replaceVoiceQuoteLines(
     args.totalCents,
     args.status === "ai_failed" ? args.failureStage : null,
     args.clientSentence ?? null,
+    args.exclusions ?? null,
     args.roomsJson ?? null,
     args.quoteId,
     jobId,

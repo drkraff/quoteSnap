@@ -6,6 +6,7 @@
 import type { CountryCode, CurrencyCode } from "../money/currency.js";
 import type { CustomerQuotePayload } from "./customer-payload.js";
 import { toCustomerQuotePayload } from "./customer-payload.js";
+import { coerceStoredQuantity } from "./integer-money.js";
 import { roomNameForId, roomsFromDb } from "./rooms.js";
 import type { QuoteLineItemRow, QuoteRow } from "../routes/quotes-payload.js";
 
@@ -77,7 +78,8 @@ export function buildQuoteSnapshotPayload(args: {
     rooms,
     lineItems: args.lineItems.map((item) => ({
       name: item.name,
-      quantity: item.quantity,
+      // node-pg returns numeric(12,2) as a string ("10.00"). The snapshot stores a number.
+      quantity: coerceStoredQuantity(item.quantity),
       unitPriceCents: customerUnitPriceCents(item.unit_price_cents),
       unit: item.unit,
       privateNote: item.private_note,

@@ -220,7 +220,7 @@ export default function QuotesScreen(): JSX.Element {
               getVoiceStatus,
               fetchQuote,
               getDraftLineItems,
-              async markDraftReady(_quote, lineItemsJson, clientSentence, roomsJson) {
+              async markDraftReady(_quote, lineItemsJson, clientSentence, roomsJson, exclusions) {
                 const ready = draftReadyLocalFields(lineItemsJson);
                 const assigned = assignRoomPhotosToNearestLine(
                   parsePhotosJson(q.photosJson),
@@ -257,13 +257,16 @@ export default function QuotesScreen(): JSX.Element {
                     if (clientSentence !== undefined && !fieldHeld(q.id, r.localDirty, 'clientSentence')) {
                       r.clientSentence = clientSentence;
                     }
+                    if (exclusions && !fieldHeld(q.id, r.localDirty, 'exclusions')) {
+                      r.exclusions = exclusions;
+                    }
                     if (roomsJson && !fieldHeld(q.id, r.localDirty, 'rooms')) {
                       r.roomsJson = roomsJson;
                     }
                   });
                 });
               },
-              async markFailed(_quote, lineItemsJson, clientSentence, roomsJson, failureStage) {
+              async markFailed(_quote, lineItemsJson, clientSentence, roomsJson, failureStage, exclusions) {
                 const failed = draftFailedLocalFields(lineItemsJson);
                 await database.write(async () => {
                   const draftCollection = database.get<Draft>('drafts');
@@ -291,6 +294,9 @@ export default function QuotesScreen(): JSX.Element {
                     assignStoredAiFailureStage(r, failed.status, failureStage);
                     if (clientSentence !== undefined && !fieldHeld(q.id, r.localDirty, 'clientSentence')) {
                       r.clientSentence = clientSentence;
+                    }
+                    if (exclusions && !fieldHeld(q.id, r.localDirty, 'exclusions')) {
+                      r.exclusions = exclusions;
                     }
                     if (roomsJson && !fieldHeld(q.id, r.localDirty, 'rooms')) {
                       r.roomsJson = roomsJson;

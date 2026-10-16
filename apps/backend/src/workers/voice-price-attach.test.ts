@@ -556,6 +556,8 @@ describe("voice-processor material markup wiring", () => {
   it("attaches prices through the async exact-lookup path before commit", () => {
     const src = readFileSync(path.join(here, "voice-processor.ts"), "utf8");
     assert.match(src, /supplementSpokenExtract/);
+    assert.match(src, /splitVoiceCustomerCopy/);
+    assert.match(src, /transcript,/);
     assert.match(src, /validateAndBuildLineItemsAsync/);
     assert.match(src, /lookupExactRateCardCents/);
     assert.match(src, /replaceVoiceQuoteLines/);

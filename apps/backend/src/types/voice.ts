@@ -29,7 +29,7 @@ export interface VoiceExtractResult {
    * Omit/null if they did not say hours. There is no one-hour minimum.
    */
   spokenHours?: number | null;
-  /** Client-facing scope / exclusions. Joined into quotes.client_sentence. */
+  /** Client-facing exclusions. Saved on quotes.exclusions (Not included), not the note. */
   assumptions?: string[] | string | null;
   /**
    * One short customer-facing job description. No prices and no transcript

@@ -74,7 +74,13 @@ function lineRow(overrides: Partial<QuoteLineItemRow> = {}): QuoteLineItemRow {
 function createDb(options: {
   quote: QuoteRow;
   lines: QuoteLineItemRow[];
-  brand?: { display_name: string | null; trade: string | null };
+  brand?: {
+    display_name: string | null;
+    trade: string | null;
+    currency_code?: string | null;
+    vat_percent?: number | string | null;
+    country_code?: string | null;
+  };
 }) {
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   let quote = { ...options.quote };
@@ -368,6 +374,89 @@ describe("sendQuoteForApproval", () => {
       generateToken: () => generateApprovalToken(),
     });
     assert.equal(missing.status, 404);
+  });
+
+  it("stores a fractional sales-tax percent from a numeric column", async () => {
+    const db = createDb({
+      quote: quoteRow({ total_cents: 112500 }),
+      lines: [lineRow({ unit_price_cents: 112500 })],
+      brand: {
+        display_name: "Ada Electric",
+        trade: "electrical",
+        currency_code: "USD",
+        vat_percent: "8.250",
+        country_code: "US",
+      },
+    });
+    const outcome = await sendQuoteForApproval(db.queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {},
+      sender: senderSpy().sender,
+      now: NOW,
+      publicBaseUrl: "http://localhost:3000",
+      ttlMs: 1000,
+      generateToken: () => generateApprovalToken(),
+    });
+    assert.equal(outcome.status, 201);
+    const payload = JSON.parse(String(db.snapshot()?.payload));
+    assert.equal(payload.vatPercent, 8.25);
+    assert.equal(payload.countryCode, "US");
+    assert.equal(payload.currencyCode, "USD");
+  });
+
+  it("stores 0 when a US contractor row is missing its tax percent", async () => {
+    const db = createDb({
+      quote: quoteRow(),
+      lines: [lineRow()],
+      brand: {
+        display_name: "Ada Electric",
+        trade: "electrical",
+        currency_code: "USD",
+        country_code: "US",
+      },
+    });
+    const outcome = await sendQuoteForApproval(db.queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {},
+      sender: senderSpy().sender,
+      now: NOW,
+      publicBaseUrl: "http://localhost:3000",
+      ttlMs: 1000,
+      generateToken: () => generateApprovalToken(),
+    });
+    assert.equal(outcome.status, 201);
+    const payload = JSON.parse(String(db.snapshot()?.payload));
+    assert.equal(payload.vatPercent, 0);
+  });
+
+  it("keeps Israel VAT when the stored percent is 18", async () => {
+    const db = createDb({
+      quote: quoteRow(),
+      lines: [lineRow()],
+      brand: {
+        display_name: "Noa",
+        trade: "electrical",
+        currency_code: "ILS",
+        vat_percent: "18.000",
+        country_code: "IL",
+      },
+    });
+    const outcome = await sendQuoteForApproval(db.queryFn, {
+      quoteId: QUOTE_ID,
+      contractorId: CONTRACTOR_ID,
+      body: {},
+      sender: senderSpy().sender,
+      now: NOW,
+      publicBaseUrl: "http://localhost:3000",
+      ttlMs: 1000,
+      generateToken: () => generateApprovalToken(),
+    });
+    assert.equal(outcome.status, 201);
+    const payload = JSON.parse(String(db.snapshot()?.payload));
+    assert.equal(payload.vatPercent, 18);
+    assert.equal(payload.countryCode, "IL");
   });
 
   it("includes the approval URL only for the dry-run sender", () => {

@@ -19,6 +19,7 @@ import { isConflictError } from '../../../src/api/client';
 import * as Clipboard from 'expo-clipboard';
 import { CopyApprovalLinkButton } from '../../../src/components/quotes/copy-approval-link-button';
 import { QuoteDetail } from '../../../src/components/quotes/quote-detail';
+import { FeedbackFab } from '../../../src/components/feedback/feedback-fab';
 import { isOnline } from '../../../src/sync/network-monitor';
 import { useIsOnline } from '../../../src/sync/use-is-online';
 import { useContractorLocale } from '../../../src/money/use-contractor-locale';
@@ -365,9 +366,10 @@ export default function QuoteDetailScreen(): JSX.Element {
   }
 
   return (
+    <View style={styles.container}>
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl + 56 }]}
     >
       <QuoteDetail
         quote={{
@@ -415,6 +417,8 @@ export default function QuoteDetailScreen(): JSX.Element {
       </Pressable>
       <Text style={styles.duplicateHint}>{DUPLICATE_QUOTE_HINT}</Text>
     </ScrollView>
+    <FeedbackFab offset={insets.bottom + 16} quoteId={id} />
+    </View>
   );
 }
 

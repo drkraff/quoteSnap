@@ -16,7 +16,7 @@ if (process.env['EAS_BUILD'] === 'true') {
 }
 
 const config: ExpoConfig = {
-  name: 'QuoteSnap',
+  name: 'Vela',
   slug: 'quotesnap',
   scheme: 'quotesnap',
   version: '1.0.0',
@@ -56,16 +56,16 @@ const config: ExpoConfig = {
       'expo-av',
       {
         microphonePermission:
-          'QuoteSnap needs microphone access to record voice quotes.',
+          'Vela needs microphone access to record voice quotes.',
       },
     ],
     [
       'expo-image-picker',
       {
         cameraPermission:
-          'QuoteSnap needs camera access to attach job photos to a quote.',
+          'Vela needs camera access to attach job photos to a quote.',
         photosPermission:
-          'QuoteSnap needs photo library access to attach job photos to a quote.',
+          'Vela needs photo library access to attach job photos to a quote.',
       },
     ],
     // Wires WatermelonDB native Gradle into android/. disableJsi: true (camelCase,

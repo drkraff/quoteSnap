@@ -3,7 +3,7 @@ import { StatusBadge } from './status-badge';
 import { formatRelativeDate } from '../../utils/format-relative-date';
 import { formatQuantityLabel, formatUnitPriceLabel, isUnknownUnitPrice } from '../../utils/line-items';
 import { draftPriceFlag, draftPriceSourceLabel } from '../../utils/price-source';
-import { formatMoneyCents, taxLabelForCountry } from '../../money/currency';
+import { formatMoneyCents, formatVatPercent, taxLabelForCountry } from '../../money/currency';
 import { useContractorLocale } from '../../money/use-contractor-locale';
 import { quoteVatTotals } from '../../money/vat';
 import { colors, spacing, typography } from '../../theme/tokens';
@@ -190,7 +190,7 @@ export function QuoteDetail({ quote, lineItems }: QuoteDetailProps): JSX.Element
       <View style={styles.footer}>
         <Text style={styles.totalLabel}>Subtotal {subtotalDisplay}</Text>
         {vatDisplay != null ? (
-          <Text style={styles.totalLabel}>{taxLabelForCountry(locale.countryCode)} {locale.vatPercent}% {vatDisplay}</Text>
+          <Text style={styles.totalLabel}>{taxLabelForCountry(locale.countryCode)} {formatVatPercent(locale.vatPercent)}% {vatDisplay}</Text>
         ) : null}
         <Text style={styles.totalLabel}>Total</Text>
         <Text style={styles.totalAmount}>{totalDisplay}</Text>

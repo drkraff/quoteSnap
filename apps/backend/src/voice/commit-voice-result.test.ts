@@ -73,9 +73,10 @@ describe("replaceVoiceQuoteLines", () => {
       null,
     ]);
     assert.equal(calls[3]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
-    assert.deepEqual(calls[3]!.params, ["draft_local", 1500, null, null, null, "quote-1", JOB_ID]);
+    assert.deepEqual(calls[3]!.params, ["draft_local", 1500, null, null, null, null, "quote-1", JOB_ID]);
+    assert.match(UPDATE_VOICE_QUOTE_RESULT_SQL, /exclusions = COALESCE\(\$5, exclusions\)/);
+    assert.match(UPDATE_VOICE_QUOTE_RESULT_SQL, /voice_job_id = \$8/);
     assert.match(UPDATE_VOICE_QUOTE_RESULT_SQL, /status = 'ai_processing'/);
-    assert.equal(UPDATE_VOICE_QUOTE_RESULT_SQL.includes("draft_local'"), false);
     assert.equal(UPDATE_VOICE_QUOTE_RESULT_SQL.includes("'sent'"), false);
   });
 
@@ -114,7 +115,7 @@ describe("replaceVoiceQuoteLines", () => {
       "unknown",
       null,
     ]);
-    assert.deepEqual(calls[3]!.params, ["ai_failed", 0, "mapping", null, null, "quote-2", JOB_ID]);
+    assert.deepEqual(calls[3]!.params, ["ai_failed", 0, "mapping", null, null, null, "quote-2", JOB_ID]);
   });
 
   it("writes joined extract assumptions into client_sentence", async () => {
@@ -139,7 +140,37 @@ describe("replaceVoiceQuoteLines", () => {
       null,
       "appliances not included",
       null,
+      null,
       "quote-3",
+      JOB_ID,
+    ]);
+  });
+
+  it("writes spoken exclusions onto exclusions and keeps the note", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    await replaceVoiceQuoteLines(
+      recordingClient(calls),
+      {
+        quoteId: "quote-excl",
+        jobId: JOB_ID,
+        status: "draft_local",
+        totalCents: 8000,
+        failureStage: null,
+        clientSentence: "Replace the outlet.",
+        exclusions: "permit not included",
+        lineItems: [],
+      },
+    );
+    assert.match(UPDATE_VOICE_QUOTE_RESULT_SQL, /exclusions = COALESCE\(\$5, exclusions\)/);
+    assert.equal(calls[0]!.sql, LOCK_CURRENT_VOICE_JOB_SQL);
+    assert.deepEqual(calls[2]!.params, [
+      "draft_local",
+      8000,
+      null,
+      "Replace the outlet.",
+      "permit not included",
+      null,
+      "quote-excl",
       JOB_ID,
     ]);
   });
@@ -185,6 +216,7 @@ describe("replaceVoiceQuoteLines", () => {
     assert.deepEqual(calls[3]!.params, [
       "draft_local",
       0,
+      null,
       null,
       null,
       roomsJson,

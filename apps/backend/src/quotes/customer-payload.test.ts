@@ -88,6 +88,8 @@ describe("toCustomerQuotePayload", () => {
     assert.equal(payload.lineItems[0]!.unitPriceCents, null);
     assert.equal(payload.totalCents, 0);
     assert.equal(payload.clientSentence, null);
+    assert.equal(payload.vatPercent, 18);
+    assert.equal(payload.countryCode, null);
     assert.equal(JSON.stringify(payload).includes(SECRET_JOB), false);
   });
 

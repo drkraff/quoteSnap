@@ -5,7 +5,11 @@ declare module 'react-test-renderer' {
     toJSON(): unknown;
     root: {
       findByProps(props: { accessibilityLabel: string }): {
-        props: { onPress: () => void };
+        props: {
+          onPress: () => void;
+          onChangeText?: (value: string) => void;
+          accessibilityState?: { disabled?: boolean };
+        };
       };
     };
   }

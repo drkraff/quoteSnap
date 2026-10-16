@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppHeaderActions } from '../../src/components/app/app-header-actions';
+import { FeedbackProvider } from '../../src/components/feedback/feedback-provider';
 import { tabBarHref } from '../../src/navigation/app-tabs';
 import { SYNC_ISSUES_TITLE } from '../../src/sync/dead-letter';
 import { colors, typography } from '../../src/theme/tokens';
@@ -12,9 +13,10 @@ export const unstable_settings = {
 
 export default function AppLayout(): JSX.Element {
   return (
+    <FeedbackProvider>
     <Tabs
       screenOptions={{
-        headerTitle: 'QuoteSnap',
+        headerTitle: 'Vela',
         headerRight: () => <AppHeaderActions />,
         headerStyle: { backgroundColor: colors.dominant },
         headerShadowVisible: false,
@@ -121,5 +123,6 @@ export default function AppLayout(): JSX.Element {
         }}
       />
     </Tabs>
+    </FeedbackProvider>
   );
 }

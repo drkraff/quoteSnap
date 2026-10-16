@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { LocaleStep } from '../../../src/components/onboarding/locale-step';
 import {
   COUNTRY_PRESETS,
+  formatVatPercent,
   parseCountryCode,
   parseVatPercent,
   type CountryCode,
@@ -21,16 +22,17 @@ export default function LocaleOnboardingScreen(): JSX.Element {
   const [vatText, setVatText] = useState(() => {
     const stored = useAuthStore.getState().contractor;
     const country = initialCountry();
-    if (parseCountryCode(stored?.countryCode) === country && typeof stored?.vatPercent === 'number') {
-      return String(stored.vatPercent);
+    const storedPercent = parseVatPercent(stored?.vatPercent);
+    if (parseCountryCode(stored?.countryCode) === country && storedPercent != null) {
+      return formatVatPercent(storedPercent);
     }
-    return String(COUNTRY_PRESETS[country].vatPercent);
+    return formatVatPercent(COUNTRY_PRESETS[country].vatPercent);
   });
-  const vatPercent = parseVatPercent(Number(vatText));
+  const vatPercent = parseVatPercent(vatText);
 
   function selectCountry(next: CountryCode): void {
     setCountryCode(next);
-    setVatText(String(COUNTRY_PRESETS[next].vatPercent));
+    setVatText(formatVatPercent(COUNTRY_PRESETS[next].vatPercent));
   }
 
   async function handleContinue(): Promise<void> {

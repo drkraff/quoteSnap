@@ -48,7 +48,7 @@ describe('customerQuoteToDocument', () => {
     expect(doc.text).toContain('Plumbing');
     expect(doc.text).toContain(CUSTOMER_ASSUMPTIONS_HEADING);
     expect(doc.text).toContain('Appliances and decorative lighting not included.');
-    expect(doc.filename).toBe('QuoteSnap-quote.pdf');
+    expect(doc.filename).toBe('Vela-quote.pdf');
   });
 
   it('omits an empty client sentence and does not invent job-scope copy', () => {
@@ -305,6 +305,34 @@ describe('professional customer page', () => {
   });
 });
 
+describe('spoken exclusions', () => {
+  it('prints permit not included under Not included and keeps the note', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 8000,
+      clientSentence: 'Replace the outlet.',
+      exclusions: 'permit not included',
+      currencyCode: 'USD',
+      countryCode: 'US',
+      vatPercent: 0,
+      lineItems: [
+        { name: 'outlet', quantity: 1, unitPriceCents: 8000, unit: 'each' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload);
+    expect(doc.html).toContain('Not included');
+    expect(doc.html).toContain('permit not included');
+    expect(doc.html).toContain('Note');
+    expect(doc.html).toContain('Replace the outlet.');
+    expect(doc.text).toContain('Not included');
+    expect(doc.text).toContain('permit not included');
+    const noteAt = doc.html.indexOf('Note');
+    const excludedAt = doc.html.indexOf('Not included');
+    expect(noteAt).toBeGreaterThan(-1);
+    expect(excludedAt).toBeGreaterThan(noteAt);
+  });
+});
+
 describe('US customer page', () => {
   it('uses dollars, feet for cable, hours for labor, and sales tax', () => {
     const payload = toCustomerQuotePayload({
@@ -338,6 +366,42 @@ describe('US customer page', () => {
     expect(doc.html).not.toContain('₪');
     expect(doc.text).toContain('Sales tax 8%  $15.60');
     expect(payload.countryCode).toBe('US');
+  });
+
+  it('prints 8.25% of $1,125.00 as $92.81', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 112500,
+      currencyCode: 'USD',
+      vatPercent: 8.25,
+      countryCode: 'US',
+      lineItems: [
+        { name: 'panel', quantity: 1, unitPriceCents: 112500, unit: 'each' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload);
+    expect(payload.vatPercent).toBe(8.25);
+    expect(doc.html).toContain('Sales tax 8.25%');
+    expect(doc.html).toContain('$92.81');
+    expect(doc.totalLabel).toBe('$1217.81');
+    expect(doc.text).toContain('Sales tax 8.25%  $92.81');
+    expect(doc.html).not.toContain('VAT');
+  });
+
+  it('uses 0 when a US quote is missing its tax percent', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 4500,
+      currencyCode: 'USD',
+      countryCode: 'US',
+      lineItems: [
+        { name: 'cable', quantity: 10, unitPriceCents: 450, unit: 'foot' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload);
+    expect(payload.vatPercent).toBe(0);
+    expect(doc.html).toContain('Sales tax 0%');
+    expect(doc.html).not.toContain('18%');
   });
 
   it('prints a zero sales-tax line instead of inventing a rate', () => {
