@@ -25,6 +25,20 @@ export function applyFailureSchedule(retryCountAfterFailure: number, nowMs: numb
   return { status: 'pending', nextRetryAtMs: nowMs + delay };
 }
 
+/**
+ * A failed "I sent it" stays pending and keeps retrying. Dead-lettering it
+ * lets the next open copy the server draft back over the local sent quote.
+ * After the 15m attempt, wait that same interval again.
+ */
+export function applySentMarkFailureSchedule(
+  retryCountAfterFailure: number,
+  nowMs: number,
+): RetrySchedule {
+  const delay = retryDelayMs(retryCountAfterFailure);
+  const wait = delay ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
+  return { status: 'pending', nextRetryAtMs: nowMs + wait };
+}
+
 export function isQueueItemDue(
   item: { status: string; nextRetryAtMs: number | null },
   nowMs: number,

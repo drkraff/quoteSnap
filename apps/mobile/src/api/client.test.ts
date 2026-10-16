@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { apiClient, resetApiClientForTests } from './client';
+import { API_REQUEST_TIMEOUT_MS, COLD_API_RETRY_MESSAGE, apiClient, resetApiClientForTests } from './client';
 import { useAuthStore } from '../store/auth-store';
 import { retainQueuedWorkForContractor } from '../sync/sync-queue';
 
@@ -259,5 +259,29 @@ describe('apiClient auth vs resource 401 handling', () => {
       error: 'Internal server error',
       quoteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     });
+  });
+
+  it('times out a hung sign-in and tells the contractor to retry', async () => {
+    jest.useFakeTimers();
+    try {
+      (global.fetch as jest.Mock).mockImplementation(() => new Promise(() => {}));
+
+      const pending = apiClient.post('/auth/login', {
+        email: 'ada@example.com',
+        password: 'secret',
+      });
+      const assertion = expect(pending).rejects.toMatchObject({
+        status: 408,
+        error: COLD_API_RETRY_MESSAGE,
+      });
+      await jest.advanceTimersByTimeAsync(API_REQUEST_TIMEOUT_MS);
+      await assertion;
+
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      const init = fetchCalls()[0]?.init;
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

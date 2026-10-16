@@ -1189,6 +1189,229 @@ describe('upsertCatalogItems / upsertQuotes', () => {
     expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
   });
 
+  it('keeps a local sent quote locked when the sent update is dead-lettered', async () => {
+    const sentAt = new Date('2026-09-15T12:00:00.000Z');
+    const localLines = [
+      { name: 'Outlet', quantity: 1, unitPriceCents: 8000 },
+    ];
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'sent',
+      customerPhone: null,
+      totalCents: 8000,
+      createdAt: new Date(0),
+      updatedAt: sentAt,
+      sentAt,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify(localLines),
+      notes: null,
+      updatedAt: sentAt,
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    const parked: FakeQueueItem = {
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'update',
+      status: 'dead_letter',
+      payloadJson: JSON.stringify({ status: 'sent', totalCents: 8000, lineItems: localLines }),
+    };
+    queueItems = [parked];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 0,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-16T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [
+          { id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 },
+        ],
+      },
+    ]);
+
+    expect(localQuote.status).toBe('sent');
+    expect(localQuote.sentAt).toEqual(sentAt);
+    expect(localQuote.totalCents).toBe(8000);
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual(localLines);
+    expect(parked.status).toBe('dead_letter');
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
+  it('re-locks a sent quote that a previous open already copied back to a draft', async () => {
+    const localLines = [{ name: 'Outlet', quantity: 1, unitPriceCents: 8000 }];
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'draft_local',
+      customerPhone: null,
+      totalCents: 8000,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: null,
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify(localLines),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [
+      {
+        entityType: 'quote',
+        entityId: 'local-quote-1',
+        action: 'update',
+        status: 'dead_letter',
+        payloadJson: JSON.stringify({ status: 'sent' }),
+      },
+    ];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-16T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+      },
+    ]);
+
+    expect(localQuote.status).toBe('sent');
+    expect(localQuote.sentAt).toBeNull();
+    expect(localQuote.totalCents).toBe(8000);
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual(localLines);
+  });
+
+  it('does not treat a pending sent mark as a draft fork', async () => {
+    const localLines = [{ name: 'Outlet', quantity: 1, unitPriceCents: 8000 }];
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'sent',
+      customerPhone: null,
+      totalCents: 8000,
+      createdAt: new Date(0),
+      updatedAt: new Date('2026-09-15T12:00:00.000Z'),
+      sentAt: new Date('2026-09-15T12:00:00.000Z'),
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify(localLines),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    const pending: FakeQueueItem = {
+      entityType: 'quote',
+      entityId: 'local-quote-1',
+      action: 'update',
+      status: 'pending',
+      payloadJson: JSON.stringify({ status: 'sent', totalCents: 8000 }),
+    };
+    queueItems = [pending];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'draft_local',
+        customerPhone: null,
+        totalCents: 1500,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-16T00:00:00.000Z',
+        sentAt: null,
+        voiceJobId: null,
+        lineItems: [{ id: 'li-1', name: 'Pipe', quantity: 1, unitPriceCents: 1500 }],
+      },
+    ]);
+
+    expect(localQuote.status).toBe('sent');
+    expect(localQuote.sentAt).toEqual(new Date('2026-09-15T12:00:00.000Z'));
+    expect(JSON.parse(localDraft.lineItemsJson)).toEqual(localLines);
+    expect(pending.status).toBe('pending');
+    expect(queueItems.some((item) => item.status === NEEDS_REVIEW_STATUS)).toBe(false);
+  });
+
+  it('still applies a server sent snapshot when the sent update has already landed', async () => {
+    const localQuote = attachUpdate<FakeQuote>({
+      id: 'local-quote-1',
+      serverId: 'srv-quote-1',
+      contractorId,
+      status: 'sent',
+      customerPhone: null,
+      totalCents: 8000,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      sentAt: new Date('2026-09-15T12:00:00.000Z'),
+      voiceJobId: null,
+      isArchived: false,
+      serverRevision: '2026-09-01T00:00:00.000Z',
+    });
+    const localDraft = attachUpdate<FakeDraft>({
+      id: 'local-draft-1',
+      quoteId: 'local-quote-1',
+      lineItemsJson: JSON.stringify([{ name: 'Outlet', quantity: 1, unitPriceCents: 8000 }]),
+      notes: null,
+      updatedAt: new Date(0),
+    });
+    quotes = [localQuote];
+    drafts = [localDraft];
+    queueItems = [
+      {
+        entityType: 'quote',
+        entityId: 'local-quote-1',
+        action: 'update',
+        status: 'dead_letter',
+        payloadJson: JSON.stringify({ status: 'sent' }),
+      },
+    ];
+
+    await upsertQuotes(contractorId, [
+      {
+        id: 'srv-quote-1',
+        status: 'sent',
+        customerPhone: null,
+        totalCents: 8000,
+        createdAt: '2026-09-02T00:00:00.000Z',
+        updatedAt: '2026-09-16T00:00:00.000Z',
+        sentAt: '2026-09-16T00:00:00.000Z',
+        voiceJobId: null,
+        lineItems: [{ id: 'li-1', name: 'Outlet', quantity: 1, unitPriceCents: 8000 }],
+      },
+    ]);
+
+    expect(localQuote.status).toBe('sent');
+    expect(localQuote.sentAt).toEqual(new Date('2026-09-16T00:00:00.000Z'));
+  });
+
   it('still applies a frozen server snapshot while a draft update is dead-lettered', async () => {
     const localQuote = attachUpdate<FakeQuote>({
       id: 'local-quote-1',

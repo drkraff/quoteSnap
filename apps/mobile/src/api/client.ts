@@ -47,6 +47,55 @@ export function isConflictError(value: unknown): value is ApiError {
   return isApiError(value) && value.status === 409;
 }
 
+/**
+ * A sleeping Railway process can sit on migrations and pg-boss before it
+ * accepts a connection. Bound that wait so sign-in and later API calls
+ * surface a retry instead of spinning until the platform gives up.
+ */
+export const API_REQUEST_TIMEOUT_MS = 30_000;
+
+export const COLD_API_RETRY_MESSAGE =
+  'The server is taking too long to respond. Try again in a moment.';
+
+function coldApiError(): ApiError {
+  return { status: 408, error: COLD_API_RETRY_MESSAGE };
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error
+    && (error.name === 'AbortError' || error.name === 'TimeoutError')
+  );
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(coldApiError());
+    }, API_REQUEST_TIMEOUT_MS);
+  });
+  const request = fetch(url, { ...init, signal: controller.signal }).then(
+    (response) => response,
+    (error: unknown) => {
+      if (controller.signal.aborted || isAbortError(error)) {
+        throw coldApiError();
+      }
+      throw error;
+    },
+  );
+  // Promise.race leaves the loser running. Swallow a late abort so it is not
+  // an unhandled rejection after the timeout already won.
+  void request.catch(() => {});
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 function isAuthPath(path: string): boolean {
   return path === '/auth' || path.startsWith('/auth/');
 }
@@ -120,7 +169,7 @@ async function request<T>(
     serializedBody = formBody ? body : JSON.stringify(body);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method,
     headers,
     body: serializedBody,

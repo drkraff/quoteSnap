@@ -8,6 +8,7 @@ import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
 import { parseQuoteServerId, parseVoiceClientKey, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
+import { cancelSupersededVoiceJob } from '../voice/cancel-voice-job.js';
 import { voiceAudioMimeError, voiceAudioR2Key } from '../voice/audio-upload.js';
 import { failedVoiceStatusPayload, voiceJobStateIsFailed } from '../voice/ai-failure.js';
 import { voiceFeatureGate } from '../env/optional-features.js';
@@ -77,6 +78,10 @@ router.post(
       }
       quoteId = resolved.quoteId;
       const created = resolved.created;
+      await cancelSupersededVoiceJob(
+        (queue, id) => boss.cancel(queue, id),
+        resolved.supersededJobId,
+      );
       if (resolved.replayJobId) {
         res.status(202).json({ jobId: resolved.replayJobId, quoteId });
         return;

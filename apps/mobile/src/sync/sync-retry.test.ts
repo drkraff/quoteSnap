@@ -1,6 +1,7 @@
 import {
   RETRY_BACKOFF_MS,
   applyFailureSchedule,
+  applySentMarkFailureSchedule,
   isQueueItemDue,
   retryDelayMs,
   soonestFutureRetryMs,
@@ -37,6 +38,21 @@ describe('applyFailureSchedule', () => {
     expect(applyFailureSchedule(6, now)).toEqual({
       status: 'dead_letter',
       nextRetryAtMs: null,
+    });
+  });
+});
+
+describe('applySentMarkFailureSchedule', () => {
+  const now = 1_000_000;
+
+  it('stays pending after the 15m attempt so a sent quote keeps retrying', () => {
+    expect(applySentMarkFailureSchedule(6, now)).toEqual({
+      status: 'pending',
+      nextRetryAtMs: now + 15 * 60_000,
+    });
+    expect(applySentMarkFailureSchedule(1, now)).toEqual({
+      status: 'pending',
+      nextRetryAtMs: now + 5_000,
     });
   });
 });

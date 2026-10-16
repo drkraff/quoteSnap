@@ -74,7 +74,7 @@ describe("resolveVoiceUploadQuote", () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     const runQuery: VoiceUploadQueryFn = async (sql, params) => {
       calls.push({ sql, params });
-      if (sql.includes("SELECT id FROM quotes")) {
+      if (sql.includes("SELECT id, voice_job_id FROM quotes")) {
         return { rows: [{ id: QUOTE_ID }] };
       }
       return { rows: [] };
@@ -84,7 +84,7 @@ describe("resolveVoiceUploadQuote", () => {
 
     assert.deepEqual(result, { ok: true, quoteId: QUOTE_ID, created: false });
     assert.equal(calls.length, 2);
-    assert.match(calls[0]!.sql, /SELECT id FROM quotes WHERE id = \$1 AND contractor_id = \$2/);
+    assert.match(calls[0]!.sql, /SELECT id, voice_job_id FROM quotes WHERE id = \$1 AND contractor_id = \$2/);
     assert.deepEqual(calls[0]!.params, [QUOTE_ID, CONTRACTOR_ID]);
     assert.match(calls[1]!.sql, /UPDATE quotes SET status = 'ai_processing', ai_failure_stage = NULL, voice_job_id = NULL/);
     assert.deepEqual(calls[1]!.params, [QUOTE_ID, CONTRACTOR_ID]);
@@ -148,13 +148,36 @@ describe("resolveVoiceUploadQuote", () => {
 
     const result = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, null, "local-quote-1");
 
-    assert.deepEqual(result, { ok: true, quoteId: QUOTE_ID, created: false });
+    assert.deepEqual(result, {
+      ok: true,
+      quoteId: QUOTE_ID,
+      created: false,
+      supersededJobId: "job-dead",
+    });
     assert.equal(result.ok ? result.replayJobId : "not-ok", undefined);
     assert.equal(calls.some((sql) => sql.includes("INSERT INTO quotes")), false);
     assert.match(
       calls.find((sql) => sql.includes("UPDATE")) ?? "",
       /voice_job_id = NULL/,
     );
+  });
+
+  it("returns the previous job id when a re-record resets the quote", async () => {
+    const runQuery: VoiceUploadQueryFn = async (sql) => {
+      if (sql.includes("SELECT")) {
+        return { rows: [{ id: QUOTE_ID, voice_job_id: "job-old" }] };
+      }
+      return { rows: [] };
+    };
+
+    const result = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, QUOTE_ID);
+
+    assert.deepEqual(result, {
+      ok: true,
+      quoteId: QUOTE_ID,
+      created: false,
+      supersededJobId: "job-old",
+    });
   });
 
   it("returns 404 when the UUID is missing or belongs to another contractor", async () => {

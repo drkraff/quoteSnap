@@ -79,19 +79,31 @@ export function failedVoiceStatusPayload(
 
 export const MARK_QUOTE_AI_FAILED_SQL = `UPDATE quotes
    SET status = 'ai_failed', ai_failure_stage = $2
- WHERE id = $1 AND status = 'ai_processing'`;
+ WHERE id = $1
+   AND status = 'ai_processing'
+   AND voice_job_id = $3
+ RETURNING id`;
 
 export type MarkQuoteAiFailedQueryFn = (
   text: string,
   params?: unknown[],
 ) => Promise<{ rows: unknown[] }>;
 
+/**
+ * Returns false when this job is no longer the stored voice job. A late
+ * failure must not mark a newer recording, or a quote that already left
+ * `ai_processing`, as `ai_failed`.
+ */
 export async function markQuoteAiFailed(
   runQuery: MarkQuoteAiFailedQueryFn,
   quoteId: string,
   stage: AiFailureStage | null,
-): Promise<void> {
-  await runQuery(MARK_QUOTE_AI_FAILED_SQL, [quoteId, stage]);
+  jobId: string,
+): Promise<boolean> {
+  const id = jobId.trim();
+  if (id === "") return false;
+  const result = await runQuery(MARK_QUOTE_AI_FAILED_SQL, [quoteId, stage, id]);
+  return result.rows.length > 0;
 }
 
 /**
