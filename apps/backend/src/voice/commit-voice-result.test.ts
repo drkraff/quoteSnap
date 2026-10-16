@@ -59,7 +59,7 @@ describe("replaceVoiceQuoteLines", () => {
       null,
     ]);
     assert.equal(calls[2]!.sql, UPDATE_VOICE_QUOTE_RESULT_SQL);
-    assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, null, null, "quote-1"]);
+    assert.deepEqual(calls[2]!.params, ["draft_local", 1500, null, null, null, null, "quote-1"]);
   });
 
   it("writes ai_failed + mapping stage for a partial FAIL-05 draft and stores 0 cents for blank prices", async () => {
@@ -100,7 +100,7 @@ describe("replaceVoiceQuoteLines", () => {
       "unknown",
       null,
     ]);
-    assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", null, null, "quote-2"]);
+    assert.deepEqual(calls[2]!.params, ["ai_failed", 0, "mapping", null, null, null, "quote-2"]);
   });
 
   it("writes joined extract assumptions into client_sentence", async () => {
@@ -128,7 +128,38 @@ describe("replaceVoiceQuoteLines", () => {
       null,
       "appliances not included",
       null,
+      null,
       "quote-3",
+    ]);
+  });
+
+  it("writes spoken exclusions onto exclusions and keeps the note", async () => {
+    const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
+    await replaceVoiceQuoteLines(
+      {
+        query: async (sql, params) => {
+          calls.push({ sql, params });
+        },
+      },
+      {
+        quoteId: "quote-excl",
+        status: "draft_local",
+        totalCents: 8000,
+        failureStage: null,
+        clientSentence: "Replace the outlet.",
+        exclusions: "permit not included",
+        lineItems: [],
+      },
+    );
+    assert.match(UPDATE_VOICE_QUOTE_RESULT_SQL, /exclusions = COALESCE\(\$5, exclusions\)/);
+    assert.deepEqual(calls[1]!.params, [
+      "draft_local",
+      8000,
+      null,
+      "Replace the outlet.",
+      "permit not included",
+      null,
+      "quote-excl",
     ]);
   });
 
@@ -176,6 +207,7 @@ describe("replaceVoiceQuoteLines", () => {
     assert.deepEqual(calls[2]!.params, [
       "draft_local",
       0,
+      null,
       null,
       null,
       roomsJson,

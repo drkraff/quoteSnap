@@ -1,4 +1,5 @@
 import { CLIENT_SENTENCE_MAX_LENGTH } from "../quotes/client-sentence.js";
+import { EXCLUSIONS_MAX_LENGTH } from "../quotes/customer-fields.js";
 
 const PRICE_OR_TRANSCRIPT_RE =
   /\b\d+(?:\.\d+)?\s*(?:shekels?|shekel|nis|dollars?|bucks|₪|\$)\b|\b(?:shekels?|shekel|nis|dollars?|bucks|₪|\$)\s*\d+|\bplus\s+\d+|\d+(?:\.\d+)?\s*(?:shekels?|shekel|nis|dollars?|bucks|₪|\$)?\s*each\b/i;
@@ -57,4 +58,94 @@ export function joinAssumptionsToClientSentence(value: unknown): string | null {
   return joined.length > CLIENT_SENTENCE_MAX_LENGTH
     ? joined.slice(0, CLIENT_SENTENCE_MAX_LENGTH)
     : joined;
+}
+
+const SPOKEN_EXCLUSION_RE = /\b([a-z0-9]+(?:\s+[a-z0-9]+){0,6})\s+not included\b/gi;
+
+const EXCLUSION_STOP = new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "but",
+  "so",
+  "then",
+  "that",
+  "this",
+  "with",
+  "for",
+  "to",
+  "of",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "plus",
+  "also",
+]);
+
+function looseText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * "permit not included" said out loud. Keeps a short subject and drops a
+ * price fragment. Does not invent an exclusion the contractor did not say.
+ */
+export function spokenExclusionPhrases(transcript: string): string[] {
+  const phrases: string[] = [];
+  const seen = new Set<string>();
+  for (const match of transcript.toLowerCase().matchAll(SPOKEN_EXCLUSION_RE)) {
+    let words = (match[1] ?? "").split(/\s+/).filter(Boolean);
+    while (words.length > 1 && EXCLUSION_STOP.has(words[0] ?? "")) {
+      words = words.slice(1);
+    }
+    if (words.length > 4) {
+      words = words.slice(-4);
+    }
+    while (words.length > 1 && EXCLUSION_STOP.has(words[0] ?? "")) {
+      words = words.slice(1);
+    }
+    if (words.length === 0) {
+      continue;
+    }
+    const phrase = `${words.join(" ")} not included`;
+    if (!isClientFacingSentence(phrase) || seen.has(phrase)) {
+      continue;
+    }
+    seen.add(phrase);
+    phrases.push(phrase);
+  }
+  return phrases;
+}
+
+/**
+ * The job sentence stays the note. Assumptions, and a spoken "not included"
+ * the model dropped, go to Not included. When both come back, both are kept.
+ */
+export function splitVoiceCustomerCopy(
+  extract: { clientSentence?: unknown; assumptions?: unknown },
+  transcript: string,
+): { clientSentence: string | null; exclusions: string | null } {
+  const clientSentence = sanitizeClientFacingSentence(extract.clientSentence);
+  const fromModel = joinAssumptionsToClientSentence(extract.assumptions);
+  const parts: string[] = [];
+  if (fromModel) {
+    parts.push(fromModel);
+  }
+  const have = looseText(fromModel ?? "");
+  for (const phrase of spokenExclusionPhrases(transcript)) {
+    if (!have.includes(looseText(phrase))) {
+      parts.push(phrase);
+    }
+  }
+  if (parts.length === 0) {
+    return { clientSentence, exclusions: null };
+  }
+  const joined = parts.join("\n");
+  const exclusions = joined.length > EXCLUSIONS_MAX_LENGTH
+    ? joined.slice(0, EXCLUSIONS_MAX_LENGTH)
+    : joined;
+  return { clientSentence, exclusions };
 }

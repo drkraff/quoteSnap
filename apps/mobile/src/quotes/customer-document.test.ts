@@ -305,6 +305,34 @@ describe('professional customer page', () => {
   });
 });
 
+describe('spoken exclusions', () => {
+  it('prints permit not included under Not included and keeps the note', () => {
+    const payload = toCustomerQuotePayload({
+      customerPhone: null,
+      totalCents: 8000,
+      clientSentence: 'Replace the outlet.',
+      exclusions: 'permit not included',
+      currencyCode: 'USD',
+      countryCode: 'US',
+      vatPercent: 0,
+      lineItems: [
+        { name: 'outlet', quantity: 1, unitPriceCents: 8000, unit: 'each' },
+      ],
+    });
+    const doc = customerQuoteToDocument(payload);
+    expect(doc.html).toContain('Not included');
+    expect(doc.html).toContain('permit not included');
+    expect(doc.html).toContain('Note');
+    expect(doc.html).toContain('Replace the outlet.');
+    expect(doc.text).toContain('Not included');
+    expect(doc.text).toContain('permit not included');
+    const noteAt = doc.html.indexOf('Note');
+    const excludedAt = doc.html.indexOf('Not included');
+    expect(noteAt).toBeGreaterThan(-1);
+    expect(excludedAt).toBeGreaterThan(noteAt);
+  });
+});
+
 describe('US customer page', () => {
   it('uses dollars, feet for cable, hours for labor, and sales tax', () => {
     const payload = toCustomerQuotePayload({
