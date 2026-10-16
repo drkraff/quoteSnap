@@ -31,6 +31,8 @@ describe("resolveMigrationsDir", () => {
     assert.ok(files.includes("023_quote_snapshot_delete.sql"));
     assert.ok(files.includes("024_catalog_client_key.sql"));
     assert.ok(files.includes("027_quotes_voice_job_index.sql"));
+    assert.ok(files.includes("028_contractor_country.sql"));
+    assert.ok(files.includes("029_feedback.sql"));
     assert.ok(existsSync(path.join(dir, "009_quote_archive.sql")));
     assert.ok(existsSync(path.join(dir, "010_rate_card_entries.sql")));
     assert.ok(existsSync(path.join(dir, "011_quote_line_item_unit.sql")));

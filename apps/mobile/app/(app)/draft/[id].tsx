@@ -93,6 +93,7 @@ import { ClientSentenceField } from '../../../src/components/quotes/client-sente
 import { PrivateNoteSheet } from '../../../src/components/quotes/private-note-sheet';
 import { PhotoStrip } from '../../../src/components/quotes/photo-strip';
 import { UndoToast } from '../../../src/components/catalog/undo-toast';
+import { FeedbackFab } from '../../../src/components/feedback/feedback-fab';
 import { AiFailedBanner } from '../../../src/components/quotes/ai-failed-banner';
 import { ReviewBeforeSendingBanner } from '../../../src/components/quotes/review-before-sending-banner';
 import {
@@ -1843,6 +1844,7 @@ function DraftScreen(): JSX.Element {
           setUndoItem(null);
         }}
       />
+      <FeedbackFab edge="top" offset={12} quoteId={quote.serverId || id} />
     </KeyboardAvoidingView>
   );
 }
