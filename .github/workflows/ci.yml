@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -20,6 +22,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Check migrations are append-only and sequential
+        run: node scripts/check-migrations.mjs
 
       - name: Typecheck backend
         run: npm run typecheck --workspace=apps/backend
@@ -72,38 +77,28 @@ jobs:
         run: |
           set -o pipefail
           npm run migrate --workspace=apps/backend 2>&1 | tee migrate-first.log
-          files=$(find apps/backend/src/db/migrations -name '*.sql' | wc -l | tr -d ' ')
+          mapfile -t names < <(find apps/backend/src/db/migrations -name '*.sql' -printf '%f\n' | sort)
+          files=${#names[@]}
           applied=$(grep -c 'Applied migration:' migrate-first.log || true)
           test "$applied" = "$files"
-          grep -q 'Applied migration: 001_foundation.sql' migrate-first.log
-          grep -q 'Applied migration: 022_quote_client_key.sql' migrate-first.log
-          grep -q 'Applied migration: 023_quote_snapshot_delete.sql' migrate-first.log
-          grep -q 'Applied migration: 024_catalog_client_key.sql' migrate-first.log
-          grep -q 'Applied migration: 025_fractional_quantity.sql' migrate-first.log
-          grep -q 'Applied migration: 026_locale_and_customer_document.sql' migrate-first.log
-          grep -q 'Applied migration: 027_quotes_voice_job_index.sql' migrate-first.log
-          grep -q 'Applied migration: 028_contractor_country.sql' migrate-first.log
-          grep -q 'Applied migration: 029_feedback.sql' migrate-first.log
+          for name in "${names[@]}"; do
+            grep -q "Applied migration: ${name}" migrate-first.log
+          done
           grep -q 'Migrations complete.' migrate-first.log
 
       - name: Re-run migrations
         run: |
           set -o pipefail
           npm run migrate --workspace=apps/backend 2>&1 | tee migrate-rerun.log
-          files=$(find apps/backend/src/db/migrations -name '*.sql' | wc -l | tr -d ' ')
+          mapfile -t names < <(find apps/backend/src/db/migrations -name '*.sql' -printf '%f\n' | sort)
+          files=${#names[@]}
           skipped=$(grep -c 'Skipping already-applied migration:' migrate-rerun.log || true)
           applied=$(grep -c 'Applied migration:' migrate-rerun.log || true)
           test "$skipped" = "$files"
           test "$applied" = "0"
-          grep -q 'Skipping already-applied migration: 001_foundation.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 022_quote_client_key.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 023_quote_snapshot_delete.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 024_catalog_client_key.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 025_fractional_quantity.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 026_locale_and_customer_document.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 027_quotes_voice_job_index.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 028_contractor_country.sql' migrate-rerun.log
-          grep -q 'Skipping already-applied migration: 029_feedback.sql' migrate-rerun.log
+          for name in "${names[@]}"; do
+            grep -q "Skipping already-applied migration: ${name}" migrate-rerun.log
+          done
           grep -q 'Migrations complete.' migrate-rerun.log
 
       - name: Integration tests
