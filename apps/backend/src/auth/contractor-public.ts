@@ -18,8 +18,7 @@ export type ContractorRow = {
   markup_percent?: number | null;
   currency_code?: string | null;
   unit_system?: string | null;
-  /** pg numeric arrives as a string ("8.250", "18.000"). */
-  vat_percent?: number | string | null;
+  vat_percent?: number | null;
   country_code?: string | null;
 };
 

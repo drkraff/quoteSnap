@@ -175,8 +175,9 @@ function quantityLabel(quantity: number, unit: string | null): string {
 }
 
 /**
- * Postgres numeric quantities are strings in JSON ("10.00", "0.50").
- * A number is kept. Anything else is not a quantity.
+ * A number is a quantity. Snapshots written before the pool parsed numeric
+ * columns may still store decimal text ("10.00", "0.50"). Anything else is
+ * not a quantity.
  */
 function parseSnapshotQuantity(value: unknown): number | null {
   const n = typeof value === "string" ? Number(value) : value;

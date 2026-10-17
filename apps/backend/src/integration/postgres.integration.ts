@@ -190,6 +190,23 @@ describe("postgres integration", { concurrency: false }, () => {
     await pool.end();
   });
 
+  it("returns numeric and decimal columns as numbers", async () => {
+    const result = await query(
+      `SELECT 10.00::numeric AS quantity, 8.250::decimal AS vat_percent, 0.50::numeric(12,2) AS half_hour`,
+    );
+    const row = result.rows[0] as {
+      quantity: unknown;
+      vat_percent: unknown;
+      half_hour: unknown;
+    };
+    assert.equal(row.quantity, 10);
+    assert.equal(typeof row.quantity, "number");
+    assert.equal(row.vat_percent, 8.25);
+    assert.equal(typeof row.vat_percent, "number");
+    assert.equal(row.half_hour, 0.5);
+    assert.equal(typeof row.half_hour, "number");
+  });
+
   it("stores one quote when two creates share a client key", async () => {
     const contractorId = await insertContractor();
     const clientKey = randomUUID();

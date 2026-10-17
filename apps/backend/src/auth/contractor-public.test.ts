@@ -13,12 +13,12 @@ const ROW = {
 };
 
 describe("contractorPublicFromRow tax percent", () => {
-  it("reads a fractional percent stored as numeric text", () => {
+  it("reads a fractional percent from the numeric column", () => {
     const contractor = contractorPublicFromRow({
       ...ROW,
       currency_code: "USD",
       unit_system: "imperial",
-      vat_percent: "8.250",
+      vat_percent: 8.25,
       country_code: "US",
     });
     assert.equal(contractor.vatPercent, 8.25);
@@ -40,7 +40,7 @@ describe("contractorPublicFromRow tax percent", () => {
       ...ROW,
       currency_code: "ILS",
       unit_system: "metric",
-      vat_percent: "18.000",
+      vat_percent: 18,
       country_code: "IL",
     });
     assert.equal(israel.vatPercent, 18);

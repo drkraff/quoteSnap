@@ -124,13 +124,13 @@ describe("buildQuoteSnapshotPayload", () => {
     assert.equal(payload.clientSentence, null);
   });
 
-  it("stores a number when Postgres returns a numeric quantity as a string", () => {
+  it("stores a numeric quantity as a number", () => {
     const payload = buildQuoteSnapshotPayload({
       quote: quote({ total_cents: 19500 }),
       lineItems: [
         line({
           name: "12/2 cable",
-          quantity: "10.00" as unknown as number,
+          quantity: 10,
           unit_price_cents: 450,
           unit: "foot",
           room_id: null,
@@ -139,7 +139,7 @@ describe("buildQuoteSnapshotPayload", () => {
         line({
           id: "66666666-6666-4666-8666-666666666666",
           name: "Labor",
-          quantity: "0.50" as unknown as number,
+          quantity: 0.5,
           unit_price_cents: 7500,
           unit: "hour",
           room_id: null,
@@ -148,8 +148,11 @@ describe("buildQuoteSnapshotPayload", () => {
       ],
     });
     assert.equal(payload.lineItems[0]!.quantity, 10);
+    assert.equal(typeof payload.lineItems[0]!.quantity, "number");
     assert.equal(payload.lineItems[1]!.quantity, 0.5);
+  });
 
+  it("reads a snapshot quantity that was stored as decimal text", () => {
     const fromStoredString = parseSnapshotPayload({
       customerPhone: null,
       totalCents: 19500,

@@ -76,7 +76,8 @@ const VAT_PERCENT_MILLI_MAX = 100 * VAT_PERCENT_MILLI_SCALE;
 /**
  * Integer thousandths of a percent, or null when the value is not a rate
  * from 0 to 100 with at most 3 decimal places.
- * pg `numeric` arrives as a string ("8.250", "18.000").
+ * The pool returns a numeric column as a number. Decimal text ("8.250")
+ * is still accepted for a hand-built value.
  */
 export function vatPercentMilli(value: unknown): number | null {
   if (typeof value === "number") {
@@ -104,7 +105,7 @@ function milliFromDecimalText(text: string): number | null {
   return milli;
 }
 
-/** 0–100 with at most 3 decimal places. 8.25 and the pg string "8.250" are 8.25. */
+/** 0–100 with at most 3 decimal places. 8.25 and the decimal text "8.250" are 8.25. */
 export function parseVatPercent(value: unknown): number | null {
   const milli = vatPercentMilli(value);
   if (milli == null) return null;

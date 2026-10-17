@@ -35,11 +35,14 @@ export function isStorableHours(value: unknown): value is number {
   return Math.abs(scaled - Math.round(scaled)) < 1e-6;
 }
 
-/** pg `numeric` arrives as a string. Whole numbers stay integers (2.00 → 2). */
+/**
+ * Quantity from quote_line_items. The pool parses numeric(12,2) as a number.
+ * Whole values stay integers (2 → 2). A value that is not a positive finite
+ * number falls back to 1.
+ */
 export function coerceStoredQuantity(value: unknown): number {
-  const n = typeof value === "string" ? Number(value) : value;
-  if (typeof n === "number" && Number.isFinite(n) && n > 0) {
-    return Math.round(n * 100) / 100;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.round(value * 100) / 100;
   }
   return 1;
 }
