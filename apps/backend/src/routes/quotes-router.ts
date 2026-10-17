@@ -3,6 +3,7 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { authenticateToken } from "../middleware/auth.js";
 import { logRequestFailure } from "../log/logger.js";
+import { quoteLifecycleConflict } from "../quotes/lifecycle-error.js";
 import { applyQuotePut, parseQuotePutBody } from "../quotes/quote-write.js";
 import { createQuote } from "../quotes/create-quote.js";
 import { sendQuoteForApproval } from "../quotes/send-quote.js";
@@ -212,6 +213,11 @@ export function createQuotesRouter(deps: QuotesRouterDeps): Router {
       );
       res.status(outcome.status).json(outcome.json);
     } catch (err) {
+      const locked = quoteLifecycleConflict(err);
+      if (locked) {
+        res.status(409).json({ error: locked });
+        return;
+      }
       logRequestFailure(req, err, "PUT /quotes/:id error");
       res.status(500).json({ error: "Internal server error" });
     }

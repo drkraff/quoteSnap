@@ -1203,10 +1203,14 @@ describe("applyQuotePut", () => {
     assert.equal(outcome.status, 200);
     if (outcome.status !== 200) return;
     assert.equal(outcome.json.quote.status, "sent");
-    const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
+    const updateAt = calls.findIndex((c) => c.sql.startsWith("UPDATE quotes"));
+    const deleteAt = calls.findIndex((c) => c.sql === DELETE_LINE_ITEMS_SQL);
+    const insertAt = calls.findIndex((c) => c.sql === INSERT_LINE_ITEM_SQL);
+    assert.ok(deleteAt >= 0 && insertAt > deleteAt && updateAt > insertAt);
+    const update = calls[updateAt];
     assert.ok(update);
-    assert.match(update!.sql, /status = \$/);
-    assert.equal(update!.params?.[0], "sent");
+    assert.match(update.sql, /status = \$/);
+    assert.equal(update.params?.[0], "sent");
     assert.equal(
       /SET[\s\S]*customer_phone\s*=/.test(update!.sql),
       false,
@@ -1278,7 +1282,7 @@ describe("applyQuotePut", () => {
     );
   });
 
-  it("replaces line items on one queryFn: UPDATE, DELETE, then INSERT with preserved confidence", async () => {
+  it("replaces line items on one queryFn: DELETE, INSERT, then UPDATE with preserved confidence", async () => {
     const existing: QuoteLineItemRow[] = [
       {
         id: "22222222-2222-4222-8222-222222222222",
@@ -1317,7 +1321,7 @@ describe("applyQuotePut", () => {
       if (c.sql === INSERT_LINE_ITEM_SQL) return "insert";
       return "other";
     });
-    assert.deepEqual(kinds, ["select-quote", "select-lines", "update", "delete", "insert"]);
+    assert.deepEqual(kinds, ["select-quote", "select-lines", "delete", "insert", "update"]);
 
     const update = calls.find((c) => c.sql.startsWith("UPDATE quotes"));
     assert.ok(update);

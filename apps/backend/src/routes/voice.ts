@@ -7,6 +7,7 @@ import { uploadToR2, deleteFromR2 } from '../services/r2.js';
 import { boss } from '../workers/voice-processor.js';
 import { query } from '../db/connection.js';
 import type { VoiceStatusResponse } from '../types/voice.js';
+import { quoteLifecycleConflict } from '../quotes/lifecycle-error.js';
 import { parseQuoteServerId, parseVoiceClientKey, resolveVoiceUploadQuote } from '../voice/upload-quote.js';
 import { cancelSupersededVoiceJob } from '../voice/cancel-voice-job.js';
 import { voiceAudioMimeError, voiceAudioR2Key } from '../voice/audio-upload.js';
@@ -129,6 +130,11 @@ router.post(
         throw pipelineErr;
       }
     } catch (err) {
+      const locked = quoteLifecycleConflict(err);
+      if (locked) {
+        res.status(409).json({ error: locked });
+        return;
+      }
       logRequestFailure(req, err, 'POST /voice/upload error');
       // Include quoteId so a client that never got 202 can stamp serverId and
       // retry against the same row instead of INSERT-ing a duplicate.
