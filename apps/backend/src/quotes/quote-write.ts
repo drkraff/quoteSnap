@@ -930,23 +930,10 @@ export async function applyQuotePut(
     setClauses.push(`total_cents = $${params.length}`);
   }
 
-  let quote = current;
-  if (setClauses.length > 0) {
-    params.push(args.quoteId);
-    const idParam = params.length;
-    params.push(args.contractorId);
-    const contractorParam = params.length;
-    const updateSql = `UPDATE quotes
-         SET ${setClauses.join(", ")}
-         WHERE id = $${idParam} AND contractor_id = $${contractorParam}
-         RETURNING ${QUOTE_COLUMNS}`;
-    const updated = await queryFn(updateSql, params);
-    if (updated.rows.length === 0) {
-      return { status: 404, json: { error: "Quote not found" } };
-    }
-    quote = updated.rows[0] as QuoteRow;
-  }
-
+  // Lines first, then status. Migration 031 freezes line items as soon as
+  // the quote is sent (or another frozen status). A PUT that carries both
+  // the new lines and status: sent must write the lines while the row is
+  // still a draft. The trigger runs immediately, not at COMMIT.
   if (resolvedLines) {
     await queryFn(DELETE_LINE_ITEMS_SQL, [args.quoteId]);
     for (const item of resolvedLines) {
@@ -966,6 +953,23 @@ export async function applyQuotePut(
         item.clientId,
       ]);
     }
+  }
+
+  let quote = current;
+  if (setClauses.length > 0) {
+    params.push(args.quoteId);
+    const idParam = params.length;
+    params.push(args.contractorId);
+    const contractorParam = params.length;
+    const updateSql = `UPDATE quotes
+         SET ${setClauses.join(", ")}
+         WHERE id = $${idParam} AND contractor_id = $${contractorParam}
+         RETURNING ${QUOTE_COLUMNS}`;
+    const updated = await queryFn(updateSql, params);
+    if (updated.rows.length === 0) {
+      return { status: 404, json: { error: "Quote not found" } };
+    }
+    quote = updated.rows[0] as QuoteRow;
   }
 
   return { status: 200, json: { quote: quoteRowToResponse(quote) } };

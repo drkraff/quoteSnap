@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { QUOTE_STATUS_LOCKED_ERROR } from "../quotes/lifecycle-error.js";
 import {
   parseQuoteServerId,
   parseVoiceClientKey,
@@ -74,7 +75,7 @@ describe("resolveVoiceUploadQuote", () => {
     const calls: Array<{ sql: string; params: unknown[] | undefined }> = [];
     const runQuery: VoiceUploadQueryFn = async (sql, params) => {
       calls.push({ sql, params });
-      if (sql.includes("SELECT id, voice_job_id FROM quotes")) {
+      if (sql.includes("SELECT id, status, voice_job_id FROM quotes")) {
         return { rows: [{ id: QUOTE_ID }] };
       }
       return { rows: [] };
@@ -84,7 +85,7 @@ describe("resolveVoiceUploadQuote", () => {
 
     assert.deepEqual(result, { ok: true, quoteId: QUOTE_ID, created: false });
     assert.equal(calls.length, 2);
-    assert.match(calls[0]!.sql, /SELECT id, voice_job_id FROM quotes WHERE id = \$1 AND contractor_id = \$2/);
+    assert.match(calls[0]!.sql, /SELECT id, status, voice_job_id FROM quotes WHERE id = \$1 AND contractor_id = \$2/);
     assert.deepEqual(calls[0]!.params, [QUOTE_ID, CONTRACTOR_ID]);
     assert.match(calls[1]!.sql, /UPDATE quotes SET status = 'ai_processing', ai_failure_stage = NULL, voice_job_id = NULL/);
     assert.deepEqual(calls[1]!.params, [QUOTE_ID, CONTRACTOR_ID]);
@@ -186,5 +187,57 @@ describe("resolveVoiceUploadQuote", () => {
     const result = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, QUOTE_ID);
 
     assert.deepEqual(result, { ok: false, status: 404, error: "Quote not found" });
+  });
+
+  it("refuses to pull a sent quote back into voice processing", async () => {
+    for (const status of ["sent", "approved", "declined", "expired", "failed_send"]) {
+      const calls: string[] = [];
+      const runQuery: VoiceUploadQueryFn = async (sql) => {
+        calls.push(sql);
+        if (sql.includes("SELECT")) {
+          return { rows: [{ id: QUOTE_ID, status, voice_job_id: "job-old" }] };
+        }
+        return { rows: [] };
+      };
+
+      const byId = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, QUOTE_ID);
+      assert.deepEqual(byId, { ok: false, status: 409, error: QUOTE_STATUS_LOCKED_ERROR }, status);
+      assert.equal(calls.some((sql) => sql.includes("UPDATE")), false, status);
+
+      const byKey = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, null, "local-sent");
+      assert.deepEqual(byKey, { ok: false, status: 409, error: QUOTE_STATUS_LOCKED_ERROR }, status);
+      assert.equal(calls.some((sql) => sql.includes("UPDATE")), false, status);
+      assert.equal(calls.some((sql) => sql.includes("INSERT")), false, status);
+    }
+  });
+
+  it("returns 409 when the database rejects the voice reset after the read", async () => {
+    const runQuery: VoiceUploadQueryFn = async (sql) => {
+      if (sql.includes("SELECT")) {
+        return { rows: [{ id: QUOTE_ID, status: "draft_local", voice_job_id: null }] };
+      }
+      throw new Error("frozen quote cannot return to draft or voice");
+    };
+
+    const result = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, QUOTE_ID);
+
+    assert.deepEqual(result, { ok: false, status: 409, error: QUOTE_STATUS_LOCKED_ERROR });
+  });
+
+  it("returns 409 when a client-key race finds a sent quote", async () => {
+    let selects = 0;
+    const runQuery: VoiceUploadQueryFn = async (sql) => {
+      if (sql.includes("SELECT")) {
+        selects += 1;
+        if (selects === 1) return { rows: [] };
+        return { rows: [{ id: QUOTE_ID, status: "sent", voice_job_id: "job-old" }] };
+      }
+      return { rows: [] };
+    };
+
+    const result = await resolveVoiceUploadQuote(runQuery, CONTRACTOR_ID, null, "local-sent");
+
+    assert.deepEqual(result, { ok: false, status: 409, error: QUOTE_STATUS_LOCKED_ERROR });
+    assert.equal(selects, 2);
   });
 });
