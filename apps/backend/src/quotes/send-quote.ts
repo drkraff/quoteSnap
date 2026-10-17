@@ -200,7 +200,7 @@ export async function sendQuoteForApproval(
     display_name: string | null;
     trade: string | null;
     currency_code?: string | null;
-    vat_percent?: number | string | null;
+    vat_percent?: number | null;
     country_code?: string | null;
   };
   const brand = normalizeSnapshotBrand(brandRow.display_name, brandRow.trade);

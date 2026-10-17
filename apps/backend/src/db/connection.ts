@@ -3,12 +3,15 @@ import { Pool, QueryResult } from "pg";
 import { databaseUrlError } from "../env/boot-env.js";
 import { log } from "../log/logger.js";
 import { attachIdleClientErrorHandler } from "./pool-errors.js";
+import { installPgNumericParser } from "./pg-numeric.js";
 import { runTransaction, type TxQueryFn } from "./transaction.js";
 
 const databaseError = databaseUrlError(process.env["DATABASE_URL"]);
 if (databaseError) {
   throw new Error(databaseError);
 }
+
+installPgNumericParser();
 
 const pool = new Pool({
   connectionString: process.env["DATABASE_URL"],

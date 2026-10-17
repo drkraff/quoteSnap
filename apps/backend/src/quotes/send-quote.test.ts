@@ -78,7 +78,7 @@ function createDb(options: {
     display_name: string | null;
     trade: string | null;
     currency_code?: string | null;
-    vat_percent?: number | string | null;
+    vat_percent?: number | null;
     country_code?: string | null;
   };
 }) {
@@ -384,7 +384,7 @@ describe("sendQuoteForApproval", () => {
         display_name: "Ada Electric",
         trade: "electrical",
         currency_code: "USD",
-        vat_percent: "8.250",
+        vat_percent: 8.25,
         country_code: "US",
       },
     });
@@ -439,7 +439,7 @@ describe("sendQuoteForApproval", () => {
         display_name: "Noa",
         trade: "electrical",
         currency_code: "ILS",
-        vat_percent: "18.000",
+        vat_percent: 18,
         country_code: "IL",
       },
     });
